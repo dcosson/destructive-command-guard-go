@@ -99,6 +99,7 @@ standalone binary and h2 integration are thin wrappers around it.
 | **remote.rsync** | rsync | `rsync --delete`, `rsync --delete-before`, `rsync --delete-after` | |
 | **secrets.vault** | vault | `vault secrets disable`, `vault delete`, `vault kv destroy`, `vault lease revoke` | ✅ |
 | **platform.github** | gh | `gh repo delete`, `gh release delete`, `gh issue close`, `gh pr close` | |
+| **infrastructure.ansible** | ansible, ansible-playbook | `ansible all -m shell -a "rm -rf /"`, `ansible-playbook --extra-vars "state=absent"`, `ansible all -m file -a "state=absent"`, `ansible all -m service -a "state=stopped"` | ✅ |
 
 **Note:** The **frameworks** pack is new — not in the upstream Rust version. It pairs
 with environment awareness (A7) to catch the "ran db:reset against prod" class
@@ -108,7 +109,7 @@ of mistakes.
 
 DNS, email, payment, search, API gateway, load balancer, monitoring, feature
 flags, messaging (Kafka/RabbitMQ/SQS), CI/CD pipeline modification, Podman,
-Kustomize, Ansible, MinIO, 1Password, CircleCI, Jenkins.
+Kustomize, MinIO, 1Password, CircleCI, Jenkins.
 
 These are either too niche for an LLM coding context or the destructive
 commands are uncommon LLM mistakes. Can be added if demand arises.
