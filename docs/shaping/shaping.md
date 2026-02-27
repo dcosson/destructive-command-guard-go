@@ -75,7 +75,7 @@ standalone binary and h2 integration are thin wrappers around it.
 
 ## A8 Detail: Pack Scope
 
-### v1 Packs (included)
+### Packs (all included in v1)
 
 | Pack | Keywords | Key Destructive Patterns | Env-Sensitive |
 |------|----------|--------------------------|:---:|
@@ -93,22 +93,16 @@ standalone binary and h2 integration are thin wrappers around it.
 | **cloud.azure** | az | `az vm delete`, `az group delete`, `az storage account delete` | ✅ |
 | **kubernetes.kubectl** | kubectl | `kubectl delete namespace`, `kubectl delete -f`, `kubectl drain`, `kubectl replace --force` | ✅ |
 | **frameworks** | rails, rake, manage.py, artisan, mix | `rails db:reset`, `rails db:drop`, `rake db:drop:all`, `manage.py flush`, `manage.py migrate --run-syncdb`, `artisan migrate:fresh`, `mix ecto.reset` | ✅ |
+| **kubernetes.helm** | helm | `helm uninstall`, `helm delete`, `helm rollback` | ✅ |
+| **database.mongodb** | mongo, mongosh, mongodump, mongorestore | `db.dropDatabase()`, `db.collection.drop()`, `db.collection.deleteMany({})`, `mongosh --eval "db.dropDatabase()"` | ✅ |
+| **database.redis** | redis-cli | `FLUSHALL`, `FLUSHDB`, `DEL *`, `redis-cli FLUSHALL` | ✅ |
+| **remote.rsync** | rsync | `rsync --delete`, `rsync --delete-before`, `rsync --delete-after` | |
+| **secrets.vault** | vault | `vault secrets disable`, `vault delete`, `vault kv destroy`, `vault lease revoke` | ✅ |
+| **platform.github** | gh | `gh repo delete`, `gh release delete`, `gh issue close`, `gh pr close` | |
 
 **Note:** The **frameworks** pack is new — not in the upstream Rust version. It pairs
 with environment awareness (A7) to catch the "ran db:reset against prod" class
 of mistakes.
-
-### v2 Packs (deferred, add incrementally)
-
-| Pack | Why deferred |
-|------|-------------|
-| kubernetes.helm | Less common in LLM coding context |
-| database.mongodb | Niche |
-| database.redis | FLUSHALL is destructive but redis is usually recoverable |
-| remote.rsync | `rsync --delete` is dangerous but less common LLM mistake |
-| secrets.vault | Niche |
-| platform.github | `gh repo delete` etc. — useful but lower priority |
-| storage.s3/gcs/azure_blob (standalone) | Folded into cloud.aws/gcp/azure for v1 |
 
 ### Not planned
 
