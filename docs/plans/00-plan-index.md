@@ -23,8 +23,8 @@ and feedback incorporated via `/plan-incorporate` before implementation begins.
 | Gate | Condition | Before proceeding to |
 |------|-----------|---------------------|
 | G1 | tree-sitter-go exports bash grammar publicly; bash parsing + command extraction passes tests on representative commands | Batch 2 |
-| G2 | Pattern matching framework works with at least 1 test pack; environment detection works; policy engine works | Batch 3, Batch 4 |
-| G3 | All 21 packs implemented with per-pattern unit tests | Batch 4 (CLI/hook) |
+| G2 | Pattern matching framework works with at least 1 test pack; environment detection works; policy engine works; golden file infrastructure ready | Batch 3, Batch 4 |
+| G3 | All 21 packs implemented with per-pattern unit tests and golden file entries | Batch 5 |
 | G4 | Public API works end-to-end; CLI hook mode works with Claude Code protocol | Batch 5 |
 
 ---
@@ -41,6 +41,9 @@ AST and share types. Splitting them would create interface churn.
 
 The tree-sitter-go grammar export is a prerequisite change in a separate repo.
 This plan should include the work needed there and define the interface contract.
+**Hard external dependency**: Batch 1 cannot complete without tree-sitter-go
+exporting grammars from `internal/testgrammars/` to `grammars/`. Fallback:
+temporarily vendor grammar data into DCG (see architecture D6).
 
 ---
 
@@ -58,6 +61,11 @@ packs are implemented.
 
 A test pack (e.g., a minimal "core.git" with 2-3 patterns) should be created
 as part of this plan to validate the framework end-to-end.
+
+This batch also includes the **golden file infrastructure** — the test
+framework and initial seed corpus. Packs in Batch 3 contribute golden file
+entries as they are developed. This ensures regression safety from the start
+rather than retrofitting it in Batch 5.
 
 ---
 
@@ -91,13 +99,21 @@ around the API. This doesn't strictly depend on ALL packs being done (03b-03e)
 — it can proceed once the framework (02) and core packs (03a) are ready. The
 remaining packs can be developed in parallel with this.
 
+**Incomplete coverage note**: The CLI and hook binary will only detect patterns
+from registered packs. During Batch 4 development (before 03b-03e complete),
+only core.git and core.filesystem are available. Integration tests in Batch 4
+should be structured so they test with whatever packs are registered and can
+be extended as more packs are added. The CLI should work with any subset of
+packs (the registry pattern ensures this). Early users of the hook binary
+should be aware of the coverage gap until all packs ship.
+
 ---
 
 ## Batch 5: Hardening & Validation
 
 | Doc | Component | Description | Depends On | Status |
 |-----|-----------|-------------|-----------|--------|
-| [05-testing-and-benchmarks](./05-testing-and-benchmarks.md) | Testing & Benchmarks | Benchmark suite (pre-filter, parsing, extraction, matching, full pipeline). Comparison tests against upstream Rust version. Fuzz testing for parser robustness. End-to-end tests with real-world command samples. Performance profiling and optimization. | 04, 03b, 03c, 03d, 03e | Not started |
+| [05-testing-and-benchmarks](./05-testing-and-benchmarks.md) | Testing & Benchmarks | Benchmark suite (pre-filter, parsing, extraction, matching, full pipeline). Comparison tests against upstream Rust version. Fuzz testing for parser robustness. Mutation testing harness for pattern packs. Golden file corpus expansion to 500+ commands. Grammar-derived coverage analysis. End-to-end tests with real-world command samples. Performance profiling and optimization. | 04, 03b, 03c, 03d, 03e | Not started |
 
 ---
 

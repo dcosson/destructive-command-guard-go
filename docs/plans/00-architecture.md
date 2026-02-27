@@ -160,15 +160,33 @@ package guard
 
 // Evaluate analyzes a shell command for destructive patterns.
 // Stateless, no I/O. Safe for concurrent use.
-func Evaluate(command string, opts ...Option) *Result
+// Returns a value type — the zero value is a valid "nothing found, allow" result.
+func Evaluate(command string, opts ...Option) Result
 
 // Result contains the evaluation outcome.
 type Result struct {
     Decision   Decision       // Allow, Deny, or Ask
     Assessment *Assessment    // Raw severity + confidence (nil if no match)
     Matches    []Match        // All pattern matches found
+    Warnings   []Warning      // Informational warnings (parse failures, timeouts, etc.)
     Command    string         // The original command
 }
+
+// Warning indicates a non-fatal condition during evaluation.
+// These are informational — they don't change the decision but enable
+// observability of fail-open events for monitoring.
+type Warning struct {
+    Code    WarningCode
+    Message string
+}
+
+type WarningCode int
+const (
+    WarnPartialParse WarningCode = iota  // AST contained ERROR nodes
+    WarnInlineDepthExceeded              // Inline script recursion hit max depth
+    WarnInputTruncated                   // Input exceeded max length
+    WarnMatcherPanic                     // A CommandMatcher panicked (recovered)
+)
 
 type Decision int
 const (
@@ -211,8 +229,8 @@ const (
 type Option func(*evalConfig)
 
 func WithPolicy(p Policy) Option          // Set decision policy
-func WithAllowlist(patterns ...string) Option  // Allow specific commands/patterns
-func WithBlocklist(patterns ...string) Option  // Block specific commands/patterns
+func WithAllowlist(rules ...string) Option     // Allow commands matching rules
+func WithBlocklist(rules ...string) Option     // Block commands matching rules
 func WithPacks(packs ...string) Option     // Enable only these packs
 func WithDisabledPacks(packs ...string) Option // Disable specific packs
 func WithEnv(env []string) Option          // Provide process env vars for env detection
@@ -228,19 +246,66 @@ func InteractivePolicy() Policy  // Ask on Medium, Deny on High+
 func PermissivePolicy() Policy   // Ask on High, Deny on Critical only
 ```
 
+**Allowlist/Blocklist matching semantics:**
+
+Rules are matched against the **full raw command string** using glob patterns
+(not regex). `*` matches any sequence of characters. Matching is
+case-sensitive.
+
+- `"git status"` — exact match against the full command
+- `"git status *"` — matches `git status` with any arguments
+- `"*/bin/git *"` — matches path-prefixed git commands
+
+**Evaluation order**: Blocklist is checked first. If a command matches a
+blocklist rule, it is Denied regardless of allowlist. If a command matches
+an allowlist rule (and no blocklist rule), it is Allowed without further
+analysis. This means blocklist takes precedence — it is the safety backstop.
+
+**Note on scope**: Allowlist/blocklist matching operates on the raw command
+string before parsing. This is intentional — it provides a fast escape hatch
+that doesn't depend on the parser. Callers who want more precise control
+should use pack selection (`WithPacks`/`WithDisabledPacks`) instead.
+
+**Note on Policy interface**: The `Decide(Assessment)` signature is
+intentionally minimal — it only sees severity and confidence, not pack/rule
+details. This keeps policies simple and composable. Per-pack or per-rule
+overrides should be handled via allowlists/blocklists or by composing
+multiple `Evaluate` calls with different pack sets.
+
+**API versioning**: The initial release is `v0` (no stability guarantees).
+The API will be promoted to `v1` after the golden file corpus confirms the
+assessment/decision behavior is stable across real-world usage.
+
 ### Layer 2: Evaluation Pipeline (`internal/eval`)
 
 Orchestrates the analysis steps. This is the core internal engine.
 
 **Pipeline steps:**
 
-1. **Allowlist/Blocklist check** — If the command matches a caller-provided
-   allowlist pattern, short-circuit to Allow. If blocklist, short-circuit
-   to Deny.
-2. **Keyword pre-filter** — Check if the command string contains any keyword
+1. **Input validation** — Reject empty/whitespace commands (Allow, no
+   warnings). Truncate commands exceeding 64KB (Allow with
+   `WarnInputTruncated` — commands this long are not typical LLM output).
+2. **Blocklist/Allowlist check** — Check blocklist first (glob match against
+   raw command string). If blocklist matches, short-circuit to Deny. Then
+   check allowlist. If allowlist matches, short-circuit to Allow. Blocklist
+   takes precedence.
+3. **Keyword pre-filter** — Check if the command string contains any keyword
    from enabled packs. If no keywords match, return Allow (no parsing needed).
-3. **Tree-sitter parse** — Parse the command string as bash. If parsing fails,
-   fail-open (Allow).
+   Note: the pre-filter may have false negatives for aliased commands
+   (e.g., `alias g=git; g push --force` — "git" not present). This is
+   acceptable given the threat model (LLMs generate full command names).
+   Keywords should be chosen to be specific enough to avoid excessive
+   pass-through; keyword effectiveness is measured in the benchmark suite.
+4. **Tree-sitter parse** — Parse the command string as bash. Tree-sitter
+   almost always returns a tree (with error recovery), even for malformed
+   input. We distinguish two cases:
+   - **Full parse failure** (very rare — tree-sitter returns no tree):
+     fail-open, return Allow with `WarnPartialParse`.
+   - **Partial parse with ERROR nodes** (common for unusual syntax): proceed
+     with best-effort extraction. The extractor extracts all `simple_command`
+     nodes it can find, including those adjacent to ERROR nodes. This is not
+     fail-open — it is best-effort analysis. A `WarnPartialParse` warning is
+     added to the result.
 4. **Command extraction** — Walk the AST to extract individual command
    invocations: `(name, args, flags, inlineEnvVars)`.
 5. **Dataflow resolution** — Forward pass through the AST tracking variable
@@ -249,18 +314,47 @@ Orchestrates the analysis steps. This is the core internal engine.
    §8 Alien Artifacts for details.
 6. **Normalization** — Strip path prefixes from command names
    (`/usr/bin/git` → `git`).
-7. **Inline script detection** — For commands like `python -c "..."`,
+8. **Inline script detection** — For commands like `python -c "..."`,
    `bash -c "..."`, extract the script body and analyze it with the
-   appropriate language grammar.
-8. **Environment detection** — Check inline env vars from the AST,
+   appropriate language grammar. Recursive: extracted shell commands from
+   inline scripts are re-evaluated through the full pipeline (including
+   further inline detection). **Max recursion depth: 3 levels.** Beyond
+   this, the nested content is treated as opaque (fail-open with
+   `WarnInlineDepthExceeded`). Evaluate uses `recover()` to catch panics
+   from matchers or inline detection, logging and continuing with
+   `WarnMatcherPanic`.
+9. **Environment detection** — Check inline env vars from the AST,
    dataflow-resolved env vars, and caller-provided process env vars for
-   production indicators.
+   production indicators. Detection checks specific env var names against
+   specific values:
+   - **Exact-value env vars**: `RAILS_ENV`, `NODE_ENV`, `FLASK_ENV`,
+     `APP_ENV`, `MIX_ENV`, `RACK_ENV` checked for values `production`
+     or `prod`.
+   - **URL-shaped env vars**: `DATABASE_URL`, `REDIS_URL`, `MONGO_URL`,
+     `ELASTICSEARCH_URL` checked for hostnames containing `prod` as a
+     word boundary (not substring — `productivity.internal` does not match).
+   - **Profile env vars**: `AWS_PROFILE`, `GOOGLE_CLOUD_PROJECT`,
+     `AZURE_SUBSCRIPTION` checked for values containing `prod` as a
+     word boundary.
+   - **Severity escalation**: When production indicators are detected,
+     severity is bumped by one level (Low→Medium, Medium→High, High→Critical),
+     capped at Critical. The `EnvEscalated` flag is set on the match.
+   - Detection rules are hardcoded in v1 but structured for easy extension.
 9. **Pattern matching** — For each extracted command, check against enabled
    packs. Safe patterns are checked first (short-circuit to Allow for that
    command). Then destructive patterns are checked.
-10. **Assessment aggregation** — If multiple commands in a pipeline match,
-    take the highest severity.
-11. **Policy application** — Convert the final assessment to a decision
+11. **Assessment aggregation** — If multiple commands in a compound statement
+    match, aggregate by `(severity, confidence)` as a tuple: severity is the
+    primary sort, confidence is secondary. The highest-ranked assessment
+    becomes the result. This applies uniformly across all compound forms:
+    - Pipelines (`cmd1 | cmd2`): both sides evaluated
+    - Sequential (`;`, `&&`, `||`): all commands evaluated
+    - Subshells (`(cmd)`): transparent, inner commands evaluated
+    - Command substitution (`$(cmd)`, `` `cmd` ``): inner commands evaluated
+    - Backgrounded (`cmd &`): evaluated (the command still runs)
+    All matched patterns are collected in `Result.Matches` regardless of
+    which one determines the final assessment.
+12. **Policy application** — Convert the final assessment to a decision
     using the configured policy.
 
 ### Layer 3: Pattern Packs (`internal/packs`)
@@ -312,9 +406,38 @@ type ExtractedCommand struct {
     InlineEnv  map[string]string // Inline env var assignments
     RawText    string            // Original text span from source
     InPipeline bool              // Is this part of a pipeline?
-    Negated    bool              // Preceded by !
+    Negated    bool              // Preceded by ! (does not affect severity — cmd still runs)
 }
 ```
+
+**Flags representation**: `map[string]string` intentionally loses flag ordering
+and duplicate information. Combined short flags are decomposed into separate
+entries (`rm -rf` → keys `-r` and `-f`). This is acceptable because destructive
+pattern matching checks for flag *presence*, not multiplicity or order. Matchers
+must use exact flag name matching (not prefix) — `--force` does not match
+`--force-with-lease`.
+
+**Safe-before-destructive evaluation order**: For each extracted command, safe
+patterns are checked first. If a safe pattern matches, destructive patterns for
+that specific command are skipped. Other commands in the same compound statement
+are still evaluated independently.
+
+**Built-in matcher implementations** (pack authors compose from these rather
+than implementing `CommandMatcher` from scratch):
+
+- **NameMatcher**: Matches command name (exact, after normalization)
+- **FlagMatcher**: Checks presence/absence of specific flags
+- **ArgMatcher**: Checks positional arguments (exact, glob, or regex)
+- **ArgContentMatcher**: Regex/substring match on argument values
+  (for SQL patterns like `DROP TABLE` in `psql -c "..."`)
+- **EnvMatcher**: Checks inline env var names/values
+- **CompositeMatcher**: AND/OR/NOT composition of the above
+- **NegativeMatcher**: Inverts a match (e.g., "rm -rf but NOT /tmp")
+
+**Note on alias resolution**: The tool operates on the literal command string,
+not the resolved execution path. Shell aliases (`alias g=git`) and functions
+are not resolved. This is out of scope — we analyze what the LLM generates,
+not what the shell resolves it to.
 
 ### Layer 4: Tree-sitter Integration (`internal/parse`)
 
@@ -547,14 +670,23 @@ number of short strings against the command. `strings.Contains` is fast enough
 at this scale and avoids an external dependency. If benchmarks show this is a
 bottleneck (unlikely), we can switch to aho-corasick later.
 
-### D4: Fail-open on parse errors
+### D4: Fail-open on parse errors, best-effort on partial parses
 
-**Decision**: If tree-sitter fails to parse a command (malformed bash, exotic
-syntax), return Allow.
+**Decision**: Two distinct behaviors:
 
-**Rationale**: This is a mistake preventer, not a security boundary. Blocking
-commands we can't understand would create false denials that erode trust in
-the tool. The upstream Rust version follows the same philosophy.
+1. **Full parse failure** (tree-sitter returns no tree — extremely rare):
+   return Allow with `WarnPartialParse`. This is fail-open.
+2. **Partial parse with ERROR nodes** (tree-sitter's error recovery produced
+   a tree with some ERROR nodes — common for unusual syntax): extract all
+   `simple_command` nodes we can find and analyze them. This is **best-effort
+   analysis**, not fail-open. A `WarnPartialParse` warning is included so
+   callers can monitor how often this occurs.
+
+**Rationale**: Tree-sitter almost always returns *some* tree due to its error
+recovery. A pure "fail-open on parse error" policy would almost never trigger.
+The real risk is ERROR nodes in otherwise-parsed trees causing the extractor
+to silently skip destructive commands. Best-effort extraction mitigates this
+by analyzing everything we can structurally understand.
 
 ### D5: Assessment/Policy separation
 
@@ -568,12 +700,26 @@ means Ask). The library ships sensible defaults but lets callers override.
 
 ### D6: Grammars exported from tree-sitter-go
 
-**Decision**: Have tree-sitter-go export grammar packages publicly (e.g.,
-`grammars/bash`) rather than vendoring grammar data into DCG.
+**Decision**: Have tree-sitter-go export grammar packages publicly rather
+than vendoring grammar data into DCG.
+
+**Required import paths from tree-sitter-go:**
+
+- `github.com/treesitter-go/treesitter/grammars/bash` — language data
+  (currently in `internal/testgrammars/bash/language.go`)
+- `github.com/treesitter-go/treesitter/scanners/bash` — external scanner
+  (already public at `scanners/bash/scanner.go`)
+- Same pattern for other grammars: `grammars/python`, `scanners/python`, etc.
 
 **Rationale**: Keeps a single source of truth for grammar data. DCG imports
 the grammars as a regular Go dependency. Requires a change to tree-sitter-go
 to move grammars from `internal/testgrammars/` to a public `grammars/` package.
+
+**Fallback**: If the tree-sitter-go export is delayed, DCG can temporarily
+vendor the grammar data (copy the generated language files). This unblocks
+development. The vendored copy would be replaced by the proper import once
+the export is available. Both repos are under the same owner so this is a
+coordination issue, not a blocking dependency.
 
 ---
 
@@ -592,8 +738,18 @@ to move grammars from `internal/testgrammars/` to a public `grammars/` package.
 
 - `guard.Evaluate()` is safe for concurrent use. No shared mutable state.
 - Tree-sitter parsers are **not** safe for concurrent use. The evaluation
-  pipeline creates a parser per call (or uses a pool). Parser creation is
-  cheap — the grammar data is shared and read-only.
+  pipeline uses `sync.Pool` to reuse parsers.
+- **Parser pooling invariant**: The bash external scanner carries mutable
+  state (heredoc tracking, glob paren depth, etc.). This state is implicitly
+  reset during the first lex operation of each `Parse()` call via
+  `Scanner.Deserialize(nil)`. This means pooled parsers are safe to reuse
+  without explicit scanner reset. However, `Parse()` allocates a fresh
+  `SubtreeArena` and `Stack` per call, so pooling saves the parser struct,
+  lexer, and external scanner allocation — not the arena/stack. The pooling
+  wrapper should call `parser.Reset()` defensively before returning to pool.
+- **Callers needing timeout behavior** should wrap `Evaluate()` with their
+  own context deadline. The library does not enforce timeouts internally
+  (beyond the 64KB input length limit).
 
 ### Testing
 
@@ -653,11 +809,40 @@ theory. We implement a lightweight version scoped to a single command string
 
 This is not full abstract interpretation — we don't handle control flow
 (if/then/else), loops, or function definitions. We handle the linear and
-`&&`/`||` cases that cover >95% of real-world LLM-generated commands.
+`&&`/`||` cases that cover the majority of real-world LLM-generated commands
+(hypothesis to be validated in Batch 5 testing).
+
+**Scoping model (deliberate over-approximation for safety):**
+
+- **Sequential (`;`)**: Variable definitions carry forward. Straightforward.
+- **`&&` chains**: Both sides are analyzed. Variable definitions from the
+  left side carry forward to the right. This is correct for the success
+  path and conservative for the failure path (variable may not be set if
+  left side fails, but we assume it is).
+- **`||` chains**: **May-alias approach.** Both branches are analyzed. When
+  a variable has different values from different branches
+  (`DIR=/tmp || DIR=/`), we track all possible values and substitute each
+  one independently. If *any* substitution produces a dangerous match, we
+  flag it. This biases toward false positives, which is the correct
+  direction for a safety tool.
+- **Subshells (`(cmd)`)**: Flattened — we treat subshell variable assignments
+  as visible to the parent scope. In real bash, `(export FOO=bar); cmd`
+  does NOT propagate `FOO`. Our over-approximation may produce false
+  positives but never false negatives for this case.
+- **Pipelines (`cmd1 | cmd2`)**: Flattened — variable assignments from any
+  pipeline stage are visible to subsequent stages. In real bash, each
+  pipeline stage is a subshell (except with `lastpipe`). Same conservative
+  over-approximation rationale.
+
+**Error bias**: The dataflow analysis is biased toward **false positives**
+(flagging commands that may not actually be dangerous) rather than false
+negatives (missing dangerous commands). For a safety tool, this is the
+correct trade-off.
 
 **Complexity**: O(n) in the number of AST nodes — a single forward pass. No
 fixpoint iteration needed because bash command strings are acyclic (no loops
-in the common case).
+in the common case). The may-alias branching is bounded by the number of
+`||` branches (typically 1-2).
 
 **Where it lives**: `internal/parse` as part of command extraction. The
 extractor already walks the AST; dataflow tracking is an additional accumulator
@@ -765,8 +950,9 @@ impressive-looking work that produces no measurable user-facing improvement.
 
 **What we do instead**: Focus optimization effort on what matters:
 
-- **Parser pooling**: Avoid allocating a new tree-sitter parser per call.
-  Pool parsers with `sync.Pool` since grammar data is shared and read-only.
+- **Parser pooling**: Pool parsers with `sync.Pool`. Saves parser struct,
+  lexer, and external scanner allocation per call. See §7 Concurrency for
+  the scanner reset invariant details.
 - **Pre-filter effectiveness**: Ensure >90% of benign commands skip parsing
   entirely. This is the highest-leverage optimization — avoiding work entirely.
 - **Lazy pack initialization**: Packs are registered at init time but their
@@ -792,3 +978,40 @@ impressive-looking work that produces no measurable user-facing improvement.
 | R9 | Config file | Layer 5: `cmd/dcgo/config.go` |
 | R10 | CLI test/packs commands | Layer 5: test mode, packs mode |
 | R11 | Environment awareness | `internal/envdetect`, `WithEnv` option |
+
+---
+
+## Review Disposition
+
+Incorporated feedback from: `00-architecture-review-security-architect.md`,
+`00-architecture-review-systems-engineer.md`.
+
+| Finding | Reviewer | Severity | Summary | Disposition | Notes |
+|---------|----------|----------|---------|-------------|-------|
+| SA-P0.1 | security-architect | P0 | Fail-open on partial parses — tree-sitter returns partial trees with ERROR nodes, not full failures | Incorporated | D4 rewritten to distinguish full parse failure from partial parse with ERROR nodes; pipeline step 4 updated with best-effort extraction behavior |
+| SA-P0.2 | security-architect | P0 | Allowlist/blocklist matching semantics undefined | Incorporated | Added full specification: glob matching against raw command string, blocklist-first precedence, scope documentation |
+| SA-P1.1 | security-architect | P1 | Dataflow `\|\|` chains produce incorrect variable resolution | Incorporated | §8 updated with may-alias approach: track all possible values, flag if any substitution is dangerous |
+| SA-P1.2 | security-architect | P1 | Inline script recursion depth unbounded | Incorporated | Pipeline step 8 now specifies max depth of 3, with WarnInlineDepthExceeded |
+| SA-P1.3 | security-architect | P1 | Assessment aggregation underspecified for compound commands | Incorporated | Pipeline step 11 now covers all compound forms with (severity, confidence) tuple ranking |
+| SA-P1.4 | security-architect | P1 | Environment detection matching rules vague | Incorporated | Pipeline step 9 now specifies exact env var names, word-boundary matching, and +1 severity escalation |
+| SA-P2.1 | security-architect | P2 | CommandMatcher too minimal for safe pattern expressiveness | Incorporated | Added built-in matcher types, flag decomposition rules, safe-before-destructive order |
+| SA-P2.2 | security-architect | P2 | No timeout/resource limit on parsing | Incorporated | Pipeline step 1 adds 64KB input limit; §7 documents caller timeout responsibility |
+| SA-P2.3 | security-architect | P2 | Mutation testing deferred too late (Batch 5) | Incorporated | Golden file infrastructure moved to Batch 2 in plan index; mutation testing stays in Batch 5 but golden files seed from Batch 2 |
+| SA-P2.4 | security-architect | P2 | Flags map loses ordering/duplicates | Incorporated | Added documentation of trade-off and flag decomposition rules |
+| SA-P2.5 | security-architect | P2 | tree-sitter-go grammar export dependency risk | Incorporated | D6 updated with fallback plan (temporary vendoring) and exact import paths |
+| SA-P3.1 | security-architect | P3 | No versioning strategy | Incorporated | Added v0 initial release note in API section |
+| SA-P3.2 | security-architect | P3 | No alias/function resolution | Incorporated | Added scope note in CommandMatcher section |
+| SA-P3.3 | security-architect | P3 | R9 inconsistency shaping vs plan index | Not Incorporated | R9 stays nice-to-have in shaping; plan index includes it because it's low-effort once the API exists. No conflict — shaping reflects priority, plan index reflects scope |
+| SA-P3.4 | security-architect | P3 | Negated field unused | Incorporated | Added clarifying comment on the field |
+| SE-P1.1 | systems-engineer | P1 | Evaluate() returns *Result should be Result | Incorporated | Changed to value return; documented zero-value semantics |
+| SE-P1.2 | systems-engineer | P1 | Dataflow scoping under-specified | Incorporated | §8 now documents subshell/pipeline/conditional scoping with explicit over-approximation rationale |
+| SE-P1.3 | systems-engineer | P1 | Batch 4 dependency gap — incomplete pack coverage | Incorporated | Plan index Batch 4 notes updated with coverage gap documentation |
+| SE-P2.1 | systems-engineer | P2 | sync.Pool scanner reset invariant | Incorporated | §7 Concurrency updated with scanner reset details and defensive Reset() call |
+| SE-P2.2 | systems-engineer | P2 | Module path mismatch for tree-sitter-go | Incorporated | Merged with SA-P2.5; D6 now lists exact import paths |
+| SE-P2.3 | systems-engineer | P2 | CommandMatcher too narrow for SQL patterns | Incorporated | Added ArgContentMatcher to built-in matcher list |
+| SE-P2.4 | systems-engineer | P2 | Pre-filter false negative risk with aliases | Incorporated | Pipeline step 3 now documents alias limitation and keyword quality guidance |
+| SE-P2.5 | systems-engineer | P2 | No structured error types | Incorporated | Added Warning type and WarnPartialParse/WarnInlineDepthExceeded/etc. codes to Result |
+| SE-P2.6 | systems-engineer | P2 | Plan index Batch 5 missing URP testing details | Incorporated | Batch 5 description expanded with mutation testing, golden file, grammar coverage |
+| SE-P3.1 | systems-engineer | P3 | Flags map loses ordering | Incorporated | Merged with SA-P2.4 |
+| SE-P3.2 | systems-engineer | P3 | Policy interface lacks context | Not Incorporated | Intentional minimalism documented in API section. Per-pack/per-rule overrides handled via allowlists or multiple Evaluate calls |
+| SE-P3.3 | systems-engineer | P3 | Inline recursion depth unbounded | Incorporated | Merged with SA-P1.2 |
