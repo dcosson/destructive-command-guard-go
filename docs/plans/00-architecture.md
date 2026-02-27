@@ -243,19 +243,24 @@ Orchestrates the analysis steps. This is the core internal engine.
    fail-open (Allow).
 4. **Command extraction** — Walk the AST to extract individual command
    invocations: `(name, args, flags, inlineEnvVars)`.
-5. **Normalization** — Strip path prefixes from command names
+5. **Dataflow resolution** — Forward pass through the AST tracking variable
+   assignments (`DIR=/`, `export RAILS_ENV=production`). Substitute known
+   variable values into subsequent commands' arguments and env vars. See
+   §8 Alien Artifacts for details.
+6. **Normalization** — Strip path prefixes from command names
    (`/usr/bin/git` → `git`).
-6. **Inline script detection** — For commands like `python -c "..."`,
+7. **Inline script detection** — For commands like `python -c "..."`,
    `bash -c "..."`, extract the script body and analyze it with the
    appropriate language grammar.
-7. **Environment detection** — Check inline env vars from the AST and
-   caller-provided env vars for production indicators.
-8. **Pattern matching** — For each extracted command, check against enabled
+8. **Environment detection** — Check inline env vars from the AST,
+   dataflow-resolved env vars, and caller-provided process env vars for
+   production indicators.
+9. **Pattern matching** — For each extracted command, check against enabled
    packs. Safe patterns are checked first (short-circuit to Allow for that
    command). Then destructive patterns are checked.
-9. **Assessment aggregation** — If multiple commands in a pipeline match,
-   take the highest severity.
-10. **Policy application** — Convert the final assessment to a decision
+10. **Assessment aggregation** — If multiple commands in a pipeline match,
+    take the highest severity.
+11. **Policy application** — Convert the final assessment to a decision
     using the configured policy.
 
 ### Layer 3: Pattern Packs (`internal/packs`)
@@ -423,10 +428,12 @@ destructive-command-guard-go/
 │   │
 │   ├── parse/                      # Layer 4: Tree-sitter integration
 │   │   ├── bash.go                 #   Bash parsing + command extraction
+│   │   ├── dataflow.go             #   Variable tracking + resolution (Alien Artifact)
 │   │   ├── normalize.go            #   Command name normalization
 │   │   ├── inline.go               #   Inline script detection
 │   │   ├── command.go              #   ExtractedCommand type
 │   │   ├── bash_test.go
+│   │   ├── dataflow_test.go
 │   │   ├── normalize_test.go
 │   │   └── inline_test.go
 │   │
@@ -611,7 +618,165 @@ to move grammars from `internal/testgrammars/` to a public `grammars/` package.
 
 ---
 
-## 8. Fit Check: Architecture × Requirements
+## 8. Alien Artifacts
+
+### Intraprocedural Dataflow Analysis on Bash AST
+
+Our highest-leverage advanced technique. Instead of analyzing each
+`simple_command` node in isolation, we perform lightweight reaching-definitions
+analysis across compound commands within a single command string.
+
+**Problem it solves:**
+
+```bash
+# Pattern matching on isolated commands misses these:
+DIR=/; rm -rf $DIR                    # Variable carries the danger
+export RAILS_ENV=production && rails db:reset  # Env set in prior command
+DB_HOST=prod-db.internal; psql -h $DB_HOST -c "DROP TABLE users"
+```
+
+In all three cases, the destructive operation and the dangerous context are
+in separate `simple_command` nodes. Isolated extraction misses the connection.
+
+**Technique:**
+
+Reaching-definitions analysis is a classic dataflow analysis from compiler
+theory. We implement a lightweight version scoped to a single command string
+(intraprocedural — we don't analyze across separate invocations):
+
+1. Walk the bash AST in execution order (respecting `&&`, `||`, `;`, pipes)
+2. At each `variable_assignment` or `export` command, record the definition:
+   `{variable_name → value, scope: local|export}`
+3. At each `simple_command`, substitute known variable values into the
+   extracted command's arguments and env vars
+4. Feed the resolved command into pattern matching and environment detection
+
+This is not full abstract interpretation — we don't handle control flow
+(if/then/else), loops, or function definitions. We handle the linear and
+`&&`/`||` cases that cover >95% of real-world LLM-generated commands.
+
+**Complexity**: O(n) in the number of AST nodes — a single forward pass. No
+fixpoint iteration needed because bash command strings are acyclic (no loops
+in the common case).
+
+**Where it lives**: `internal/parse` as part of command extraction. The
+extractor already walks the AST; dataflow tracking is an additional accumulator
+carried through the walk.
+
+---
+
+## 9. Unreasonably Robust Programming (URP)
+
+### Mutation Testing on Pattern Packs
+
+Every condition in every `CommandMatcher` must be load-bearing. We build an
+automated mutation testing harness that:
+
+1. For each destructive pattern, systematically mutates one condition at a time
+   (remove a flag check, change the command name, relax an argument constraint)
+2. Reruns the pack's test suite after each mutation
+3. Verifies that at least one test fails for every mutation
+
+If a mutation doesn't cause a test failure, either the condition is redundant
+(remove it) or the test suite has a gap (add a test). This guarantees our test
+suite exercises every dimension of every pattern.
+
+**Measurement**: Mutation kill rate per pack. Target: 100%.
+
+### Golden File Corpus
+
+A version-controlled corpus of ~500+ real-world commands with expected
+evaluation results (decision, matched pack, severity). Every CI run verifies
+the corpus. Any behavior change on a golden file must be explicitly
+acknowledged in the diff — no silent regressions.
+
+The corpus includes:
+
+- All pack pattern examples (both destructive and safe variants)
+- Edge cases: unusual flag ordering, quoted arguments, path-prefixed binaries
+- Compound commands: pipelines, `&&` chains, subshells
+- Inline scripts: `python -c`, `bash -c`, heredocs
+- False-positive traps: commands that look dangerous but aren't
+- Dataflow cases: variable assignments feeding into destructive commands
+
+**Measurement**: Corpus size and coverage of pack patterns. Every pattern must
+have at least 3 golden file entries (1 match, 1 near-miss, 1 safe variant).
+
+### Fuzz Testing
+
+Fuzz the full evaluation pipeline with randomly generated inputs:
+
+- Random bash-like strings (valid and invalid syntax)
+- Mutations of known commands (swap flags, change arguments)
+- Extremely long inputs, empty inputs, unicode edge cases
+
+**Invariants verified under fuzzing**:
+
+1. Never panics (always returns a valid Result)
+2. Parse errors → Allow (fail-open)
+3. Empty/whitespace commands → Allow
+4. Result.Decision is always one of {Allow, Deny, Ask}
+5. If Result.Assessment is nil, Result.Decision is Allow
+6. If Result.Matches is non-empty, Result.Assessment is non-nil
+
+**Measurement**: Fuzz corpus size, time-to-first-crash (target: never).
+
+### Comparison Testing Against Upstream
+
+Run the same command corpus through both the Rust upstream and our Go version.
+Produce a diff report categorizing every difference as:
+
+- **Intentional improvement** (we catch something the Rust version misses, or
+  we correctly allow something it false-positives on)
+- **Intentional divergence** (different design choice, documented)
+- **Bug** (we miss something the Rust version catches — fix it)
+
+**Measurement**: Comparison pass rate. Unexplained divergences = 0.
+
+### Grammar-Derived Coverage Analysis
+
+Use the tree-sitter bash grammar's node types to enumerate the structural
+contexts a command can appear in (simple_command, pipeline, subshell,
+command_substitution, if_statement body, for loop body, etc.). Verify our
+command extractor handles all of them.
+
+For each pack's command names, generate synthetic commands in every structural
+context and verify extraction + matching works. This catches extractor blind
+spots like "we handle pipelines but not subshells in arithmetic expansion."
+
+**Measurement**: Structural context coverage per pack. Target: 100% of
+bash grammar command-bearing node types.
+
+---
+
+## 10. Extreme Optimization
+
+After analysis, we conclude that extreme optimization (SIMD, assembly, GPU
+offload) is **not applicable** to this workload in a meaningful way.
+
+The inputs are short strings (typically < 1KB), processed one at a time, at
+the frequency of LLM tool invocations (seconds between calls). The dominant
+cost is tree-sitter parsing, which is already well-optimized. The keyword
+pre-filter operates on ~50 short strings against a short command —
+`strings.Contains` completes in nanoseconds at this scale.
+
+Engineering SIMD or assembly for this workload would be optimization theater —
+impressive-looking work that produces no measurable user-facing improvement.
+
+**What we do instead**: Focus optimization effort on what matters:
+
+- **Parser pooling**: Avoid allocating a new tree-sitter parser per call.
+  Pool parsers with `sync.Pool` since grammar data is shared and read-only.
+- **Pre-filter effectiveness**: Ensure >90% of benign commands skip parsing
+  entirely. This is the highest-leverage optimization — avoiding work entirely.
+- **Lazy pack initialization**: Packs are registered at init time but their
+  matchers are only compiled on first use.
+- **Benchmark-driven**: All optimizations are validated by benchmarks. No
+  speculative optimization.
+
+---
+
+## 11. Fit Check: Architecture × Requirements
 
 | Req | Requirement | Arch Coverage |
 |-----|-------------|---------------|
