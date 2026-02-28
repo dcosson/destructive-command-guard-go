@@ -59,10 +59,11 @@ extracted fields.
 - **Command normalization.** The AST faithfully preserves `/usr/bin/git` as
   the command name. We still need to strip path prefixes to normalize
   command names for matching.
-- **Keyword pre-filter.** Before spending time on tree-sitter parsing, a
-  fast string-contains check on pack keywords lets us skip parsing entirely
-  for harmless commands. This is our equivalent of the Rust version's
-  aho-corasick quick-reject.
+- **Keyword pre-filter.** Before spending time on tree-sitter parsing, an
+  Aho-Corasick multi-pattern match on pack keywords lets us skip parsing
+  entirely for harmless commands. Like the upstream, but as the *only*
+  fast-path rejection — we don't need the upstream's additional tiers
+  because tree-sitter handles everything else structurally in one pass.
 
 ---
 
@@ -294,8 +295,9 @@ Orchestrates the analysis steps. This is the core internal engine.
    raw command string). If blocklist matches, short-circuit to Deny. Then
    check allowlist. If allowlist matches, short-circuit to Allow. Blocklist
    takes precedence.
-3. **Keyword pre-filter** — Check if the command string contains any keyword
-   from enabled packs. If no keywords match, return Allow (no parsing needed).
+3. **Keyword pre-filter (Aho-Corasick)** — Single-pass multi-pattern match
+   against all enabled pack keywords using a precomputed Aho-Corasick
+   automaton. If no keywords match, return Allow (no parsing needed).
    Note: the pre-filter may have false negatives for aliased commands
    (e.g., `alias g=git; g push --force` — "git" not present). This is
    acceptable given the threat model (LLMs generate full command names).
@@ -667,15 +669,30 @@ separates command invocations from their arguments, so string content is never
 confused with command invocations. This is a direct advantage of the
 tree-sitter-first architecture.
 
-### D3: Single-pass keyword pre-filter
+### D3: Aho-Corasick keyword pre-filter
 
-**Decision**: Use simple `strings.Contains` checks for keyword pre-filtering
-rather than aho-corasick.
+**Decision**: Use Aho-Corasick multi-pattern matching for the keyword
+pre-filter.
 
-**Rationale**: With 21 packs and ~50 keywords, the pre-filter checks a small
-number of short strings against the command. `strings.Contains` is fast enough
-at this scale and avoids an external dependency. If benchmarks show this is a
-bottleneck (unlikely), we can switch to aho-corasick later.
+**Rationale**: Since packs are static, the Aho-Corasick automaton is built
+once at init time (`sync.Once`) from all enabled pack keywords (~50 keywords
+across 21 packs) and reused for every call. This gives us O(n) matching
+against all keywords simultaneously in a single pass over the command string,
+with zero per-call setup cost. A pure-Go Aho-Corasick library keeps us
+cgo-free.
+
+The upstream Rust version also uses Aho-Corasick for its quick-reject filter,
+but follows it with multiple additional tiers (context sanitization, heredoc
+trigger detection, etc.). Our architecture is cleaner: the pre-filter is the
+*only* fast-path rejection. Everything else flows through the single
+parse → extract → match pipeline. Tree-sitter gives us in one pass the
+structural understanding that the upstream needs multiple tiers to approximate.
+
+**Dynamic pack selection**: When callers use `WithPacks` or
+`WithDisabledPacks`, the pre-filter uses a separate automaton for that pack
+subset. These subset automatons are cached (keyed by the set of enabled
+packs) so repeated calls with the same pack configuration reuse the same
+automaton.
 
 ### D4: Indeterminate assessment on unanalyzable input, best-effort on partial parses
 
@@ -958,9 +975,7 @@ offload) is **not applicable** to this workload in a meaningful way.
 
 The inputs are short strings (typically < 1KB), processed one at a time, at
 the frequency of LLM tool invocations (seconds between calls). The dominant
-cost is tree-sitter parsing, which is already well-optimized. The keyword
-pre-filter operates on ~50 short strings against a short command —
-`strings.Contains` completes in nanoseconds at this scale.
+cost is tree-sitter parsing, which is already well-optimized.
 
 Engineering SIMD or assembly for this workload would be optimization theater —
 impressive-looking work that produces no measurable user-facing improvement.
@@ -970,7 +985,8 @@ impressive-looking work that produces no measurable user-facing improvement.
 - **Parser pooling**: Pool parsers with `sync.Pool`. Saves parser struct,
   lexer, and external scanner allocation per call. See §7 Concurrency for
   the scanner reset invariant details.
-- **Pre-filter effectiveness**: Ensure >90% of benign commands skip parsing
+- **Aho-Corasick pre-filter**: Precomputed automaton matches all ~50 keywords
+  in a single O(n) pass. Target: >90% of benign commands skip parsing
   entirely. This is the highest-leverage optimization — avoiding work entirely.
 - **Lazy pack initialization**: Packs are registered at init time but their
   matchers are only compiled on first use.
