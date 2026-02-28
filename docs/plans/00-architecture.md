@@ -22,8 +22,10 @@ security boundary.
 - **Assessment ≠ Decision**: Pattern matching produces severity + confidence
   assessments. A separate policy layer converts assessments to decisions
   (Allow/Deny/Ask). Callers control their own risk tolerance.
-- **Fail-open**: Parse errors, unknown constructs, and timeouts result in
-  Allow, not Deny. We never block valid workflows due to analysis limitations.
+- **Indeterminate → Policy decides**: When input can't be fully analyzed
+  (parse failures, oversized input), the pipeline produces an Indeterminate
+  assessment. The caller's policy decides the outcome — strict callers deny,
+  interactive callers ask, permissive callers allow.
 
 ### Architectural Divergence from Upstream (Rust)
 
@@ -173,8 +175,9 @@ type Result struct {
 }
 
 // Warning indicates a non-fatal condition during evaluation.
-// These are informational — they don't change the decision but enable
-// observability of fail-open events for monitoring.
+// Warnings are informational for observability. Some warnings (like
+// WarnPartialParse) also trigger Indeterminate assessments that affect
+// the decision via the policy layer.
 type Warning struct {
     Code    WarningCode
     Message string
@@ -212,7 +215,8 @@ type Match struct {
 
 type Severity int
 const (
-    Low Severity = iota
+    Indeterminate Severity = iota // Could not analyze (parse failure, input too large)
+    Low
     Medium
     High
     Critical
@@ -241,9 +245,9 @@ type Policy interface {
 }
 
 // Built-in policies
-func StrictPolicy() Policy       // Deny on Medium+, no Ask
-func InteractivePolicy() Policy  // Ask on Medium, Deny on High+
-func PermissivePolicy() Policy   // Ask on High, Deny on Critical only
+func StrictPolicy() Policy       // Deny on Medium+ and Indeterminate, no Ask
+func InteractivePolicy() Policy  // Ask on Medium and Indeterminate, Deny on High+
+func PermissivePolicy() Policy   // Ask on High, Deny on Critical, Allow Indeterminate
 ```
 
 **Allowlist/Blocklist matching semantics:**
@@ -282,9 +286,10 @@ Orchestrates the analysis steps. This is the core internal engine.
 
 **Pipeline steps:**
 
-1. **Input validation** — Reject empty/whitespace commands (Allow, no
-   warnings). Truncate commands exceeding 64KB (Allow with
-   `WarnInputTruncated` — commands this long are not typical LLM output).
+1. **Input validation** — Empty/whitespace commands return Allow (no
+   warnings — there's nothing to guard against). Commands exceeding 128KB
+   produce an Indeterminate assessment with `WarnInputTruncated` — the
+   policy decides whether to allow, deny, or ask.
 2. **Blocklist/Allowlist check** — Check blocklist first (glob match against
    raw command string). If blocklist matches, short-circuit to Deny. Then
    check allowlist. If allowlist matches, short-circuit to Allow. Blocklist
@@ -300,12 +305,14 @@ Orchestrates the analysis steps. This is the core internal engine.
    almost always returns a tree (with error recovery), even for malformed
    input. We distinguish two cases:
    - **Full parse failure** (very rare — tree-sitter returns no tree):
-     fail-open, return Allow with `WarnPartialParse`.
+     produce an Indeterminate assessment with `WarnPartialParse`. The policy
+     decides the outcome.
    - **Partial parse with ERROR nodes** (common for unusual syntax): proceed
      with best-effort extraction. The extractor extracts all `simple_command`
-     nodes it can find, including those adjacent to ERROR nodes. This is not
-     fail-open — it is best-effort analysis. A `WarnPartialParse` warning is
-     added to the result.
+     nodes it can find, including those adjacent to ERROR nodes. A
+     `WarnPartialParse` warning is added to the result. If any destructive
+     patterns are found in the successfully-parsed portions, those assessments
+     take precedence over Indeterminate.
 4. **Command extraction** — Walk the AST to extract individual command
    invocations: `(name, args, flags, inlineEnvVars)`.
 5. **Dataflow resolution** — Forward pass through the AST tracking variable
@@ -670,23 +677,32 @@ number of short strings against the command. `strings.Contains` is fast enough
 at this scale and avoids an external dependency. If benchmarks show this is a
 bottleneck (unlikely), we can switch to aho-corasick later.
 
-### D4: Fail-open on parse errors, best-effort on partial parses
+### D4: Indeterminate assessment on unanalyzable input, best-effort on partial parses
 
-**Decision**: Two distinct behaviors:
+**Decision**: Three distinct behaviors for degenerate inputs:
 
-1. **Full parse failure** (tree-sitter returns no tree — extremely rare):
-   return Allow with `WarnPartialParse`. This is fail-open.
-2. **Partial parse with ERROR nodes** (tree-sitter's error recovery produced
-   a tree with some ERROR nodes — common for unusual syntax): extract all
-   `simple_command` nodes we can find and analyze them. This is **best-effort
-   analysis**, not fail-open. A `WarnPartialParse` warning is included so
-   callers can monitor how often this occurs.
+1. **Empty/whitespace command**: Allow unconditionally. There is nothing to
+   guard against.
+2. **Full parse failure or input too large** (tree-sitter returns no tree,
+   or input exceeds 128KB): produce an `Indeterminate` severity assessment
+   and let the policy decide. StrictPolicy denies, InteractivePolicy asks,
+   PermissivePolicy allows.
+3. **Partial parse with ERROR nodes** (tree-sitter's error recovery produced
+   a tree with some ERROR nodes): extract all `simple_command` nodes we can
+   find and analyze them. This is **best-effort analysis**. If destructive
+   patterns are found in parsed portions, those assessments take precedence.
+   If no patterns match in the parsed portions, the result is Indeterminate
+   (we couldn't fully analyze the command). A `WarnPartialParse` warning is
+   always included.
 
-**Rationale**: Tree-sitter almost always returns *some* tree due to its error
-recovery. A pure "fail-open on parse error" policy would almost never trigger.
-The real risk is ERROR nodes in otherwise-parsed trees causing the extractor
-to silently skip destructive commands. Best-effort extraction mitigates this
-by analyzing everything we can structurally understand.
+**Rationale**: "Fail-open" is the wrong default for a safety tool. When we
+can't analyze a command, the right answer is "we don't know" — and the
+*caller's policy* should decide what to do with uncertainty. This is consistent
+with D5 (assessment/policy separation): the pipeline produces assessments,
+the policy makes decisions. Indeterminate is an assessment, not a decision.
+
+The only unconditional Allow is for empty commands, where there is genuinely
+nothing to evaluate.
 
 ### D5: Assessment/Policy separation
 
@@ -749,7 +765,7 @@ coordination issue, not a blocking dependency.
   wrapper should call `parser.Reset()` defensively before returning to pool.
 - **Callers needing timeout behavior** should wrap `Evaluate()` with their
   own context deadline. The library does not enforce timeouts internally
-  (beyond the 64KB input length limit).
+  (beyond the 128KB input length limit).
 
 ### Testing
 
@@ -898,11 +914,12 @@ Fuzz the full evaluation pipeline with randomly generated inputs:
 **Invariants verified under fuzzing**:
 
 1. Never panics (always returns a valid Result)
-2. Parse errors → Allow (fail-open)
-3. Empty/whitespace commands → Allow
-4. Result.Decision is always one of {Allow, Deny, Ask}
-5. If Result.Assessment is nil, Result.Decision is Allow
-6. If Result.Matches is non-empty, Result.Assessment is non-nil
+2. Empty/whitespace commands → Allow
+3. Result.Decision is always one of {Allow, Deny, Ask}
+4. If Result.Assessment is nil, Result.Decision is Allow
+5. If Result.Matches is non-empty, Result.Assessment is non-nil
+6. Parse failures → Assessment.Severity is Indeterminate (policy decides)
+7. Input > 128KB → Assessment.Severity is Indeterminate (policy decides)
 
 **Measurement**: Fuzz corpus size, time-to-first-crash (target: never).
 
@@ -995,7 +1012,7 @@ Incorporated feedback from: `00-architecture-review-security-architect.md`,
 | SA-P1.3 | security-architect | P1 | Assessment aggregation underspecified for compound commands | Incorporated | Pipeline step 11 now covers all compound forms with (severity, confidence) tuple ranking |
 | SA-P1.4 | security-architect | P1 | Environment detection matching rules vague | Incorporated | Pipeline step 9 now specifies exact env var names, word-boundary matching, and +1 severity escalation |
 | SA-P2.1 | security-architect | P2 | CommandMatcher too minimal for safe pattern expressiveness | Incorporated | Added built-in matcher types, flag decomposition rules, safe-before-destructive order |
-| SA-P2.2 | security-architect | P2 | No timeout/resource limit on parsing | Incorporated | Pipeline step 1 adds 64KB input limit; §7 documents caller timeout responsibility |
+| SA-P2.2 | security-architect | P2 | No timeout/resource limit on parsing | Incorporated | Pipeline step 1 adds 128KB input limit; §7 documents caller timeout responsibility |
 | SA-P2.3 | security-architect | P2 | Mutation testing deferred too late (Batch 5) | Incorporated | Golden file infrastructure moved to Batch 2 in plan index; mutation testing stays in Batch 5 but golden files seed from Batch 2 |
 | SA-P2.4 | security-architect | P2 | Flags map loses ordering/duplicates | Incorporated | Added documentation of trade-off and flag decomposition rules |
 | SA-P2.5 | security-architect | P2 | tree-sitter-go grammar export dependency risk | Incorporated | D6 updated with fallback plan (temporary vendoring) and exact import paths |
