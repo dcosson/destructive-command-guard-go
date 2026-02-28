@@ -18,7 +18,7 @@ shaping: true
 | R7 | 🟡 Standalone binary supports other agent protocols (Copilot, Gemini CLI) in addition to Claude Code | Nice-to-have |
 | R8 | 🟡 Library API supports caller-provided allowlists and blocklists (overrides in both directions) | Must-have |
 | R9 | 🟡 Standalone binary reads config file for allowlists/blocklists/pack selection | Nice-to-have |
-| R10 | CLI: `dcgo test "cmd"` (with `--explain`), `dcgo packs` to list packs | Must-have |
+| R10 | CLI: `dcg-go test "cmd"` (with `--explain`), `dcg-go packs` to list packs | Must-have |
 | R11 | 🟡 Environment awareness — detect production indicators from inline env vars in the command (via AST) and from caller-provided process env vars; escalate severity of database/infra commands in production-looking environments | Must-have |
 
 ---
@@ -44,7 +44,7 @@ standalone binary and h2 integration are thin wrappers around it.
 | **A8** | **Pattern packs** — Modular pattern definitions organized by category. Each pack has: keywords (for pre-filter), safe patterns (whitelist), destructive patterns (blacklist) with severity, confidence, and remediation suggestions. Patterns produce assessments, not decisions — the policy layer (A2) maps these to actions. Some patterns are environment-sensitive (e.g. `rails db:reset` is Medium normally, Critical when `RAILS_ENV=production`). | |
 | **A9** | **Standalone hook binary** — Thin `main()` that reads Claude Code JSON from stdin, extracts the command, calls the evaluation API with default policy and `os.Environ()`, outputs JSON with `permissionDecision` of `allow`, `deny`, or `ask`. | |
 | **A10** | **Config file loading (standalone binary only)** — Binary reads optional config file for allowlists, blocklists, pack selection, policy choice, then passes them as options to the library API. Not needed for library consumers like h2 who manage their own config. | ⚠️ |
-| **A11** | **CLI interface** — Binary is `dcgo`. Subcommands: `dcgo test "cmd"` (run guard, show result; `--explain` for detailed reasoning), `dcgo packs` (list available packs). Hook mode is default when no subcommand (reads stdin JSON). | |
+| **A11** | **CLI interface** — Binary is `dcg-go`. Subcommands: `dcg-go test "cmd"` (run guard, show result; `--explain` for detailed reasoning), `dcg-go packs` (list available packs). Hook mode is default when no subcommand (reads stdin JSON). | |
 
 ---
 
@@ -62,7 +62,7 @@ standalone binary and h2 integration are thin wrappers around it.
 | R7 | 🟡 Standalone binary supports other agent protocols (Copilot, Gemini CLI) in addition to Claude Code | Nice-to-have | ❌ |
 | R8 | 🟡 Library API supports caller-provided allowlists and blocklists (overrides in both directions) | Must-have | ✅ |
 | R9 | 🟡 Standalone binary reads config file for allowlists/blocklists/pack selection | Nice-to-have | ❌ |
-| R10 | 🟡 CLI: `dcgo test "cmd"` (with `--explain`), `dcgo packs` to list packs | Must-have | ✅ |
+| R10 | 🟡 CLI: `dcg-go test "cmd"` (with `--explain`), `dcg-go packs` to list packs | Must-have | ✅ |
 
 | R11 | 🟡 Environment awareness — detect production indicators from inline env vars in the command (via AST) and from caller-provided process env vars; escalate severity of database/infra commands in production-looking environments | Must-have | ✅ |
 

@@ -1,7 +1,7 @@
 # Destructive Command Guard (Go) — Architecture
 
 **Module**: `github.com/dcosson/destructive-command-guard-go`
-**Binary**: `dcgo`
+**Binary**: `dcg-go`
 **Source**: [Shaping doc](../shaping/shaping.md) | [Frame](../shaping/frame.md)
 
 ---
@@ -106,10 +106,10 @@ graph TB
         OtherGrammars["grammars/python,<br/>ruby, js, etc."]
     end
 
-    subgraph "CLI (cmd/dcgo)"
+    subgraph "CLI (cmd/dcg-go)"
         HookMode["Hook Mode (stdin JSON)"]
-        TestMode["Test Mode (dcgo test)"]
-        PacksMode["Packs Mode (dcgo packs)"]
+        TestMode["Test Mode (dcg-go test)"]
+        PacksMode["Packs Mode (dcg-go packs)"]
         Config["Config File Loader"]
     end
 
@@ -449,15 +449,15 @@ Wraps tree-sitter-go for our specific needs:
   and extract the embedded script text
 - **Multi-language parsing**: Parse extracted scripts with appropriate grammars
 
-### Layer 5: CLI (`cmd/dcgo`)
+### Layer 5: CLI (`cmd/dcg-go`)
 
 Thin binary with three modes:
 
 - **Hook mode** (default, no subcommand): Read JSON from stdin, evaluate,
   write JSON to stdout. Initially supports Claude Code protocol only.
-- **Test mode** (`dcgo test "cmd"`): Evaluate a command and print the result.
+- **Test mode** (`dcg-go test "cmd"`): Evaluate a command and print the result.
   `--explain` for detailed reasoning.
-- **Packs mode** (`dcgo packs`): List available packs with descriptions.
+- **Packs mode** (`dcg-go packs`): List available packs with descriptions.
 - **Config**: Optional YAML/TOML config file for allowlists, blocklists,
   pack selection.
 
@@ -519,7 +519,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant CC as Claude Code
-    participant DCGO as dcgo binary
+    participant DCGO as dcg-go binary
     participant Guard as guard.Evaluate()
 
     CC->>DCGO: stdin JSON: {"tool": "Bash",<br/>"input": {"command": "git push --force"}}
@@ -602,11 +602,11 @@ destructive-command-guard-go/
 │       └── detect_test.go
 │
 ├── cmd/
-│   └── dcgo/                       # Layer 5: CLI binary
+│   └── dcg-go/                       # Layer 5: CLI binary
 │       ├── main.go                 #   Entry point, subcommand routing
 │       ├── hook.go                 #   Hook mode (stdin JSON → stdout JSON)
-│       ├── test.go                 #   Test mode (dcgo test "cmd")
-│       ├── packs.go                #   Packs mode (dcgo packs)
+│       ├── test.go                 #   Test mode (dcg-go test "cmd")
+│       ├── packs.go                #   Packs mode (dcg-go packs)
 │       └── config.go               #   Config file loading
 │
 ├── docs/
@@ -621,7 +621,7 @@ destructive-command-guard-go/
 
 ```mermaid
 graph TD
-    CMD["cmd/dcgo"] --> GUARD["guard (public API)"]
+    CMD["cmd/dcg-go"] --> GUARD["guard (public API)"]
     GUARD --> EVAL["internal/eval"]
     EVAL --> PARSE["internal/parse"]
     EVAL --> PACKS["internal/packs"]
@@ -972,10 +972,10 @@ impressive-looking work that produces no measurable user-facing improvement.
 | R3 | Tree-sitter structural analysis | Layer 4: `internal/parse`, D1: structural matching |
 | R4 | Cover destructive command categories | Layer 3: 21 packs across all categories |
 | R5 | Benchmarked performance | Cross-cutting: benchmark suite |
-| R6 | Standalone hook binary | Layer 5: `cmd/dcgo` hook mode |
+| R6 | Standalone hook binary | Layer 5: `cmd/dcg-go` hook mode |
 | R7 | Other agent protocols | Not in v1 — library is protocol-agnostic, easy to add |
 | R8 | Allowlists/blocklists | `WithAllowlist`/`WithBlocklist` options |
-| R9 | Config file | Layer 5: `cmd/dcgo/config.go` |
+| R9 | Config file | Layer 5: `cmd/dcg-go/config.go` |
 | R10 | CLI test/packs commands | Layer 5: test mode, packs mode |
 | R11 | Environment awareness | `internal/envdetect`, `WithEnv` option |
 

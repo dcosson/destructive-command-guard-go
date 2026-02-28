@@ -92,7 +92,7 @@ established pattern. 03b-03e can run in parallel with each other.
 
 | Doc | Component | Description | Depends On | Status |
 |-----|-----------|-------------|-----------|--------|
-| [04-api-and-cli](./04-api-and-cli.md) | Public API & CLI | `guard` package public API (Evaluate, Result, Option types). CLI binary: hook mode (Claude Code JSON protocol), test mode (dcgo test), packs mode (dcgo packs). Config file loading (YAML). Integration tests exercising full pipeline. | 02, 03a | Not started |
+| [04-api-and-cli](./04-api-and-cli.md) | Public API & CLI | `guard` package public API (Evaluate, Result, Option types). CLI binary: hook mode (Claude Code JSON protocol), test mode (dcg-go test), packs mode (dcg-go packs). Config file loading (YAML). Integration tests exercising full pipeline. | 02, 03a | Not started |
 
 **Notes**: The public API and CLI are one plan because the CLI is a thin wrapper
 around the API. This doesn't strictly depend on ALL packs being done (03b-03e)
