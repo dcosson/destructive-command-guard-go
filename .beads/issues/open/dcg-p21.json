@@ -1,0 +1,15 @@
+{
+  "id": "dcg-p21",
+  "title": "Verify keyword source-of-truth is covered in plans",
+  "description": "After all sub-plans are written, verify that 02-matching-framework (or another sub-plan) fully specifies: (1) how keywords are declared per-pack (source of truth), (2) how the registry compiles the keyword set from enabled packs, (3) whether keywords are compiled once at init or per-call based on WithPacks/WithDisabledPacks options, (4) that the shaping doc's keyword lists are referenced as the starting point for each pack's keywords.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg-go"
+  ],
+  "created_at": "2026-02-28T14:29:53.546414-08:00",
+  "updated_at": "2026-02-28T14:29:53.546414-08:00"
+}
