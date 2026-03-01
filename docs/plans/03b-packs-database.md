@@ -39,7 +39,7 @@ that LLM coding agents interact with:
 **Scope**:
 - 5 packs, each with safe + destructive patterns
 - All packs follow the pack authoring guide (03a §4)
-- 80+ golden file entries across all 5 packs
+- 70+ golden file entries across all 5 packs
 - Per-pattern unit tests with match and near-miss cases
 - Reachability tests for every destructive pattern
 - Environment escalation tests for env-sensitive packs
@@ -144,12 +144,21 @@ are case-insensitive by specification.
 | DROP DATABASE | `(?i)\bDROP\s+DATABASE\b` | `DROP DATABASE mydb` |
 | TRUNCATE | `(?i)\bTRUNCATE\b` | `TRUNCATE users`, `TRUNCATE TABLE orders` |
 | DELETE no WHERE | `(?i)\bDELETE\s+FROM\b(?!.*\bWHERE\b)` | `DELETE FROM users` but NOT `DELETE FROM users WHERE id=1` |
+| UPDATE no WHERE | `(?i)\bUPDATE\b(?!.*\bWHERE\b)` | `UPDATE users SET active=false` but NOT `UPDATE users SET active=false WHERE id=1` |
 | ALTER TABLE DROP | `(?i)\bALTER\s+TABLE\b.*\bDROP\b` | `ALTER TABLE users DROP COLUMN email` |
+| DROP SCHEMA | `(?i)\bDROP\s+SCHEMA\b` | `DROP SCHEMA public CASCADE` |
 
-**DELETE FROM heuristic**: The "no WHERE" check uses a negative lookahead
-`(?!.*\bWHERE\b)`. This is a **heuristic** — it will false-positive on
-multi-statement inputs where WHERE appears in a different statement. We set
-`ConfidenceMedium` for this pattern to reflect the heuristic nature.
+**DELETE FROM / UPDATE without WHERE heuristic**: The "no WHERE" check uses
+separate matchers: `SQLContent(\bDELETE\s+FROM\b)` composed with
+`Not(SQLContent(\bWHERE\b))`. This is a **heuristic** with a known
+**false-negative** in multi-statement SQL: if WHERE appears in a **different**
+statement (e.g., `DELETE FROM users; SELECT * FROM orders WHERE active=true`),
+the Not clause sees WHERE and the pattern fails to match. The DELETE without
+WHERE goes undetected. The same limitation applies to UPDATE without WHERE.
+
+We set `ConfidenceMedium` for these patterns to reflect the heuristic nature.
+A future enhancement could split on semicolons before checking, but this
+requires matcher framework changes beyond v1 scope.
 
 ### 4.3 DataflowResolved Consideration
 
@@ -223,7 +232,7 @@ func (m ArgContentMatcher) Match(cmd parse.ExtractedCommand) bool {
 }
 ```
 
-**Builder helper**:
+**Builder helpers**:
 ```go
 // SQLContent creates an ArgContentMatcher that checks both args and flag
 // values for a case-insensitive SQL regex pattern.
@@ -234,7 +243,43 @@ func SQLContent(pattern string) ArgContentMatcher {
         CheckFlagValues: true,
     }
 }
+
+// ArgAtFold matches an arg at a specific index using case-insensitive
+// string comparison (strings.EqualFold). Used for Redis commands where
+// commands are case-insensitive but we want exact command matching
+// without regex overhead.
+func ArgAtFold(idx int, value string) CommandMatcher {
+    return argAtFoldMatcher{idx: idx, value: value}
+}
+
+type argAtFoldMatcher struct {
+    idx   int
+    value string
+}
+
+func (m argAtFoldMatcher) Match(cmd parse.ExtractedCommand) bool {
+    if m.idx < len(cmd.Args) {
+        return strings.EqualFold(cmd.Args[m.idx], m.value)
+    }
+    return false
+}
 ```
+
+### 4.5 Matcher Naming Clarification
+
+The plan uses several related matchers. To avoid confusion for pack authors:
+
+| Builder | What it checks | Use case |
+|---------|---------------|----------|
+| `ArgContent(substring)` | Substring match in `cmd.Args` only | Simple substring in args |
+| `ArgContentRegex(pattern)` | Regex match in `cmd.Args` only | Regex patterns in args (e.g., `"^\\."` for dot-commands) |
+| `SQLContent(pattern)` | Case-insensitive regex in **both** `cmd.Args` and `cmd.Flags` values | SQL keywords in flag values (`-c`, `-e`) or args |
+| `ArgAt(idx, value)` | Exact string match at `cmd.Args[idx]` | Exact positional match (case-sensitive) |
+| `ArgAtFold(idx, value)` | Case-insensitive match at `cmd.Args[idx]` | Redis commands (case-insensitive) |
+
+**Important**: `ArgContent` does **substring** matching, not regex. Patterns
+like `"^\\."` should use `ArgContentRegex` instead of `ArgContent`. This is
+a cross-plan reference to plan 02's matcher definitions.
 
 ---
 
@@ -245,8 +290,8 @@ func SQLContent(pattern string) ArgContentMatcher {
 **Pack ID**: `database.postgresql`
 **Keywords**: `["psql", "pg_dump", "pg_restore", "dropdb", "createdb"]`
 **Safe Patterns**: 5
-**Destructive Patterns**: 8
-**EnvSensitive**: Yes (4 of 8 destructive patterns)
+**Destructive Patterns**: 10
+**EnvSensitive**: Yes (7 of 10 destructive patterns)
 
 ```go
 package database
@@ -286,6 +331,8 @@ var pgPack = packs.Pack{
                     packs.SQLContent(`\bTRUNCATE\b`),
                     packs.SQLContent(`\bDELETE\b`),
                     packs.SQLContent(`\bALTER\b`),
+                    packs.SQLContent(`\bUPDATE\b`),
+                    packs.SQLContent(`\bINSERT\b`),
                 )),
             ),
         },
@@ -401,8 +448,7 @@ var pgPack = packs.Pack{
                 packs.Name("pg_dump"),
                 packs.Or(
                     packs.Flags("--clean"),
-                    // Note: pg_dump -c means --clean, but this conflicts with
-                    // psql -c which means --command. We only match pg_dump here.
+                    packs.Flags("-c"), // pg_dump -c means --clean (not --command like psql)
                 ),
             ),
             Severity:     guard.Medium,
@@ -425,7 +471,7 @@ var pgPack = packs.Pack{
             Confidence:   guard.ConfidenceHigh,
             Reason:       "pg_restore --clean drops existing database objects before recreating them",
             Remediation:  "Use pg_restore without --clean to restore without dropping existing data.",
-            EnvSensitive: false,
+            EnvSensitive: true,
         },
         // D8: ALTER TABLE ... DROP via psql
         {
@@ -441,6 +487,33 @@ var pgPack = packs.Pack{
             Remediation:  "Create a backup first. Verify the column/constraint name.",
             EnvSensitive: false,
         },
+        // D9: UPDATE without WHERE via psql
+        {
+            Name: "psql-update-no-where",
+            Match: packs.And(
+                packs.Name("psql"),
+                packs.SQLContent(`\bUPDATE\b`),
+                packs.Not(packs.SQLContent(`\bWHERE\b`)),
+            ),
+            Severity:     guard.Medium,
+            Confidence:   guard.ConfidenceMedium,
+            Reason:       "UPDATE without WHERE clause modifies all rows in the table",
+            Remediation:  "Add a WHERE clause to target specific rows.",
+            EnvSensitive: true,
+        },
+        // D10: DROP SCHEMA via psql
+        {
+            Name: "psql-drop-schema",
+            Match: packs.And(
+                packs.Name("psql"),
+                packs.SQLContent(`\bDROP\s+SCHEMA\b`),
+            ),
+            Severity:     guard.High,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "DROP SCHEMA destroys all objects in the schema (tables, views, functions). With CASCADE, this can destroy an entire application's database objects.",
+            Remediation:  "Use pg_dump to backup the schema first. Verify the schema name.",
+            EnvSensitive: true,
+        },
     },
 }
 ```
@@ -449,10 +522,10 @@ var pgPack = packs.Pack{
 
 | Safe Pattern | Prevents Destructive | Key Distinguishing Condition |
 |-------------|---------------------|----------------------------|
-| psql-select-safe | psql-drop-database, psql-drop-table, psql-truncate, psql-delete-no-where, psql-alter-drop | `-c` with SELECT/EXPLAIN and Not(DROP\|TRUNCATE\|DELETE\|ALTER) |
-| pg-dump-safe | pg-dump-clean | Not(--clean) |
+| psql-select-safe | psql-drop-database, psql-drop-table, psql-truncate, psql-delete-no-where, psql-update-no-where, psql-alter-drop, psql-drop-schema | `-c` with SELECT/EXPLAIN and Not(DROP\|TRUNCATE\|DELETE\|ALTER\|UPDATE\|INSERT) |
+| pg-dump-safe | pg-dump-clean | Not(--clean \| -c) |
 | createdb-safe | (none — no destructive createdb patterns) | Name = createdb |
-| psql-interactive-safe | psql-drop-*, psql-truncate, psql-delete-*, psql-alter-drop | Not(-c \| --command \| -f \| --file) |
+| psql-interactive-safe | psql-drop-*, psql-truncate, psql-delete-*, psql-update-*, psql-alter-drop, psql-drop-schema | Not(-c \| --command \| -f \| --file) |
 | pg-restore-safe | pg-restore-clean | Not(--clean \| -c) |
 
 **Notes**:
@@ -460,6 +533,10 @@ var pgPack = packs.Pack{
 - `psql -f drop.sql` (file execution) matches neither safe nor destructive
   because we cannot inspect file contents. It passes as "no match" → Allow.
   This is a known limitation documented in §13.
+- `createdb --template production_db new_db` copies an entire database. While
+  read-only from the source's perspective, it can cause heavy I/O on a
+  production server. We don't flag this — it's a benign-but-potentially-
+  expensive operation, not a destructive one.
 
 ---
 
@@ -468,8 +545,8 @@ var pgPack = packs.Pack{
 **Pack ID**: `database.mysql`
 **Keywords**: `["mysql", "mysqldump", "mysqladmin"]`
 **Safe Patterns**: 4
-**Destructive Patterns**: 7
-**EnvSensitive**: Yes (4 of 7 destructive patterns)
+**Destructive Patterns**: 8
+**EnvSensitive**: Yes (5 of 8 destructive patterns)
 
 ```go
 var mysqlPack = packs.Pack{
@@ -499,10 +576,12 @@ var mysqlPack = packs.Pack{
                     packs.SQLContent(`\bTRUNCATE\b`),
                     packs.SQLContent(`\bDELETE\b`),
                     packs.SQLContent(`\bALTER\b`),
+                    packs.SQLContent(`\bUPDATE\b`),
+                    packs.SQLContent(`\bINSERT\b`),
                 )),
             ),
         },
-        // S2: mysqldump (backup — read-only) without --add-drop-table
+        // S2: mysqldump (backup — read-only)
         // Note: mysqldump includes DROP TABLE by default. --skip-add-drop-table
         // disables it. We consider default mysqldump safe because it's a backup
         // tool — the risk is at restore time, not dump time.
@@ -643,6 +722,20 @@ var mysqlPack = packs.Pack{
             Remediation:  "Schedule flush operations during maintenance windows.",
             EnvSensitive: false,
         },
+        // D8: UPDATE without WHERE via mysql -e
+        {
+            Name: "mysql-update-no-where",
+            Match: packs.And(
+                packs.Name("mysql"),
+                packs.SQLContent(`\bUPDATE\b`),
+                packs.Not(packs.SQLContent(`\bWHERE\b`)),
+            ),
+            Severity:     guard.Medium,
+            Confidence:   guard.ConfidenceMedium,
+            Reason:       "UPDATE without WHERE clause modifies all rows in the table",
+            Remediation:  "Add a WHERE clause to target specific rows.",
+            EnvSensitive: true,
+        },
     },
 }
 ```
@@ -668,7 +761,7 @@ right command is matched.
 **Pack ID**: `database.sqlite`
 **Keywords**: `["sqlite3"]`
 **Safe Patterns**: 2
-**Destructive Patterns**: 4
+**Destructive Patterns**: 5
 **EnvSensitive**: No (SQLite is a local file database)
 
 ```go
@@ -687,24 +780,24 @@ var sqlitePack = packs.Pack{
                 packs.Or(
                     packs.SQLContent(`\bSELECT\b`),
                     packs.SQLContent(`\bEXPLAIN\b`),
-                    packs.ArgContent("^\\."  ), // sqlite3 dot-commands: .tables, .schema, .dump
+                    packs.ArgContentRegex(`^\\.`), // sqlite3 dot-commands: .tables, .schema, .dump
                 ),
                 packs.Not(packs.Or(
                     packs.SQLContent(`\bDROP\b`),
                     packs.SQLContent(`\bTRUNCATE\b`),
                     packs.SQLContent(`\bDELETE\b`),
+                    packs.SQLContent(`\bUPDATE\b`),
+                    packs.SQLContent(`\bINSERT\b`),
                 )),
             ),
         },
-        // S2: sqlite3 interactive (no SQL argument)
+        // S2: sqlite3 non-destructive (no destructive SQL detected)
         {
-            Name: "sqlite3-interactive-safe",
+            Name: "sqlite3-non-destructive-safe",
             Match: packs.And(
                 packs.Name("sqlite3"),
-                // sqlite3 with just a db file path and no SQL arg
-                // Heuristic: if there's exactly 1 arg (the db path), it's interactive
-                packs.Not(packs.SQLContent(`\b(?:DROP|TRUNCATE|DELETE|ALTER)\b`)),
-                packs.Not(packs.ArgContent(`\.drop`)),
+                packs.Not(packs.SQLContent(`\b(?:DROP|TRUNCATE|DELETE|ALTER|UPDATE)\b`)),
+                packs.Not(packs.ArgContentRegex(`\.drop`)),
             ),
         },
     },
@@ -772,6 +865,20 @@ var sqlitePack = packs.Pack{
             Remediation:  "SQLite uses DELETE FROM (without WHERE) instead of TRUNCATE.",
             EnvSensitive: false,
         },
+        // D5: UPDATE without WHERE via sqlite3
+        {
+            Name: "sqlite3-update-no-where",
+            Match: packs.And(
+                packs.Name("sqlite3"),
+                packs.SQLContent(`\bUPDATE\b`),
+                packs.Not(packs.SQLContent(`\bWHERE\b`)),
+            ),
+            Severity:     guard.Medium,
+            Confidence:   guard.ConfidenceMedium,
+            Reason:       "UPDATE without WHERE clause modifies all rows in the table",
+            Remediation:  "Add a WHERE clause to target specific rows.",
+            EnvSensitive: false,
+        },
     },
 }
 ```
@@ -781,7 +888,7 @@ var sqlitePack = packs.Pack{
 ### 5.4 `database.mongodb` Pack (`internal/packs/database/mongodb.go`)
 
 **Pack ID**: `database.mongodb`
-**Keywords**: `["mongo", "mongosh", "mongodump", "mongorestore"]`
+**Keywords**: `["mongo", "mongosh", "mongodump", "mongorestore", "mongos"]`
 **Safe Patterns**: 3
 **Destructive Patterns**: 6
 **EnvSensitive**: Yes (5 of 6 destructive patterns)
@@ -794,8 +901,8 @@ operations are method calls like `db.dropDatabase()` or
 var mongoPack = packs.Pack{
     ID:          "database.mongodb",
     Name:        "MongoDB",
-    Description: "MongoDB destructive operations via mongosh, mongo, mongodump, mongorestore",
-    Keywords:    []string{"mongo", "mongosh", "mongodump", "mongorestore"},
+    Description: "MongoDB destructive operations via mongosh, mongo, mongos, mongodump, mongorestore",
+    Keywords:    []string{"mongo", "mongosh", "mongos", "mongodump", "mongorestore"},
 
     Safe: []packs.SafePattern{
         // S1: mongodump (backup — read-only)
@@ -810,6 +917,7 @@ var mongoPack = packs.Pack{
                 packs.Or(
                     packs.Name("mongosh"),
                     packs.Name("mongo"),
+                    packs.Name("mongos"),
                 ),
                 packs.Or(
                     packs.Flags("--eval"),
@@ -838,6 +946,7 @@ var mongoPack = packs.Pack{
                 packs.Or(
                     packs.Name("mongosh"),
                     packs.Name("mongo"),
+                    packs.Name("mongos"),
                 ),
                 packs.Not(packs.Flags("--eval")),
                 packs.Not(packs.Flags("-e")),
@@ -855,6 +964,7 @@ var mongoPack = packs.Pack{
                 packs.Or(
                     packs.Name("mongosh"),
                     packs.Name("mongo"),
+                    packs.Name("mongos"),
                 ),
                 packs.SQLContent(`dropDatabase\s*\(`),
             ),
@@ -871,6 +981,7 @@ var mongoPack = packs.Pack{
                 packs.Or(
                     packs.Name("mongosh"),
                     packs.Name("mongo"),
+                    packs.Name("mongos"),
                 ),
                 packs.SQLContent(`\.drop\s*\(`),
                 packs.Not(packs.SQLContent(`dropDatabase`)),
@@ -891,8 +1002,9 @@ var mongoPack = packs.Pack{
                 packs.Or(
                     packs.Name("mongosh"),
                     packs.Name("mongo"),
+                    packs.Name("mongos"),
                 ),
-                packs.SQLContent(`deleteMany\s*\(\s*\{\s*\}\s*\)`),
+                packs.SQLContent(`deleteMany\s*\(\s*(?:\{\s*\})?\s*\)`),
             ),
             Severity:     guard.Medium,
             Confidence:   guard.ConfidenceHigh,
@@ -907,6 +1019,7 @@ var mongoPack = packs.Pack{
                 packs.Or(
                     packs.Name("mongosh"),
                     packs.Name("mongo"),
+                    packs.Name("mongos"),
                 ),
                 packs.SQLContent(`\.remove\s*\(\s*\{\s*\}\s*\)`),
             ),
@@ -936,9 +1049,10 @@ var mongoPack = packs.Pack{
                 packs.Or(
                     packs.Name("mongosh"),
                     packs.Name("mongo"),
+                    packs.Name("mongos"),
                 ),
                 packs.SQLContent(`deleteMany\s*\(`),
-                packs.Not(packs.SQLContent(`deleteMany\s*\(\s*\{\s*\}\s*\)`)), // Not empty filter
+                packs.Not(packs.SQLContent(`deleteMany\s*\(\s*(?:\{\s*\})?\s*\)`)), // Not empty/no filter
             ),
             Severity:     guard.Medium,
             Confidence:   guard.ConfidenceMedium,
@@ -952,22 +1066,32 @@ var mongoPack = packs.Pack{
 
 #### 5.4.1 MongoDB Notes
 
-**mongo vs mongosh**: The legacy `mongo` shell is deprecated in favor of
-`mongosh`. We match both command names for backwards compatibility. The
-patterns are identical for both.
+**mongo vs mongosh vs mongos**: The legacy `mongo` shell is deprecated in
+favor of `mongosh`. `mongos` is the MongoDB shard router, which also
+supports `--eval` and can execute all the same destructive JavaScript
+expressions. We match all three command names. The patterns are identical.
 
 **Shell expression matching**: MongoDB patterns use `SQLContent()` (which
 wraps `ArgContentRegex` with `CheckFlagValues: true`) to match JavaScript
 method call patterns. The regex patterns target method names:
 - `dropDatabase\s*\(` — matches `db.dropDatabase()`
 - `\.drop\s*\(` — matches `db.collection.drop()`
-- `deleteMany\s*\(\s*\{\s*\}\s*\)` — matches `deleteMany({})` with empty filter
+- `deleteMany\s*\(\s*(?:\{\s*\})?\s*\)` — matches `deleteMany({})` or `deleteMany()` (empty/no filter)
 
-**Empty filter detection**: The `deleteMany({})` pattern uses a precise regex
-that matches empty object literals `{}` with optional whitespace. This is a
-ConfidenceHigh match because the empty filter is structurally unambiguous.
-`deleteMany` with a non-empty filter gets ConfidenceMedium because we can't
-evaluate filter selectivity.
+**Empty filter detection**: The `deleteMany` pattern matches both
+`deleteMany({})` (explicit empty filter) and `deleteMany()` (no argument,
+which behaves as delete-all in some MongoDB versions). Both are
+ConfidenceHigh because the intent is structurally unambiguous. `deleteMany`
+with a non-empty filter gets ConfidenceMedium because we can't evaluate
+filter selectivity.
+
+**dropIndex over-classification**: The `\.drop\s*\(` regex in
+`mongo-collection-drop` also matches `db.users.dropIndex("idx")` and
+`db.users.dropIndexes()`. These are destructive operations but less severe
+than collection drop. Currently they are classified at High severity via the
+collection drop pattern. This is intentional over-classification — for a
+mistake-preventer, flagging at higher severity is safer than under-flagging.
+`deleteMany(null)` and `deleteMany(undefined)` are not caught (edge case).
 
 ---
 
@@ -976,11 +1100,12 @@ evaluate filter selectivity.
 **Pack ID**: `database.redis`
 **Keywords**: `["redis-cli"]`
 **Safe Patterns**: 2
-**Destructive Patterns**: 5
-**EnvSensitive**: Yes (4 of 5 destructive patterns)
+**Destructive Patterns**: 6
+**EnvSensitive**: Yes (4 of 6 destructive patterns)
 
 Redis is simpler than SQL databases — commands are passed as positional
-arguments to `redis-cli` without a flag like `-c` or `-e`.
+arguments to `redis-cli` without a flag like `-c` or `-e`. All Redis
+commands are case-insensitive, so we use `ArgAtFold` (§4.4) for matching.
 
 ```go
 var redisPack = packs.Pack{
@@ -990,30 +1115,21 @@ var redisPack = packs.Pack{
     Keywords:    []string{"redis-cli"},
 
     Safe: []packs.SafePattern{
-        // S1: redis-cli read-only commands
+        // S1: redis-cli read-only commands (case-insensitive via ArgAtFold)
         {
             Name: "redis-cli-readonly-safe",
             Match: packs.And(
                 packs.Name("redis-cli"),
                 packs.Or(
-                    packs.ArgAt(0, "GET"),
-                    packs.ArgAt(0, "get"),
-                    packs.ArgAt(0, "KEYS"),
-                    packs.ArgAt(0, "keys"),
-                    packs.ArgAt(0, "INFO"),
-                    packs.ArgAt(0, "info"),
-                    packs.ArgAt(0, "PING"),
-                    packs.ArgAt(0, "ping"),
-                    packs.ArgAt(0, "TTL"),
-                    packs.ArgAt(0, "ttl"),
-                    packs.ArgAt(0, "TYPE"),
-                    packs.ArgAt(0, "type"),
-                    packs.ArgAt(0, "DBSIZE"),
-                    packs.ArgAt(0, "dbsize"),
-                    packs.ArgAt(0, "SCAN"),
-                    packs.ArgAt(0, "scan"),
-                    packs.ArgAt(0, "MONITOR"),
-                    packs.ArgAt(0, "monitor"),
+                    packs.ArgAtFold(0, "GET"),
+                    packs.ArgAtFold(0, "KEYS"),
+                    packs.ArgAtFold(0, "INFO"),
+                    packs.ArgAtFold(0, "PING"),
+                    packs.ArgAtFold(0, "TTL"),
+                    packs.ArgAtFold(0, "TYPE"),
+                    packs.ArgAtFold(0, "DBSIZE"),
+                    packs.ArgAtFold(0, "SCAN"),
+                    packs.ArgAtFold(0, "MONITOR"),
                 ),
             ),
         },
@@ -1024,26 +1140,15 @@ var redisPack = packs.Pack{
             Name: "redis-cli-interactive-safe",
             Match: packs.And(
                 packs.Name("redis-cli"),
-                // No positional args = interactive mode
-                // This is a heuristic — connection flags (-h, -p, -a) don't
-                // count as Redis commands
+                // Exclude commands that have destructive patterns
                 packs.Not(packs.Or(
-                    packs.ArgAt(0, "FLUSHALL"),
-                    packs.ArgAt(0, "flushall"),
-                    packs.ArgAt(0, "FLUSHDB"),
-                    packs.ArgAt(0, "flushdb"),
-                    packs.ArgAt(0, "DEL"),
-                    packs.ArgAt(0, "del"),
-                    packs.ArgAt(0, "UNLINK"),
-                    packs.ArgAt(0, "unlink"),
-                    packs.ArgAt(0, "SET"),
-                    packs.ArgAt(0, "set"),
-                    packs.ArgAt(0, "CONFIG"),
-                    packs.ArgAt(0, "config"),
-                    packs.ArgAt(0, "DEBUG"),
-                    packs.ArgAt(0, "debug"),
-                    packs.ArgAt(0, "SHUTDOWN"),
-                    packs.ArgAt(0, "shutdown"),
+                    packs.ArgAtFold(0, "FLUSHALL"),
+                    packs.ArgAtFold(0, "FLUSHDB"),
+                    packs.ArgAtFold(0, "DEL"),
+                    packs.ArgAtFold(0, "UNLINK"),
+                    packs.ArgAtFold(0, "CONFIG"),
+                    packs.ArgAtFold(0, "DEBUG"),
+                    packs.ArgAtFold(0, "SHUTDOWN"),
                 )),
             ),
         },
@@ -1057,12 +1162,7 @@ var redisPack = packs.Pack{
             Name: "redis-flushall",
             Match: packs.And(
                 packs.Name("redis-cli"),
-                packs.Or(
-                    packs.ArgAt(0, "FLUSHALL"),
-                    packs.ArgAt(0, "flushall"),
-                    packs.Arg("FLUSHALL"),
-                    packs.Arg("flushall"),
-                ),
+                packs.ArgAtFold(0, "FLUSHALL"),
             ),
             Severity:     guard.High,
             Confidence:   guard.ConfidenceHigh,
@@ -1075,12 +1175,7 @@ var redisPack = packs.Pack{
             Name: "redis-flushdb",
             Match: packs.And(
                 packs.Name("redis-cli"),
-                packs.Or(
-                    packs.ArgAt(0, "FLUSHDB"),
-                    packs.ArgAt(0, "flushdb"),
-                    packs.Arg("FLUSHDB"),
-                    packs.Arg("flushdb"),
-                ),
+                packs.ArgAtFold(0, "FLUSHDB"),
             ),
             Severity:     guard.High,
             Confidence:   guard.ConfidenceHigh,
@@ -1091,16 +1186,14 @@ var redisPack = packs.Pack{
 
         // ---- Medium ----
 
-        // D3: DEL with wildcard pattern (mass deletion)
+        // D3: DEL/UNLINK (key deletion)
         {
-            Name: "redis-del-wildcard",
+            Name: "redis-key-delete",
             Match: packs.And(
                 packs.Name("redis-cli"),
                 packs.Or(
-                    packs.ArgAt(0, "DEL"),
-                    packs.ArgAt(0, "del"),
-                    packs.ArgAt(0, "UNLINK"),
-                    packs.ArgAt(0, "unlink"),
+                    packs.ArgAtFold(0, "DEL"),
+                    packs.ArgAtFold(0, "UNLINK"),
                 ),
             ),
             Severity:     guard.Medium,
@@ -1114,15 +1207,10 @@ var redisPack = packs.Pack{
             Name: "redis-config-set",
             Match: packs.And(
                 packs.Name("redis-cli"),
+                packs.ArgAtFold(0, "CONFIG"),
                 packs.Or(
-                    packs.ArgAt(0, "CONFIG"),
-                    packs.ArgAt(0, "config"),
-                ),
-                packs.Or(
-                    packs.Arg("SET"),
-                    packs.Arg("set"),
-                    packs.Arg("RESETSTAT"),
-                    packs.Arg("resetstat"),
+                    packs.ArgAtFold(1, "SET"),
+                    packs.ArgAtFold(1, "RESETSTAT"),
                 ),
             ),
             Severity:     guard.Medium,
@@ -1136,17 +1224,25 @@ var redisPack = packs.Pack{
             Name: "redis-shutdown",
             Match: packs.And(
                 packs.Name("redis-cli"),
-                packs.Or(
-                    packs.ArgAt(0, "SHUTDOWN"),
-                    packs.ArgAt(0, "shutdown"),
-                    packs.Arg("SHUTDOWN"),
-                    packs.Arg("shutdown"),
-                ),
+                packs.ArgAtFold(0, "SHUTDOWN"),
             ),
             Severity:     guard.Medium,
             Confidence:   guard.ConfidenceHigh,
             Reason:       "SHUTDOWN stops the Redis server, causing service disruption",
             Remediation:  "Use redis-cli BGSAVE first. Schedule shutdowns during maintenance windows.",
+            EnvSensitive: false,
+        },
+        // D6: DEBUG (dangerous debug subcommands)
+        {
+            Name: "redis-debug",
+            Match: packs.And(
+                packs.Name("redis-cli"),
+                packs.ArgAtFold(0, "DEBUG"),
+            ),
+            Severity:     guard.Medium,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "DEBUG commands can crash the server (SEGFAULT), block it (SLEEP), or modify internal state",
+            Remediation:  "DEBUG commands should only be used in development environments for testing purposes.",
             EnvSensitive: false,
         },
     },
@@ -1156,23 +1252,32 @@ var redisPack = packs.Pack{
 #### 5.5.1 Redis Notes
 
 **Case sensitivity**: Redis commands are case-insensitive (FLUSHALL =
-flushall). We match both forms explicitly with `ArgAt(0, "FLUSHALL")` and
-`ArgAt(0, "flushall")`. An alternative would be to use `ArgContentRegex`
-with `(?i)`, but explicit matching is simpler and more readable for Redis
-since the command set is small.
+flushall = FlushAll). We use `ArgAtFold(idx, value)` which performs
+`strings.EqualFold()` matching. This catches all case variations without
+requiring duplicate patterns or regex.
 
-**DEL with wildcard**: The shaping doc mentions `DEL *` as a pattern. In
-practice, `redis-cli DEL *` doesn't actually use shell globbing — the `*`
-is passed literally to Redis which doesn't support glob in DEL. Mass deletion
-is typically done via `redis-cli KEYS "pattern*" | xargs redis-cli DEL`.
-We flag all `DEL`/`UNLINK` commands at Medium severity because they indicate
-key deletion intent. The wildcard case (via xargs pipeline) is caught by the
-pipeline's compound command evaluation — the inner `redis-cli DEL` matches.
+**DEL/UNLINK key deletion**: The shaping doc mentions `DEL *` as a pattern.
+In practice, `redis-cli DEL *` doesn't use shell globbing — the `*` is
+passed literally. Mass deletion is typically done via
+`redis-cli KEYS "pattern*" | xargs redis-cli DEL`. We flag all DEL/UNLINK
+commands at Medium severity because they indicate key deletion intent. The
+wildcard case (via xargs pipeline) is caught by the pipeline's compound
+command evaluation — the inner `redis-cli DEL` matches.
 
 **redis-cli connection flags**: `redis-cli -h host -p 6379 -a password FLUSHALL`
 puts `-h`, `-p`, `-a` into the Flags map and `FLUSHALL` into `Args[0]` after
-flag extraction. The patterns correctly match `ArgAt(0, "FLUSHALL")` because
-connection flags are separated from the Redis command.
+flag extraction. The patterns correctly match `ArgAtFold(0, "FLUSHALL")`
+because connection flags are separated from the Redis command.
+
+**DEBUG subcommands**: The `redis-debug` pattern catches all DEBUG subcommands
+(SEGFAULT, SLEEP, SET-ACTIVE-EXPIRE, etc.) at Medium severity. DEBUG SEGFAULT
+crashes the server, DEBUG SLEEP blocks it. These should only be used in
+development environments.
+
+**CONFIG SET granularity**: All CONFIG SET operations are flagged at Medium
+severity. Some CONFIG SET parameters are benign (`loglevel`) while others
+are dangerous (`maxmemory 1`, `requirepass ""`). Distinguishing between them
+would require enumerating all Redis config parameters. Deferred to v2.
 
 ---
 
@@ -1298,6 +1403,42 @@ severity: High
 confidence: High
 pack: database.postgresql
 rule: psql-drop-table
+---
+# D9: psql UPDATE no WHERE — ask
+command: psql -c "UPDATE users SET active=false"
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: database.postgresql
+rule: psql-update-no-where
+---
+# Edge: psql UPDATE with WHERE — allowed (no destructive match)
+command: psql -c "UPDATE users SET active=false WHERE id = 1"
+decision: Allow
+---
+# D10: psql DROP SCHEMA — denied
+command: psql -c "DROP SCHEMA public CASCADE"
+decision: Deny
+severity: High
+confidence: High
+pack: database.postgresql
+rule: psql-drop-schema
+---
+# S1: psql \dt meta-command — allowed
+command: psql -c "\dt"
+decision: Allow
+---
+# S1: psql \d+ meta-command — allowed
+command: psql -c "\d+ users"
+decision: Allow
+---
+# D6: pg_dump -c (short for --clean) — ask
+command: pg_dump -c mydb > backup.sql
+decision: Ask
+severity: Medium
+confidence: High
+pack: database.postgresql
+rule: pg-dump-clean
 ```
 
 ### 6.2 `database.mysql` Golden Entries
@@ -1381,6 +1522,18 @@ decision: Allow
 # S4: mysqladmin status — allowed
 command: mysqladmin status
 decision: Allow
+---
+# D8: mysql UPDATE no WHERE — ask
+command: mysql -e "UPDATE users SET active=false"
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: database.mysql
+rule: mysql-update-no-where
+---
+# Edge: mysql UPDATE with WHERE — allowed
+command: mysql -e "UPDATE users SET active=false WHERE id = 1"
+decision: Allow
 ```
 
 ### 6.3 `database.sqlite` Golden Entries
@@ -1427,6 +1580,18 @@ decision: Allow
 ---
 # Edge: sqlite3 interactive — allowed
 command: sqlite3 test.db
+decision: Allow
+---
+# D5: sqlite3 UPDATE no WHERE — ask
+command: sqlite3 test.db "UPDATE config SET value='reset'"
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: database.sqlite
+rule: sqlite3-update-no-where
+---
+# Edge: sqlite3 UPDATE with WHERE — allowed
+command: sqlite3 test.db "UPDATE config SET value='reset' WHERE key='debug'"
 decision: Allow
 ```
 
@@ -1553,7 +1718,7 @@ decision: Ask
 severity: Medium
 confidence: Medium
 pack: database.redis
-rule: redis-del-wildcard
+rule: redis-key-delete
 ---
 # D3: redis-cli UNLINK — ask
 command: redis-cli UNLINK session:12345
@@ -1561,7 +1726,7 @@ decision: Ask
 severity: Medium
 confidence: Medium
 pack: database.redis
-rule: redis-del-wildcard
+rule: redis-key-delete
 ---
 # D4: redis-cli CONFIG SET — ask
 command: redis-cli CONFIG SET maxmemory 100mb
@@ -1598,10 +1763,34 @@ decision: Allow
 # S1: redis-cli PING — allowed
 command: redis-cli PING
 decision: Allow
+---
+# D6: redis-cli DEBUG SEGFAULT — ask
+command: redis-cli DEBUG SEGFAULT
+decision: Ask
+severity: Medium
+confidence: High
+pack: database.redis
+rule: redis-debug
+---
+# D6: redis-cli DEBUG SLEEP — ask
+command: redis-cli DEBUG SLEEP 9999
+decision: Ask
+severity: Medium
+confidence: High
+pack: database.redis
+rule: redis-debug
+---
+# Edge: redis-cli FlushAll (mixed case) — denied (ArgAtFold)
+command: redis-cli FlushAll
+decision: Deny
+severity: High
+confidence: High
+pack: database.redis
+rule: redis-flushall
 ```
 
-**Total golden file entries**: 18 (postgresql) + 12 (mysql) + 7 (sqlite) +
-11 (mongodb) + 13 (redis) = **61 entries**
+**Total golden file entries**: 25 (postgresql) + 14 (mysql) + 9 (sqlite) +
+11 (mongodb) + 16 (redis) = **75 entries**
 
 ---
 
@@ -1783,6 +1972,8 @@ func TestPgPatternReachability(t *testing.T) {
         "pg-dump-clean":      cmd("pg_dump", nil, m("--clean", "")),
         "pg-restore-clean":   cmd("pg_restore", nil, m("--clean", "")),
         "psql-alter-drop":    cmd("psql", nil, m("-c", "ALTER TABLE users DROP COLUMN email")),
+        "psql-update-no-where": cmd("psql", nil, m("-c", "UPDATE users SET active=false")),
+        "psql-drop-schema":   cmd("psql", nil, m("-c", "DROP SCHEMA public CASCADE")),
     }
 
     for _, dp := range pgPack.Destructive {
@@ -1813,8 +2004,10 @@ func TestPgEnvSensitiveFlags(t *testing.T) {
         "psql-truncate":       true,
         "psql-delete-no-where": true,
         "pg-dump-clean":       false,
-        "pg-restore-clean":    false,
+        "pg-restore-clean":    true,
         "psql-alter-drop":     false,
+        "psql-update-no-where": true,
+        "psql-drop-schema":    true,
     }
     for _, dp := range pgPack.Destructive {
         t.Run(dp.Name+"/env-sensitive", func(t *testing.T) {
@@ -1843,7 +2036,7 @@ packs automatically once they're registered via `init()`.
 
 ### 7.3 Golden File Tests
 
-All 61 golden file entries (§6) are tested via the golden file infrastructure.
+All 75 golden file entries (§6) are tested via the golden file infrastructure.
 
 ### 7.4 Benchmarks
 
@@ -1935,15 +2128,24 @@ commands against production databases.
 **Measurement**: `TestPgEnvSensitiveFlags` (and equivalents for each pack)
 verify the `EnvSensitive` flag is correctly set.
 
-### Delete-Without-WHERE Heuristic
+### DML-Without-WHERE Heuristic
 
-The `DELETE FROM` without `WHERE` pattern uses a regex negative lookahead
-to detect missing WHERE clauses. While imperfect (it's a heuristic — see
-§4.2), it catches the most common and dangerous form of mass deletion.
+Both `DELETE FROM` and `UPDATE` without `WHERE` patterns use separate
+matchers to detect missing WHERE clauses. While imperfect (there is a
+known false-negative for multi-statement SQL — see §4.2), this heuristic
+catches the most common and dangerous form of mass deletion/modification.
 Setting `ConfidenceMedium` honestly reflects the heuristic nature.
 
 **Measurement**: Golden file entries for both with-WHERE and without-WHERE
-cases. Unit tests for case variations.
+cases for both DELETE and UPDATE. Unit tests for case variations.
+
+### Redis Case-Insensitive Matching
+
+All Redis patterns use `ArgAtFold()` with `strings.EqualFold()` for case-
+insensitive matching. This eliminates the mixed-case evasion vector that
+would exist with explicit upper/lowercase pairs.
+
+**Measurement**: Golden file entry for `redis-cli FlushAll` (mixed case).
 
 ---
 
@@ -1977,7 +2179,7 @@ regex engine's O(n) complexity.
 6. **`internal/packs/database/redis.go`** + `redis_test.go` — Redis pack.
    Simplest overall (positional arg matching).
 
-7. **Golden file entries** — Add all 61 entries to
+7. **Golden file entries** — Add all 75 entries to
    `internal/eval/testdata/golden/`.
 
 8. **Run all tests** — Unit, reachability, completeness, golden file.
@@ -2004,12 +2206,65 @@ parallel). Step 1 must complete before any pack implementation.
    in a future enhancement, but it requires cross-command dataflow analysis
    that's out of scope for v1.
 
-3. **Multi-statement SQL**: `psql -c "SELECT 1; DROP TABLE users"` contains
-   both safe and destructive SQL in one argument. The `ArgContentRegex` will
-   match `DROP TABLE` even though `SELECT` is also present. The safe pattern
-   will NOT match because it checks `Not(DROP)`. This is correct behavior —
-   the destructive statement should be caught.
+3. **Multi-statement SQL (destructive detection)**: `psql -c "SELECT 1; DROP TABLE users"`
+   correctly triggers the destructive pattern because the safe pattern checks
+   `Not(DROP)` and the destructive pattern finds `DROP TABLE`. This is correct.
 
-4. **redis-cli `--eval` for Lua scripts**: `redis-cli --eval script.lua` runs
+4. **Multi-statement SQL (WHERE false negative)**: `psql -c "DELETE FROM users; SELECT * FROM orders WHERE active=true"`
+   produces a **false negative** for the DELETE-without-WHERE pattern. The
+   WHERE in the SELECT statement causes the Not(WHERE) check to fail, so the
+   DELETE without WHERE goes undetected. The same applies to UPDATE without
+   WHERE. **Decision**: Accept the gap for v1. A future enhancement could
+   split on semicolons before checking. ConfidenceMedium reflects this.
+
+5. **redis-cli `--eval` for Lua scripts**: `redis-cli --eval script.lua` runs
    Lua scripts in Redis. We don't analyze Lua content. This is similar to the
    `psql -f` gap. **Decision**: Accept the gap for v1.
+
+6. **v2 pattern candidates**: The following destructive operations are not
+   covered in v1 but could be added in a future version:
+   - DROP INDEX (PostgreSQL, MySQL) — performance impact, not data loss
+   - SQLite ALTER TABLE DROP COLUMN — uncommon in LLM-generated commands
+   - Redis SCRIPT FLUSH, CLIENT KILL — operational impact
+   - Redis CONFIG SET parameter-level granularity
+   - MongoDB dropIndex/dropIndexes at a separate (Medium) severity level
+
+---
+
+## Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-reviewer | P0 | DELETE-without-WHERE multi-statement false negative (P0-1) | Incorporated | §4.2 terminology fixed (false-positive → false-negative), failure mode documented, OQ4 added |
+| 2 | dcg-reviewer | P0 | Redis mixed-case commands bypass all patterns (P0-2) | Incorporated | §4.4 ArgAtFold helper added, §5.5 rewritten with ArgAtFold for all Redis patterns |
+| 3 | dcg-reviewer | P1 | psql-select-safe shadows multi-statement UPDATE/INSERT (P1-1) | Incorporated | UPDATE and INSERT added to Not-clause in all SQL safe patterns (§5.1 S1, §5.2 S1, §5.3 S1, S2) |
+| 4 | dcg-reviewer | P1 | pg_dump -c not in destructive Or clause (P1-2) | Incorporated | Added Flags("-c") to pg-dump-clean D6 Or clause |
+| 5 | dcg-reviewer | P1 | MongoDB dropIndex over-classification (P1-3) | Incorporated | Documented as accepted over-classification in §5.4.1 notes |
+| 6 | dcg-reviewer | P1 | deleteMany() empty-parens false negative (P1-4) | Incorporated | Extended regex to `deleteMany\s*\(\s*(?:\{\s*\})?\s*\)` |
+| 7 | dcg-reviewer | P1 | ArgContent vs SQLContent naming confusion (P1-5) | Incorporated | §4.5 matcher naming table added, sqlite3 ArgContent fixed to ArgContentRegex |
+| 8 | dcg-reviewer | P2 | Dual SQL flag test case missing (P2-1) | Incorporated | Added to E7 in test harness |
+| 9 | dcg-reviewer | P2 | SQLite ALTER TABLE DROP COLUMN gap (P2-2) | Not Incorporated | Deferred to v2; uncommon in LLM-generated SQLite commands |
+| 10 | dcg-reviewer | P2 | mongos not covered (P2-3) | Incorporated | Added mongos to Keywords and all MongoDB Name() Or clauses |
+| 11 | dcg-reviewer | P2 | Redis DEBUG/SET in exclusion list (P2-4) | Incorporated | Added redis-debug D6 at Medium severity; removed SET from exclusion list |
+| 12 | dcg-reviewer | P2 | Golden count mismatch 80+ vs 61 (P2-5) | Incorporated | Fixed to 70+ in §1 (now 75 entries after new patterns added) |
+| 13 | dcg-reviewer | P3 | pg-restore-clean not env-sensitive (P3-1) | Incorporated | Changed pg-restore-clean EnvSensitive to true |
+| 14 | dcg-reviewer | P3 | CONFIG SET granularity (P3-2) | Not Incorporated | Documented as v2 refinement in §13 OQ6 |
+| 15 | dcg-reviewer | P3 | psql meta-command tests missing (P3-3) | Incorporated | Added \dt and \d+ golden file entries in §6 |
+| 16 | dcg-reviewer | P3 | P4 test doesn't test actual pack patterns (P3-4) | Incorporated | Updated P4 in test harness to test actual pack matchers |
+| 17 | dcg-reviewer | P3 | createdb --template note missing (P3-5) | Incorporated | Added to §5.1.1 notes |
+| 18 | dcg-alt-reviewer | P0 | DELETE FROM without WHERE false negative in multi-stmt SQL (DB-P0.1) | Incorporated | Duplicate of #1; terminology fixed, ConfidenceMedium retained |
+| 19 | dcg-alt-reviewer | P0 | psql-select-safe doesn't exclude UPDATE/INSERT (DB-P0.2) | Incorporated | Duplicate of #3; UPDATE and INSERT added to all SQL safe Not-clauses |
+| 20 | dcg-alt-reviewer | P1 | pg_dump -c short flag missing (DB-P1.1) | Incorporated | Duplicate of #4; Flags("-c") added |
+| 21 | dcg-alt-reviewer | P1 | Redis mixed case evasion (DB-P1.2) | Incorporated | Duplicate of #2; ArgAtFold used for all Redis patterns |
+| 22 | dcg-alt-reviewer | P1 | Missing UPDATE without WHERE across all SQL packs (DB-P1.3) | Incorporated | Added psql-update-no-where D9, mysql-update-no-where D8, sqlite3-update-no-where D5 |
+| 23 | dcg-alt-reviewer | P1 | Missing DROP SCHEMA CASCADE for PostgreSQL (DB-P1.4) | Incorporated | Added psql-drop-schema D10 at High/ConfidenceHigh, EnvSensitive |
+| 24 | dcg-alt-reviewer | P2 | Destructive SQL patterns don't require -c/-e flag (DB-P2.1) | Not Incorporated | Wider net is intentional defense-in-depth; false positive extremely unlikely |
+| 25 | dcg-alt-reviewer | P2 | MongoDB .drop() regex could match hypothetical method names (DB-P2.2) | Not Incorporated | .drop( is precise enough; MongoDB has no methods containing "drop" as substring |
+| 26 | dcg-alt-reviewer | P2 | sqlite3-interactive-safe name misleading (DB-P2.3) | Incorporated | Renamed to sqlite3-non-destructive-safe |
+| 27 | dcg-alt-reviewer | P2 | Missing DROP INDEX across SQL packs (DB-P2.4) | Not Incorporated | Deferred to v2; performance impact, not data loss |
+| 28 | dcg-alt-reviewer | P2 | Terminology error false-positive → false-negative (DB-P2.5) | Incorporated | Duplicate of #1; fixed in §4.2 |
+| 29 | dcg-alt-reviewer | P2 | Redis SCRIPT FLUSH, CLIENT KILL, DEBUG SEGFAULT not covered (DB-P2.6) | Incorporated | Partially; redis-debug D6 added. SCRIPT FLUSH/CLIENT KILL deferred to v2 |
+| 30 | dcg-alt-reviewer | P3 | redis-del-wildcard name misleading (DB-P3.1) | Incorporated | Renamed to redis-key-delete |
+| 31 | dcg-alt-reviewer | P3 | Database name containing SQL keywords false positive (DB-P3.2) | Not Incorporated | Extremely unlikely; accepted as defense-in-depth |
+| 32 | dcg-alt-reviewer | P3 | Env escalation tested only at flag level (DB-P3.3) | Not Incorporated | Correct architecture; escalation tested in plan 04 |
+| 33 | dcg-alt-reviewer | P3 | mongo keyword word-boundary dependency on plan 02 (DB-P3.4) | Not Incorporated | Dependency on plan 02 implementation, not actionable here |

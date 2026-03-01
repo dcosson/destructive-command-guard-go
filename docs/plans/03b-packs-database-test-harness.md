@@ -125,25 +125,42 @@ func TestPropertyEnvSensitivityConsistency(t *testing.T) {
 
 ### P4: SQL Regex Case Insensitivity
 
-**Invariant**: For every SQL-based destructive pattern, the regex matches
-the same SQL keyword in uppercase, lowercase, and mixed case.
+**Invariant**: For every SQL-based destructive pattern, the actual pack
+matcher handles case variations correctly. This tests the real patterns,
+not a generic regex.
 
-This uses property-based testing with generated case variations.
+This uses property-based testing with generated case variations applied
+to actual pack matchers.
 
 ```go
 func TestPropertySQLCaseInsensitivity(t *testing.T) {
-    sqlKeywords := []string{
-        "DROP TABLE", "DROP DATABASE", "TRUNCATE", "DELETE FROM",
-        "ALTER TABLE", "WHERE",
+    // Test actual pack patterns with random case variations
+    patternTests := []struct {
+        packID  string
+        pattern string
+        sqlBase string // base SQL to vary case on
+        tool    string
+        flag    string
+    }{
+        {"database.postgresql", "psql-drop-table", "DROP TABLE users", "psql", "-c"},
+        {"database.postgresql", "psql-drop-database", "DROP DATABASE myapp", "psql", "-c"},
+        {"database.postgresql", "psql-truncate", "TRUNCATE TABLE orders", "psql", "-c"},
+        {"database.mysql", "mysql-drop-table", "DROP TABLE users", "mysql", "-e"},
+        {"database.mysql", "mysql-drop-database", "DROP DATABASE myapp", "mysql", "-e"},
+        {"database.postgresql", "psql-drop-schema", "DROP SCHEMA public CASCADE", "psql", "-c"},
     }
 
-    // Generate random case variations
     f := func(seed int64) bool {
         rng := rand.New(rand.NewSource(seed))
-        for _, kw := range sqlKeywords {
-            varied := randomCase(rng, kw) // e.g., "dRoP tAbLe"
-            re := regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(kw[:4]) + `\b`)
-            if !re.MatchString(varied) {
+        for _, pt := range patternTests {
+            varied := randomCase(rng, pt.sqlBase)
+            cmd := parse.ExtractedCommand{
+                Name:  pt.tool,
+                Flags: map[string]string{pt.flag: varied},
+            }
+            pack := packByID(pt.packID)
+            dp := findDestructiveByName(pack, pt.pattern)
+            if !dp.Match.Match(cmd) {
                 return false
             }
         }
@@ -275,7 +292,7 @@ func TestPropertyCrossPackIsolation(t *testing.T) {
 
 ## E: Deterministic Examples
 
-### E1: database.postgresql Pattern Matrix (18 cases)
+### E1: database.postgresql Pattern Matrix (25 cases)
 
 Complete test matrix using `InteractivePolicy` for decision column.
 See plan doc §6.1 for the full golden file entries.
@@ -289,24 +306,30 @@ psql -c "DROP TABLE users"                       → Deny/High (psql-drop-table)
 psql -c "DROP TABLE IF EXISTS sessions"          → Deny/High (psql-drop-table)
 psql -c "TRUNCATE TABLE orders"                  → Deny/High (psql-truncate)
 psql -c "drop table users"                       → Deny/High (psql-drop-table, case insensitive)
+psql -c "DROP SCHEMA public CASCADE"             → Deny/High (psql-drop-schema)
 
 # Destructive — MEDIUM
 psql -c "DELETE FROM users"                      → Ask/Medium (psql-delete-no-where)
+psql -c "UPDATE users SET active=false"          → Ask/Medium (psql-update-no-where)
 pg_dump --clean mydb > backup.sql                → Ask/Medium (pg-dump-clean)
+pg_dump -c mydb > backup.sql                     → Ask/Medium (pg-dump-clean, short flag)
 pg_restore --clean backup.dump                   → Ask/Medium (pg-restore-clean)
 psql -c "ALTER TABLE users DROP COLUMN email"    → Ask/Medium (psql-alter-drop)
 
 # Safe / Edge
 psql -c "SELECT * FROM users"                    → Allow (psql-select-safe)
+psql -c "\dt"                                    → Allow (psql-select-safe, meta-command)
+psql -c "\d+ users"                              → Allow (psql-select-safe, meta-command)
 pg_dump mydb > backup.sql                        → Allow (pg-dump-safe)
 createdb myapp_test                              → Allow (createdb-safe)
 psql -h localhost mydb                           → Allow (psql-interactive-safe)
 pg_restore backup.dump                           → Allow (pg-restore-safe)
 psql -c "DELETE FROM users WHERE id = 1"         → Allow (no destructive match)
+psql -c "UPDATE users SET active=false WHERE id=1" → Allow (no destructive match)
 psql -f migrate.sql                              → Allow (no match — file execution gap)
 ```
 
-### E2: database.mysql Pattern Matrix (12 cases)
+### E2: database.mysql Pattern Matrix (14 cases)
 
 ```
 # Destructive — HIGH
@@ -317,6 +340,7 @@ mysql -e "TRUNCATE TABLE orders"                 → Deny/High (mysql-truncate)
 
 # Destructive — MEDIUM
 mysql -e "DELETE FROM users"                     → Ask/Medium (mysql-delete-no-where)
+mysql -e "UPDATE users SET active=false"         → Ask/Medium (mysql-update-no-where)
 mysql -e "ALTER TABLE users DROP COLUMN email"   → Ask/Medium (mysql-alter-drop)
 mysqladmin flush-tables                          → Ask/Medium (mysqladmin-flush)
 
@@ -326,9 +350,10 @@ mysqldump mydb > backup.sql                      → Allow (mysqldump-safe)
 mysql -h localhost mydb                          → Allow (mysql-interactive-safe)
 mysqladmin status                                → Allow (mysqladmin-readonly-safe)
 mysql -e "DELETE FROM users WHERE id = 1"        → Allow (no destructive match)
+mysql -e "UPDATE users SET active=false WHERE id=1" → Allow (no destructive match)
 ```
 
-### E3: database.sqlite Pattern Matrix (7 cases)
+### E3: database.sqlite Pattern Matrix (9 cases)
 
 ```
 # Destructive — HIGH
@@ -337,12 +362,14 @@ sqlite3 test.db ".drop trigger update_timestamp"  → Deny/High (sqlite3-dot-dro
 
 # Destructive — MEDIUM
 sqlite3 test.db "DELETE FROM users"              → Ask/Medium (sqlite3-delete-no-where)
+sqlite3 test.db "UPDATE config SET value='x'"    → Ask/Medium (sqlite3-update-no-where)
 
 # Safe / Edge
 sqlite3 test.db "SELECT * FROM users"            → Allow (sqlite3-readonly-safe)
 sqlite3 test.db ".tables"                        → Allow (sqlite3-readonly-safe)
-sqlite3 test.db                                  → Allow (sqlite3-interactive-safe)
+sqlite3 test.db                                  → Allow (sqlite3-non-destructive-safe)
 sqlite3 test.db "DELETE FROM users WHERE id = 1" → Allow (no destructive match)
+sqlite3 test.db "UPDATE config SET value='x' WHERE key='debug'" → Allow (no destructive match)
 ```
 
 ### E4: database.mongodb Pattern Matrix (11 cases)
@@ -366,20 +393,23 @@ mongosh mongodb://localhost:27017/mydb           → Allow (mongosh-interactive-
 mongosh --eval "show dbs"                        → Allow (mongosh-readonly-safe)
 ```
 
-### E5: database.redis Pattern Matrix (13 cases)
+### E5: database.redis Pattern Matrix (16 cases)
 
 ```
 # Destructive — HIGH
 redis-cli FLUSHALL                               → Deny/High (redis-flushall)
 redis-cli flushall                               → Deny/High (redis-flushall)
+redis-cli FlushAll                               → Deny/High (redis-flushall, ArgAtFold case-insensitive)
 redis-cli -h prod.redis.example.com FLUSHALL     → Deny/High (redis-flushall)
 redis-cli FLUSHDB                                → Deny/High (redis-flushdb)
 
 # Destructive — MEDIUM
-redis-cli DEL mykey                              → Ask/Medium (redis-del-wildcard)
-redis-cli UNLINK session:12345                   → Ask/Medium (redis-del-wildcard)
+redis-cli DEL mykey                              → Ask/Medium (redis-key-delete)
+redis-cli UNLINK session:12345                   → Ask/Medium (redis-key-delete)
 redis-cli CONFIG SET maxmemory 100mb             → Ask/Medium (redis-config-set)
 redis-cli SHUTDOWN                               → Ask/Medium (redis-shutdown)
+redis-cli DEBUG SEGFAULT                         → Ask/Medium (redis-debug)
+redis-cli DEBUG SLEEP 9999                       → Ask/Medium (redis-debug)
 
 # Safe / Edge
 redis-cli GET mykey                              → Allow (redis-cli-readonly-safe)
@@ -413,7 +443,7 @@ sqlite3 test.db "DROP TABLE users"               → High severity (no escalatio
 psql -c "DROP TABLE users"                       → High (escalates to Critical in prod)
 ```
 
-### E7: SQL Content Edge Cases (12 cases)
+### E7: SQL Content Edge Cases (14 cases)
 
 SQL-specific edge cases that stress the regex patterns:
 
@@ -426,6 +456,9 @@ mysql -e "drop database   myapp"                 → Deny/High (case + whitespac
 # Multi-statement SQL
 psql -c "SELECT 1; DROP TABLE users"             → Deny/High (destructive wins)
 mysql -e "SELECT 1; TRUNCATE orders"             → Deny/High (destructive wins)
+
+# Dual SQL flag (both -c and --command)
+psql -c "SELECT 1" --command "DROP TABLE users"  → Deny/High (DROP in --command flag value)
 
 # DELETE FROM with WHERE variations
 psql -c "DELETE FROM users WHERE 1=1"            → Allow (has WHERE — even if trivial)
@@ -582,7 +615,7 @@ func TestComparisonDbUpstreamRust(t *testing.T) {
 }
 ```
 
-**Comparison corpus**: All 61 golden file commands from §6 of the plan doc,
+**Comparison corpus**: All 75 golden file commands from §6 of the plan doc,
 plus additional edge cases:
 - Mixed-case SQL across all database tools
 - Connection flag combinations (`-h`, `-p`, `-u`, `-a`)
@@ -798,7 +831,7 @@ func BenchmarkDbGoldenCorpus(b *testing.B) {
 }
 ```
 
-**Target**: Full database corpus (61 entries) < 2ms total.
+**Target**: Full database corpus (75 entries) < 2ms total.
 
 ### B3: Regex Compilation Overhead
 
@@ -1021,16 +1054,27 @@ func TestSecurityMongoEvasion(t *testing.T) {
 
 ```go
 func TestSecurityRedisCaseEvasion(t *testing.T) {
-    // Redis commands should be matched in both upper and lower case
+    // Redis commands use ArgAtFold (strings.EqualFold) for case-insensitive matching
     tests := []struct {
         cmd      string
         wantDeny bool
     }{
         {"FLUSHALL", true},
         {"flushall", true},
-        {"FlushAll", false}, // We only match FLUSHALL and flushall explicitly
+        {"FlushAll", true},  // ArgAtFold catches all case variations
+        {"FLUSHall", true},  // ArgAtFold catches all case variations
         {"FLUSHDB", true},
         {"flushdb", true},
+        {"FlushDb", true},   // ArgAtFold catches all case variations
+        {"DEL", true},
+        {"del", true},
+        {"Del", true},       // ArgAtFold catches all case variations
+        {"SHUTDOWN", true},
+        {"shutdown", true},
+        {"Shutdown", true},  // ArgAtFold catches all case variations
+        {"DEBUG", true},
+        {"debug", true},
+        {"Debug", true},     // ArgAtFold catches all case variations
     }
 
     for _, tt := range tests {
@@ -1052,11 +1096,9 @@ func TestSecurityRedisCaseEvasion(t *testing.T) {
 }
 ```
 
-**Note on Redis mixed case**: We explicitly chose to match only `FLUSHALL`
-and `flushall` (not `FlushAll` etc.) as documented in plan §5.5.1. Redis
-itself is case-insensitive, but the explicit dual-case approach covers
-the vast majority of real-world usage. If mixed case becomes a real evasion
-vector, the implementation can switch to `ArgContentRegex` with `(?i)`.
+**Note on Redis case handling**: All Redis patterns use `ArgAtFold()`
+with `strings.EqualFold()` for fully case-insensitive matching. This
+eliminates the mixed-case evasion vector identified in review.
 
 ### SEC4: Environment Sensitivity Escalation
 
@@ -1175,7 +1217,7 @@ the environment detection integration (plan 04) works correctly:
 2. **All deterministic examples pass** — E1-E7
 3. **All fault injection tests pass** — F1-F3
 4. **All security tests pass** — SEC1-SEC4
-5. **Golden file corpus passes** — All 61 database entries
+5. **Golden file corpus passes** — All 75 database entries
 6. **Pattern reachability 100%** — Every destructive pattern reachable across
    all 5 packs
 7. **Cross-pack isolation verified** — P7 passes
@@ -1193,12 +1235,27 @@ the environment detection integration (plan 04) works correctly:
 
 ### Tracked Metrics
 
-- Pattern count by pack (safe + destructive) — target: 16 safe + 30 destructive
+- Pattern count by pack (safe + destructive) — target: 16 safe + 35 destructive
   across 5 packs
 - Test count by category (unit, reachability, golden, property, security)
-- Golden file entry count — target: 61 entries across 5 packs
+- Golden file entry count — target: 75 entries across 5 packs
 - SQL regex match latency per pattern (from B1)
 - SQL content matching: percentage of patterns using CheckFlagValues
 - Environment sensitivity coverage: 4 of 5 packs env-sensitive
 - Upstream comparison divergence count and categorization
 - Cross-database severity consistency: 0 unexpected differences
+
+---
+
+## Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-reviewer | P3 | P4 test doesn't test actual pack patterns (P3-4) | Incorporated | P4 rewritten to test real pack matchers |
+| 2 | dcg-reviewer | P2 | Dual SQL flag test case missing (P2-1) | Incorporated | Added to E7 |
+| 3 | dcg-reviewer | P3 | psql meta-command tests missing (P3-3) | Incorporated | Added to E1 |
+| 4 | dcg-alt-reviewer | P1 | Redis mixed case should be caught (DB-P1.2) | Incorporated | SEC3 updated for ArgAtFold |
+| 5 | dcg-alt-reviewer | P1 | UPDATE without WHERE tests needed (DB-P1.3) | Incorporated | Added to E1, E2, E3 |
+| 6 | dcg-alt-reviewer | P1 | DROP SCHEMA tests needed (DB-P1.4) | Incorporated | Added to E1 |
+| 7 | N/A | N/A | Golden file counts updated (61 → 75) | Incorporated | O1, B2, exit criteria updated |
+| 8 | N/A | N/A | Pattern counts updated (30 → 35 destructive) | Incorporated | Exit criteria updated |
