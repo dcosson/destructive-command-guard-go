@@ -49,7 +49,7 @@ IaC tools and cloud CLIs that LLM coding agents interact with:
 **Scope**:
 - 6 packs, each with safe + destructive patterns
 - All packs follow the pack authoring guide (03a §4)
-- 120+ golden file entries across all 6 packs
+- 132 golden file entries across all 6 packs
 - Per-pattern unit tests with match and near-miss cases
 - Reachability tests for every destructive pattern
 - Environment escalation tests for all packs (all env-sensitive)
@@ -158,10 +158,10 @@ variants at higher severity:
 
 | Tool | Auto-approve flag(s) | Severity without | Severity with |
 |------|---------------------|------------------|---------------|
-| terraform apply | `-auto-approve` | Medium | High |
-| terraform destroy | n/a (always prompts without `-auto-approve`) | High | Critical |
-| pulumi destroy | `--yes`, `-y` | High | Critical |
-| pulumi up | `--yes`, `-y` | Medium | High |
+| terraform apply | `-auto-approve` | Medium (D4) | High (D3) |
+| terraform destroy | `-auto-approve` | High (D2) | Critical (D1) |
+| pulumi destroy | `--yes`, `-y` | High (D2) | Critical (D1) |
+| pulumi up | `--yes`, `-y` | Medium (D5) | High (D4) |
 
 For commands that are always destructive (like `terraform destroy`), the
 auto-approve flag escalates from High to Critical because it removes
@@ -238,8 +238,8 @@ The `gsutil` tool is a separate command name with its own patterns.
 **Pack ID**: `infrastructure.terraform`
 **Keywords**: `["terraform"]`
 **Safe Patterns**: 4
-**Destructive Patterns**: 7
-**EnvSensitive**: Yes (all 7 destructive patterns)
+**Destructive Patterns**: 9
+**EnvSensitive**: Yes (all 9 destructive patterns)
 
 Terraform manages infrastructure as code. Destructive operations can
 destroy entire cloud environments.
@@ -291,10 +291,14 @@ var terraformPack = packs.Pack{
                     packs.ArgAt(0, "workspace"),
                     packs.ArgAt(0, "state"),
                 ),
-                // state subcommand is safe when it's list/show/pull
-                // state rm is destructive and handled by D5
-                packs.Not(packs.ArgContent("rm")),
-                packs.Not(packs.ArgContent("mv")),
+                // Exclude destructive state/workspace subcommands using
+                // positional matching at ArgAt(1) to avoid substring false
+                // positives (e.g., "webfarm" containing "rm", "forms"
+                // containing "rm"). See R1 P0-1.
+                packs.Not(packs.ArgAt(1, "rm")),
+                packs.Not(packs.ArgAt(1, "mv")),
+                packs.Not(packs.ArgAt(1, "push")),
+                packs.Not(packs.ArgAt(1, "delete")),
             ),
         },
     },
@@ -392,7 +396,35 @@ var terraformPack = packs.Pack{
             Remediation:  "Double-check source and destination addresses. Backup state first with terraform state pull.",
             EnvSensitive: true,
         },
-        // D7: terraform taint (mark resource for recreation)
+        // D7: terraform state push (overwrite remote state)
+        {
+            Name: "terraform-state-push",
+            Match: packs.And(
+                packs.Name("terraform"),
+                packs.ArgAt(0, "state"),
+                packs.ArgAt(1, "push"),
+            ),
+            Severity:     guard.Medium,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "terraform state push overwrites remote state with a local copy — can cause resource orphaning or duplication",
+            Remediation:  "Verify the local state is current. Backup remote state with terraform state pull first.",
+            EnvSensitive: true,
+        },
+        // D8: terraform workspace delete (permanently removes workspace state)
+        {
+            Name: "terraform-workspace-delete",
+            Match: packs.And(
+                packs.Name("terraform"),
+                packs.ArgAt(0, "workspace"),
+                packs.ArgAt(1, "delete"),
+            ),
+            Severity:     guard.Medium,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "terraform workspace delete permanently removes a workspace and its state file — may orphan resources",
+            Remediation:  "Run terraform destroy in the workspace first to clean up resources.",
+            EnvSensitive: true,
+        },
+        // D9: terraform taint (mark resource for recreation)
         {
             Name: "terraform-taint",
             Match: packs.And(
@@ -415,10 +447,15 @@ var terraformPack = packs.Pack{
   handling allows `state list` and `state show`). Import adds resources
   to state — it doesn't destroy anything. However, a bad import can
   cause subsequent applies to modify the imported resource. Accepted as
-  safe for v1.
-- **`terraform workspace delete`**: Not covered in v1. Workspace
-  deletion removes state files for that workspace, which could orphan
-  resources. Could be added as Medium severity in v2.
+  safe for v1 — import itself doesn't modify infrastructure directly.
+- **`terraform workspace delete`**: Covered by D8 at Medium severity.
+  Workspace deletion permanently removes state files, which could orphan
+  resources managed by that workspace. S4 excludes it via
+  `Not(ArgAt(1, "delete"))`.
+- **`terraform state push`**: Covered by D7 at Medium severity.
+  Overwrites remote state with local copy — can cause resource orphaning
+  or duplication if the local state is stale. S4 excludes it via
+  `Not(ArgAt(1, "push"))`.
 - **`-target` flag**: `terraform destroy -target=module.vpc` is scoped
   destruction. We don't distinguish targeted vs. full destroy — both
   match the destructive pattern. The severity is the same because
@@ -434,8 +471,8 @@ var terraformPack = packs.Pack{
 **Pack ID**: `infrastructure.pulumi`
 **Keywords**: `["pulumi"]`
 **Safe Patterns**: 3
-**Destructive Patterns**: 5
-**EnvSensitive**: Yes (all 5 destructive patterns)
+**Destructive Patterns**: 7
+**EnvSensitive**: Yes (all 7 destructive patterns)
 
 Pulumi is similar to Terraform but uses general-purpose programming
 languages for infrastructure definitions.
@@ -542,8 +579,6 @@ var pulumiPack = packs.Pack{
             EnvSensitive: true,
         },
 
-        // ---- Medium ----
-
         // D4: pulumi up --yes (auto-approve)
         {
             Name: "pulumi-up-yes",
@@ -561,7 +596,25 @@ var pulumiPack = packs.Pack{
             Remediation:  "Remove --yes. Run pulumi preview first, then deploy with review.",
             EnvSensitive: true,
         },
-        // D5: pulumi cancel (cancel an in-progress update)
+
+        // ---- Medium ----
+
+        // D5: pulumi up (with confirmation prompt)
+        {
+            Name: "pulumi-up",
+            Match: packs.And(
+                packs.Name("pulumi"),
+                packs.ArgAt(0, "up"),
+                packs.Not(packs.Flags("--yes")),
+                packs.Not(packs.Flags("-y")),
+            ),
+            Severity:     guard.Medium,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "pulumi up modifies infrastructure — may create, update, or destroy resources",
+            Remediation:  "Run pulumi preview first to review the changes.",
+            EnvSensitive: true,
+        },
+        // D7: pulumi cancel (cancel an in-progress update)
         {
             Name: "pulumi-cancel",
             Match: packs.And(
@@ -580,10 +633,11 @@ var pulumiPack = packs.Pack{
 
 #### 5.2.1 Pulumi Notes
 
-- **`pulumi up` without `--yes`**: Not classified as destructive because
-  it prompts for confirmation interactively. Only the `--yes` variant is
-  flagged. Same rationale as `terraform apply` vs. `terraform apply
-  -auto-approve`.
+- **`pulumi up` without `--yes`**: Classified as Medium/ConfidenceHigh
+  (D5), matching `terraform apply`'s treatment. Both deploy infrastructure
+  changes with interactive confirmation, but in non-interactive LLM agent
+  contexts the prompt may not function correctly. `pulumi up --yes` (D4)
+  escalates to High, matching the auto-approve severity split pattern.
 - **`pulumi refresh`**: Synchronizes state with real infrastructure.
   Not destructive in itself (doesn't create/destroy resources), but can
   surface drift. Classified as safe.
@@ -622,23 +676,17 @@ var ansiblePack = packs.Pack{
                     packs.Flags("-m"),
                     packs.Flags("--module-name"),
                 ),
+                // Only truly safe information-gathering modules.
+                // "command" module intentionally excluded — it can execute
+                // arbitrary commands across fleets and cannot be safely
+                // allowlisted with a blocklist approach. See R1 P0-2.
                 packs.Or(
                     packs.ArgContent("setup"),
                     packs.ArgContent("gather_facts"),
                     packs.ArgContent("ping"),
                     packs.ArgContent("debug"),
                     packs.ArgContent("stat"),
-                    packs.ArgContent("command"),
                 ),
-                packs.Not(packs.Or(
-                    packs.ArgContent("state=absent"),
-                    packs.ArgContent("state=stopped"),
-                    packs.ArgContent("rm "),
-                    packs.ArgContent("rm\t"),
-                    packs.ArgContent("rmdir"),
-                    packs.ArgContent("dd "),
-                    packs.ArgContent("mkfs"),
-                )),
             ),
         },
         // S2: ansible --list-hosts, --syntax-check, --check (dry-run)
@@ -674,11 +722,10 @@ var ansiblePack = packs.Pack{
                     packs.ArgContent("raw"),
                 ),
                 packs.Or(
-                    packs.ArgContentRegex(`rm\s+-(r|rf|fr)`),
+                    packs.ArgContentRegex(`rm\s+-`),
                     packs.ArgContent("dd "),
                     packs.ArgContent("mkfs"),
                     packs.ArgContent("> /dev/"),
-                    packs.ArgContentRegex(`rm\s+-`),
                 ),
             ),
             Severity:     guard.Critical,
@@ -809,6 +856,13 @@ var ansiblePack = packs.Pack{
   Galaxy. Could be a supply chain risk but not directly destructive.
 - **`ansible-vault`**: Not covered — encrypts/decrypts secrets files.
   `ansible-vault decrypt` could expose secrets but doesn't destroy data.
+- **`ArgContent("file")` false positive (accepted)**: D2 uses
+  `ArgContent("file")` which does substring matching. If a resource value
+  contains "file" (e.g., "profile", "logfile", "dockerfile"), D2 may
+  false-match at High instead of the correct lower-severity pattern.
+  This is accepted over-classification — the command IS flagged as
+  destructive, just by the wrong pattern at a higher severity. Not a
+  false negative.
 - **Module names in `-m` vs `-a`**: The module name comes after `-m`
   (e.g., `-m file -a 'state=absent'`). In the extracted command,
   `file` appears as the value of the `-m` flag, and `state=absent`
@@ -824,8 +878,8 @@ var ansiblePack = packs.Pack{
 **Pack ID**: `cloud.aws`
 **Keywords**: `["aws"]`
 **Safe Patterns**: 3
-**Destructive Patterns**: 14
-**EnvSensitive**: Yes (all 14 destructive patterns)
+**Destructive Patterns**: 15
+**EnvSensitive**: Yes (all 15 destructive patterns)
 
 The AWS CLI is the most complex cloud CLI with hundreds of service
 commands. We cover Tier 1 services: EC2, RDS, S3, CloudFormation, IAM,
@@ -850,6 +904,11 @@ var awsPack = packs.Pack{
                     packs.ArgContentRegex(`^get-`),
                     packs.ArgAt(1, "ls"),
                 ),
+                // Defense-in-depth: exclude destructive action subcommands
+                // to prevent false safe matches when resource names or flag
+                // values happen to start with "describe-"/"list-"/"get-".
+                // See R1 P2-3.
+                packs.Not(packs.ArgContentRegex(`^terminate-|^delete-|^stop-|^remove-`)),
             ),
         },
         // S2: aws s3 ls, aws s3 cp (read/copy operations)
@@ -946,6 +1005,9 @@ var awsPack = packs.Pack{
             EnvSensitive: true,
         },
         // D5: aws cloudformation delete-stack
+        // Escalated to Critical for cross-cloud consistency with
+        // gcloud-projects-delete and az-group-delete — all three delete
+        // a "container of resources" with cascading destruction. See R1 IC-P1.2.
         {
             Name: "aws-cfn-delete-stack",
             Match: packs.And(
@@ -953,9 +1015,9 @@ var awsPack = packs.Pack{
                 packs.ArgAt(0, "cloudformation"),
                 packs.ArgAt(1, "delete-stack"),
             ),
-            Severity:     guard.High,
+            Severity:     guard.Critical,
             Confidence:   guard.ConfidenceHigh,
-            Reason:       "aws cloudformation delete-stack destroys all resources managed by the stack",
+            Reason:       "aws cloudformation delete-stack destroys all resources managed by the stack — VPCs, RDS instances, EC2 instances, S3 buckets, etc.",
             Remediation:  "Review the stack's resources first with aws cloudformation list-stack-resources.",
             EnvSensitive: true,
         },
@@ -1100,6 +1162,20 @@ var awsPack = packs.Pack{
             Remediation:  "Use --dryrun first to see what would be deleted.",
             EnvSensitive: true,
         },
+        // D15: aws s3 mv (move/rename — copy-then-delete)
+        {
+            Name: "aws-s3-mv",
+            Match: packs.And(
+                packs.Name("aws"),
+                packs.ArgAt(0, "s3"),
+                packs.ArgAt(1, "mv"),
+            ),
+            Severity:     guard.Medium,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "aws s3 mv moves S3 objects — the source object is deleted after copying to the destination",
+            Remediation:  "Verify source and destination paths. Use aws s3 cp if you want to keep the source.",
+            EnvSensitive: true,
+        },
     },
 }
 ```
@@ -1136,8 +1212,8 @@ var awsPack = packs.Pack{
 **Pack ID**: `cloud.gcp`
 **Keywords**: `["gcloud", "gsutil", "bq"]`
 **Safe Patterns**: 3
-**Destructive Patterns**: 10
-**EnvSensitive**: Yes (all 10 destructive patterns)
+**Destructive Patterns**: 11
+**EnvSensitive**: Yes (all 11 destructive patterns)
 
 GCP uses `gcloud` for most services, `gsutil` for Cloud Storage, and
 `bq` for BigQuery.
@@ -1163,6 +1239,11 @@ var gcpPack = packs.Pack{
                     packs.ArgAt(0, "auth"),
                     packs.ArgAt(0, "version"),
                 ),
+                // Guard against resource names containing "list"/"describe"/
+                // "info" with word boundaries (e.g., "list-replica",
+                // "my-describe-project"). Mirrors Azure S1's approach.
+                // See R1 P0-3.
+                packs.Not(packs.ArgContentRegex(`\bdelete\b`)),
             ),
         },
         // S2: gsutil ls, gsutil cat, gsutil stat
@@ -1357,6 +1438,20 @@ var gcpPack = packs.Pack{
             Remediation:  "Ensure no instances or services depend on this network.",
             EnvSensitive: true,
         },
+        // D11: gsutil rsync -d (delete destination files not in source)
+        {
+            Name: "gsutil-rsync-delete",
+            Match: packs.And(
+                packs.Name("gsutil"),
+                packs.ArgAt(0, "rsync"),
+                packs.Flags("-d"),
+            ),
+            Severity:     guard.Medium,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "gsutil rsync -d deletes files at destination not present in source — cross-cloud equivalent of aws s3 sync --delete",
+            Remediation:  "Use gsutil rsync without -d for additive-only sync. Use -n for dry-run.",
+            EnvSensitive: true,
+        },
     },
 }
 ```
@@ -1376,6 +1471,11 @@ var gcpPack = packs.Pack{
   can modify data but is similar to the SQL content matching problem —
   we'd need to parse SQL content. Not covered for DML; only `bq rm` is
   destructive.
+- **`gsutil rsync` without `-d`**: Intentionally classified as safe (S2).
+  Without `-d`, rsync is additive-only — it copies new/changed files
+  without deleting extra files at the destination. With `-d`, it becomes
+  destructive (D11). This mirrors `aws s3 sync` (safe) vs
+  `aws s3 sync --delete` (D14).
 - **`--quiet`/`-q` flag**: Suppresses confirmation prompts in gcloud.
   Similar to `-auto-approve` in Terraform. We don't currently escalate
   severity for `--quiet` but it could be a v2 enhancement.
@@ -1599,7 +1699,7 @@ var azurePack = packs.Pack{
 
 ## 6. Golden File Entries
 
-### 6.1 `infrastructure.terraform` (16 entries)
+### 6.1 `infrastructure.terraform` (25 entries)
 
 ```
 # terraform — Destructive — Critical
@@ -1616,6 +1716,8 @@ terraform apply                                     → Ask/Medium (terraform-ap
 terraform apply saved.plan                          → Ask/Medium (terraform-apply)
 terraform state rm module.vpc                       → Ask/Medium (terraform-state-rm)
 terraform state mv module.old module.new            → Ask/Medium (terraform-state-mv)
+terraform state push local.tfstate                  → Ask/Medium (terraform-state-push)
+terraform workspace delete staging                  → Ask/Medium (terraform-workspace-delete)
 terraform taint aws_instance.web                    → Ask/Medium (terraform-taint)
 
 # terraform — Safe
@@ -1624,10 +1726,17 @@ terraform plan -out=plan.tfplan                     → Allow (terraform-plan-sa
 terraform init                                      → Allow (terraform-init-safe)
 terraform validate                                  → Allow (terraform-readonly-safe)
 terraform fmt                                       → Allow (terraform-readonly-safe)
+terraform output                                    → Allow (terraform-readonly-safe)
 terraform state list                                → Allow (terraform-readonly-safe)
+terraform state show aws_instance.web               → Allow (terraform-readonly-safe)
+terraform state pull                                → Allow (terraform-readonly-safe)
+terraform graph                                     → Allow (terraform-readonly-safe)
+terraform providers                                 → Allow (terraform-readonly-safe)
+terraform version                                   → Allow (terraform-readonly-safe)
+terraform state list aws_instance.webfarm           → Allow (terraform-readonly-safe)
 ```
 
-### 6.2 `infrastructure.pulumi` (14 entries)
+### 6.2 `infrastructure.pulumi` (15 entries)
 
 ```
 # pulumi — Destructive — Critical
@@ -1641,6 +1750,7 @@ pulumi up --yes                                     → Deny/High (pulumi-up-yes
 pulumi up -y                                        → Deny/High (pulumi-up-yes)
 
 # pulumi — Destructive — Medium
+pulumi up                                           → Ask/Medium (pulumi-up)
 pulumi cancel                                       → Ask/Medium (pulumi-cancel)
 
 # pulumi — Safe
@@ -1681,17 +1791,17 @@ ansible all -m stat -a 'path=/etc/nginx'            → Allow (ansible-gather-sa
 ansible all -m debug -a 'var=ansible_hostname'      → Allow (ansible-gather-safe)
 ```
 
-### 6.4 `cloud.aws` (28 entries)
+### 6.4 `cloud.aws` (30 entries)
 
 ```
 # aws — Destructive — Critical
 aws s3 rb s3://my-bucket --force                    → Deny/Critical (aws-s3-rb-force)
+aws cloudformation delete-stack --stack-name my-stack → Deny/Critical (aws-cfn-delete-stack)
 
 # aws — Destructive — High
 aws ec2 terminate-instances --instance-ids i-1234   → Deny/High (aws-ec2-terminate)
 aws rds delete-db-instance --db-instance-id mydb    → Deny/High (aws-rds-delete-instance)
 aws rds delete-db-cluster --db-cluster-id mycluster → Deny/High (aws-rds-delete-cluster)
-aws cloudformation delete-stack --stack-name my-stack → Deny/High (aws-cfn-delete-stack)
 aws iam delete-role --role-name my-role             → Deny/High (aws-iam-delete)
 aws iam delete-user --user-name my-user             → Deny/High (aws-iam-delete)
 aws iam delete-policy --policy-arn arn:aws:iam::123:policy/my-policy → Deny/High (aws-iam-delete)
@@ -1705,6 +1815,8 @@ aws s3 rb s3://my-bucket                            → Ask/Medium (aws-s3-rb)
 aws s3 rm s3://bucket/file.txt                      → Ask/Medium (aws-s3-rm)
 aws ec2 stop-instances --instance-ids i-1234        → Ask/Medium (aws-ec2-stop)
 aws s3 sync s3://source s3://dest --delete          → Ask/Medium (aws-s3-sync-delete)
+aws s3 mv s3://bucket/source s3://bucket/dest       → Ask/Medium (aws-s3-mv)
+aws s3 mv file.txt s3://bucket/                     → Ask/Medium (aws-s3-mv)
 
 # aws — Safe
 aws ec2 describe-instances                          → Allow (aws-readonly-safe)
@@ -1721,7 +1833,7 @@ aws iam list-roles                                  → Allow (aws-readonly-safe
 aws lambda list-functions                           → Allow (aws-readonly-safe)
 ```
 
-### 6.5 `cloud.gcp` (22 entries)
+### 6.5 `cloud.gcp` (24 entries)
 
 ```
 # gcp — Destructive — Critical
@@ -1741,6 +1853,8 @@ gsutil rm gs://my-bucket/file.txt                   → Ask/Medium (gsutil-rm)
 gcloud compute disks delete my-disk --zone us-central1-a → Ask/Medium (gcloud-compute-disks-delete)
 gcloud compute firewall-rules delete allow-ssh      → Ask/Medium (gcloud-firewall-rules-delete)
 gcloud compute networks delete my-vpc               → Ask/Medium (gcloud-networks-delete)
+gsutil rsync -d /local gs://my-bucket               → Ask/Medium (gsutil-rsync-delete)
+gsutil rsync -d -r /local gs://my-bucket            → Ask/Medium (gsutil-rsync-delete)
 
 # gcp — Safe
 gcloud compute instances list                       → Allow (gcloud-readonly-safe)
@@ -1790,7 +1904,7 @@ az network vnet list                                → Allow (az-readonly-safe)
 az group list                                       → Allow (az-readonly-safe)
 ```
 
-**Total golden entries**: 118 across 6 packs (16 + 14 + 16 + 28 + 22 + 22)
+**Total golden entries**: 132 across 6 packs (25 + 15 + 16 + 30 + 24 + 22)
 
 ---
 
@@ -1844,12 +1958,15 @@ var infraReachabilityCommands = map[string]parse.ExtractedCommand{
     "terraform-apply":                cmd("terraform", []string{"apply"}, nil),
     "terraform-state-rm":             cmd("terraform", []string{"state", "rm", "module.vpc"}, nil),
     "terraform-state-mv":             cmd("terraform", []string{"state", "mv", "a.b", "c.d"}, nil),
+    "terraform-state-push":           cmd("terraform", []string{"state", "push", "local.tfstate"}, nil),
+    "terraform-workspace-delete":     cmd("terraform", []string{"workspace", "delete", "staging"}, nil),
     "terraform-taint":                cmd("terraform", []string{"taint", "aws_instance.web"}, nil),
     // Pulumi
     "pulumi-destroy-yes":  cmd("pulumi", []string{"destroy"}, m("--yes", "")),
     "pulumi-destroy":      cmd("pulumi", []string{"destroy"}, nil),
     "pulumi-stack-rm":     cmd("pulumi", []string{"stack", "rm", "my-stack"}, nil),
     "pulumi-up-yes":       cmd("pulumi", []string{"up"}, m("--yes", "")),
+    "pulumi-up":           cmd("pulumi", []string{"up"}, nil),
     "pulumi-cancel":       cmd("pulumi", []string{"cancel"}, nil),
     // Ansible
     "ansible-shell-destructive":        cmd("ansible", []string{"all"}, m("-m", "shell", "-a", "rm -rf /")),
@@ -1874,6 +1991,7 @@ var infraReachabilityCommands = map[string]parse.ExtractedCommand{
     "aws-s3-rm":            cmd("aws", []string{"s3", "rm", "s3://bucket/file.txt"}, nil),
     "aws-ec2-stop":         cmd("aws", []string{"ec2", "stop-instances"}, m("--instance-ids", "i-1234")),
     "aws-s3-sync-delete":   cmd("aws", []string{"s3", "sync", "s3://src", "s3://dst"}, m("--delete", "")),
+    "aws-s3-mv":            cmd("aws", []string{"s3", "mv", "s3://bucket/src", "s3://bucket/dst"}, nil),
     // GCP
     "gcloud-projects-delete":          cmd("gcloud", []string{"projects", "delete", "my-project"}, nil),
     "gcloud-compute-instances-delete": cmd("gcloud", []string{"compute", "instances", "delete", "my-vm"}, m("--zone", "us-central1-a")),
@@ -1885,6 +2003,7 @@ var infraReachabilityCommands = map[string]parse.ExtractedCommand{
     "gcloud-compute-disks-delete":     cmd("gcloud", []string{"compute", "disks", "delete", "my-disk"}, nil),
     "gcloud-firewall-rules-delete":    cmd("gcloud", []string{"compute", "firewall-rules", "delete", "allow-ssh"}, nil),
     "gcloud-networks-delete":          cmd("gcloud", []string{"compute", "networks", "delete", "my-vpc"}, nil),
+    "gsutil-rsync-delete":             cmd("gsutil", []string{"rsync", "/local", "gs://bucket/"}, m("-d", "")),
     // Azure
     "az-group-delete":              cmd("az", []string{"group", "delete"}, m("--name", "my-rg")),
     "az-vm-delete":                 cmd("az", []string{"vm", "delete"}, m("--name", "my-vm", "--resource-group", "my-rg")),
@@ -1922,8 +2041,10 @@ terraform destroy             |    ✗    |    ✗    |    ✗    |     ✗     
 terraform destroy -auto-appr  |    ✗    |    ✗    |    ✗    |     ✗       |
 terraform apply               |    ✗    |    ✗    |    ✗    |     ✗       |
 terraform apply -auto-approve |    ✗    |    ✗    |    ✗    |     ✗       |
-terraform state rm res        |    ✗    |    ✗    |    ✗    |     ✗       | (S4 has Not(rm))
-terraform state mv a b        |    ✗    |    ✗    |    ✗    |     ✗       | (S4 has Not(mv))
+terraform state rm res        |    ✗    |    ✗    |    ✗    |     ✗       | (S4 has Not(ArgAt(1,"rm")))
+terraform state mv a b        |    ✗    |    ✗    |    ✗    |     ✗       | (S4 has Not(ArgAt(1,"mv")))
+terraform state push f        |    ✗    |    ✗    |    ✗    |     ✗       | (S4 has Not(ArgAt(1,"push")))
+terraform workspace delete x  |    ✗    |    ✗    |    ✗    |     ✗       | (S4 has Not(ArgAt(1,"delete")))
 terraform taint res           |    ✗    |    ✗    |    ✗    |     ✗       |
 terraform plan                |    ✓    |    ✗    |    ✗    |     ✗       |
 terraform state list          |    ✗    |    ✗    |    ✗    |     ✓       |
@@ -1990,7 +2111,7 @@ packs' regex-based SQL content matching.
 
 ### Universal Environment Sensitivity
 
-All 52 destructive patterns across all 6 packs are `EnvSensitive: true`.
+All 58 destructive patterns across all 6 packs are `EnvSensitive: true`.
 This ensures that ANY infrastructure or cloud operation in a production
 environment gets severity escalation. No pattern was left non-env-sensitive
 through oversight — this is a blanket policy for the infra/cloud category.
@@ -2049,7 +2170,7 @@ regex evaluation needed (unlike database packs).
 
 6. **`internal/packs/cloud/azure.go`** + `azure_test.go` — Azure pack.
 
-7. **Golden file entries** — Add all 118 entries to
+7. **Golden file entries** — Add all 132 entries to
    `internal/eval/testdata/golden/`.
 
 8. **Run all tests** — Unit, reachability, completeness, golden file.
@@ -2095,6 +2216,46 @@ establishes the auto-approve severity split pattern that Pulumi also uses.
    - AWS Tier 2: DynamoDB, ElastiCache, Route53, EKS, SNS, SQS
    - GCP: `gcloud storage` (replacement for gsutil), App Engine, Cloud Run
    - Azure: Web Apps, Cosmos DB, Key Vault, Container Registry
-   - Terraform: workspace delete, force-unlock
+   - Terraform: force-unlock
    - Pulumi: stack import, refresh --skip-preview
    - Ansible: ansible-galaxy, ansible-vault decrypt
+
+---
+
+## Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-reviewer | P0 | terraform S4 ArgContent("rm"/"mv") substring false exclusion | Incorporated | §5.1 S4 switched to ArgAt(1) positional matching |
+| 2 | dcg-reviewer | P0 | ansible S1 "command" module in safe list | Incorporated | §5.3 S1 removed "command" from safe module list |
+| 3 | dcg-reviewer | P0 | gcloud S1 missing Not(delete) guard | Incorporated | §5.5 S1 added Not(ArgContentRegex('\bdelete\b')) |
+| 4 | dcg-reviewer | P1 | pulumi up vs terraform apply severity asymmetry | Incorporated | §5.2 added D5 pulumi-up at Medium/ConfidenceHigh |
+| 5 | dcg-reviewer | P1 | terraform state push not covered | Incorporated | §5.1 added D7 terraform-state-push at Medium |
+| 6 | dcg-reviewer | P1 | aws s3 mv not classified | Incorporated | §5.4 added D15 aws-s3-mv at Medium |
+| 7 | dcg-reviewer | P1 | pulumi-up-yes D4 under wrong section comment | Incorporated | §5.2 moved D4 to High section |
+| 8 | dcg-reviewer | P1 | missing golden entries for safe terraform ops | Incorporated | §6.1 added output, state show/pull, graph, providers, version, webfarm |
+| 9 | dcg-reviewer | P2 | ansible ArgContent("file") false positive in D2 | Incorporated | §5.3.1 documented as accepted over-classification |
+| 10 | dcg-reviewer | P2 | terraform workspace delete gap | Incorporated | §5.1 added D8 + Not(ArgAt(1,"delete")) on S4 |
+| 11 | dcg-reviewer | P2 | AWS S1 ArgContentRegex matches all args | Incorporated | §5.4 S1 added Not exclusion for destructive subcommands |
+| 12 | dcg-reviewer | P2 | gsutil rsync without -d safe | Incorporated | §5.5.1 added note documenting intentional safe classification |
+| 13 | dcg-reviewer | P2 | ansible D1 redundant regex | Incorporated | §5.3 D1 removed redundant ArgContentRegex |
+| 14 | dcg-reviewer | P3 | gcloud S1 matches resource names on non-destructive commands | Not Incorporated | After P0-3 fix, remaining behavior is harmless (create is not destructive) |
+| 15 | dcg-reviewer | P3 | ansible --module-name=command long-flag edge case | Not Incorporated | Extremely rare, Indeterminate fallback is conservative |
+| 16 | dcg-reviewer | P3 | cross-cloud safe pattern structural inconsistency | Incorporated | AWS S1 and GCP S1 now have Not(delete) exclusions, aligning with Azure |
+| 17 | dcg-reviewer | P3 | MQ3 terraform state push conclusion | Incorporated | Test harness MQ3 updated with expected behavior |
+| 18 | dcg-alt-reviewer | P0 | GCP gcloud-readonly-safe bypassed by resource names | Incorporated | Duplicate of #3 — same fix |
+| 19 | dcg-alt-reviewer | P0 | Ansible S1 includes command module with incomplete Not | Incorporated | Duplicate of #2 — same fix |
+| 20 | dcg-alt-reviewer | P1 | pulumi up without --yes not caught | Incorporated | Duplicate of #4 — same fix |
+| 21 | dcg-alt-reviewer | P1 | aws cloudformation delete-stack severity inconsistency | Incorporated | §5.4 D5 escalated to Critical for cross-cloud consistency |
+| 22 | dcg-alt-reviewer | P1 | Missing gsutil rsync -d destructive pattern | Incorporated | §5.5 added D11 gsutil-rsync-delete at Medium |
+| 23 | dcg-alt-reviewer | P1 | P4 auto-approve test missing pulumi up pair | Incorporated | Test harness P4 updated with pulumi-up-yes/pulumi-up pair |
+| 24 | dcg-alt-reviewer | P2 | AWS S1 ArgContentRegex may match flag values | Incorporated | Duplicate of #11 — same fix |
+| 25 | dcg-alt-reviewer | P2 | Missing gcloud storage rm | Not Incorporated | Deferred to v2 as acknowledged in plan |
+| 26 | dcg-alt-reviewer | P2 | Azure --yes/-y auto-approve not escalated | Not Incorporated | Deferred to v2, Azure confirmation behavior too inconsistent |
+| 27 | dcg-alt-reviewer | P2 | terraform state push not covered | Incorporated | Duplicate of #5 — same fix |
+| 28 | dcg-alt-reviewer | P2 | bq rm -f force flag not distinguished | Not Incorporated | Deferred to v2, auto-approve split for bq is low priority |
+| 29 | dcg-alt-reviewer | P2 | Golden file count 120+ vs 118 | Incorporated | §1 and §6 updated to 132 (final count after all additions) |
+| 30 | dcg-alt-reviewer | P3 | O2 test missing container deletion tier | Incorporated | Test harness O2 added container/project/stack deletion tier |
+| 31 | dcg-alt-reviewer | P3 | Pulumi D4 section comment wrong | Incorporated | Duplicate of #7 — same fix |
+| 32 | dcg-alt-reviewer | P3 | terraform import drift risk | Not Incorporated | Accepted for v1, import doesn't modify infra directly |
+| 33 | dcg-alt-reviewer | P3 | SEC1 flag ordering test coverage | Incorporated | Test harness SEC1 added aws flag-between-subcommands test case |

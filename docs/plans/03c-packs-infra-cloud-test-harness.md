@@ -22,7 +22,7 @@ in core or database packs:
 - **Subcommand depth**: Commands use 1-3 levels of positional args for
   subcommands. Off-by-one errors in `ArgAt()` indices can cause false
   negatives.
-- **Universal environment sensitivity**: ALL 52 destructive patterns are
+- **Universal environment sensitivity**: ALL 58 destructive patterns are
   env-sensitive. Every pattern must be tested for escalation behavior.
 - **Auto-approve severity split**: Terraform and Pulumi have dual patterns
   for the same action (with/without auto-approve). Both variants must be
@@ -30,7 +30,7 @@ in core or database packs:
 - **Ansible content matching**: Module arguments via `-a` flag values
   require ArgContent matching similar to SQL content matching in database
   packs.
-- **AWS breadth**: 14 destructive patterns across 7 services. Cross-service
+- **AWS breadth**: 15 destructive patterns across 7 services. Cross-service
   isolation must be verified.
 
 ---
@@ -66,8 +66,10 @@ func TestPropertyEveryInfraCloudDestructivePatternReachable(t *testing.T) {
 pattern in the same pack matches it.
 
 This is critical for terraform where S4 (`terraform-readonly-safe`)
-includes `state` as a safe subcommand but must exclude `state rm` and
-`state mv` via `Not(ArgContent("rm"))`.
+includes `state` and `workspace` as safe subcommands but must exclude
+destructive state/workspace subcommands via positional matching:
+`Not(ArgAt(1, "rm"))`, `Not(ArgAt(1, "mv"))`, `Not(ArgAt(1, "push"))`,
+`Not(ArgAt(1, "delete"))`.
 
 ```go
 func TestPropertyInfraCloudSafePatternsNeverBlockDestructive(t *testing.T) {
@@ -119,6 +121,7 @@ func TestPropertyAutoApproveSeverityEscalation(t *testing.T) {
         {"infrastructure.terraform", "terraform-destroy-auto-approve", "terraform-destroy"},
         {"infrastructure.terraform", "terraform-apply-auto-approve", "terraform-apply"},
         {"infrastructure.pulumi", "pulumi-destroy-yes", "pulumi-destroy"},
+        {"infrastructure.pulumi", "pulumi-up-yes", "pulumi-up"},
     }
 
     for _, pair := range pairs {
@@ -231,7 +234,7 @@ func TestPropertyAWSServiceIsolation(t *testing.T) {
 
 ## E: Deterministic Examples
 
-### E1: infrastructure.terraform Pattern Matrix (16 cases)
+### E1: infrastructure.terraform Pattern Matrix (25 cases)
 
 See plan doc §6.1 for the full golden file entries.
 
@@ -247,6 +250,8 @@ terraform apply -auto-approve                       → Deny/High
 terraform apply                                     → Ask/Medium
 terraform state rm module.vpc                       → Ask/Medium
 terraform state mv module.old module.new            → Ask/Medium
+terraform state push local.tfstate                  → Ask/Medium
+terraform workspace delete staging                  → Ask/Medium
 terraform taint aws_instance.web                    → Ask/Medium
 
 # Safe
@@ -254,14 +259,18 @@ terraform plan                                      → Allow
 terraform init                                      → Allow
 terraform validate                                  → Allow
 terraform fmt                                       → Allow
-terraform state list                                → Allow
-terraform show                                      → Allow
 terraform output                                    → Allow
+terraform state list                                → Allow
+terraform state show aws_instance.web               → Allow
+terraform state pull                                → Allow
 terraform graph                                     → Allow
+terraform providers                                 → Allow
 terraform version                                   → Allow
+terraform show                                      → Allow
+terraform state list aws_instance.webfarm           → Allow (P0-1 regression test)
 ```
 
-### E2: infrastructure.pulumi Pattern Matrix (14 cases)
+### E2: infrastructure.pulumi Pattern Matrix (16 cases)
 
 See plan doc §6.2 for the full golden file entries.
 
@@ -276,6 +285,7 @@ pulumi stack rm my-stack                            → Deny/High
 pulumi up --yes                                     → Deny/High
 
 # Medium
+pulumi up                                           → Ask/Medium
 pulumi cancel                                       → Ask/Medium
 
 # Safe
@@ -319,11 +329,11 @@ ansible-playbook site.yml --syntax-check            → Allow
 ansible-playbook site.yml --list-tasks              → Allow
 ```
 
-### E4: cloud.aws Pattern Matrix (28 cases)
+### E4: cloud.aws Pattern Matrix (30 cases)
 
 See plan doc §6.4 for the full golden file entries.
 
-### E5: cloud.gcp Pattern Matrix (22 cases)
+### E5: cloud.gcp Pattern Matrix (24 cases)
 
 See plan doc §6.5 for the full golden file entries.
 
@@ -490,7 +500,7 @@ func TestComparisonInfraCloudUpstreamRust(t *testing.T) {
 }
 ```
 
-**Comparison corpus**: All 118 golden file commands from §6 of the plan doc.
+**Comparison corpus**: All 132 golden file commands from §6 of the plan doc.
 
 ### O2: Cross-Cloud Consistency
 
@@ -533,6 +543,14 @@ func TestComparisonCrossCloudConsistency(t *testing.T) {
                 "aws":   cmd("aws", []string{"ecs", "delete-cluster"}, nil),
                 "gcp":   cmd("gcloud", []string{"container", "clusters", "delete", "c"}, nil),
                 "azure": cmd("az", []string{"aks", "delete"}, nil),
+            },
+        },
+        {
+            "Container/project/stack deletion (Critical tier)",
+            map[string]parse.ExtractedCommand{
+                "aws":   cmd("aws", []string{"cloudformation", "delete-stack"}, nil),
+                "gcp":   cmd("gcloud", []string{"projects", "delete", "my-proj"}, nil),
+                "azure": cmd("az", []string{"group", "delete"}, nil),
             },
         },
     }
@@ -586,6 +604,22 @@ func TestComparisonIaCConsistency(t *testing.T) {
             map[string]parse.ExtractedCommand{
                 "terraform": cmd("terraform", []string{"destroy"}, nil),
                 "pulumi":    cmd("pulumi", []string{"destroy"}, nil),
+            },
+        },
+        {
+            "apply/up with auto-approve",
+            guard.High,
+            map[string]parse.ExtractedCommand{
+                "terraform": cmd("terraform", []string{"apply"}, m("-auto-approve", "")),
+                "pulumi":    cmd("pulumi", []string{"up"}, m("--yes", "")),
+            },
+        },
+        {
+            "apply/up without auto-approve",
+            guard.Medium,
+            map[string]parse.ExtractedCommand{
+                "terraform": cmd("terraform", []string{"apply"}, nil),
+                "pulumi":    cmd("pulumi", []string{"up"}, nil),
             },
         },
     }
@@ -722,12 +756,12 @@ func BenchmarkInfraCloudGoldenCorpus(b *testing.B) {
 }
 ```
 
-**Target**: Full infra/cloud corpus (118 entries) < 2ms total.
+**Target**: Full infra/cloud corpus (132 entries) < 2ms total.
 
 ### B3: AWS Pack Scaling
 
-Benchmark the AWS pack specifically because it has the most patterns (14
-destructive + 3 safe = 17 total):
+Benchmark the AWS pack specifically because it has the most patterns (15
+destructive + 3 safe = 18 total):
 
 ```go
 func BenchmarkAWSFullPackEval(b *testing.B) {
@@ -838,6 +872,11 @@ func TestSecuritySubcommandEvasion(t *testing.T) {
             cmd("gcloud", []string{"compute", "instances", "delete", "vm"}, m("--project", "prod")),
             "cloud.gcp", true,
             "project flag should not affect matching"},
+        // AWS flag between subcommand levels
+        {"aws ec2 --debug terminate-instances",
+            cmd("aws", []string{"ec2", "terminate-instances"}, m("--debug", "")),
+            "cloud.aws", true,
+            "flags between subcommand levels should not affect matching"},
     }
 
     for _, tt := range tests {
@@ -970,7 +1009,8 @@ Manually verify terraform state commands:
 3. `terraform state rm resource` → Ask/Medium (destructive)
 4. `terraform state mv a b` → Ask/Medium (destructive)
 5. `terraform state pull` → Allow (safe, via S4 readonly)
-6. `terraform state push` → depends (not currently covered — review if needed)
+6. `terraform state push` → Ask/Medium (terraform-state-push)
+7. `terraform workspace delete staging` → Ask/Medium (terraform-workspace-delete)
 
 ### MQ4: AWS Service Coverage Review
 
@@ -1008,9 +1048,9 @@ Manually evaluate AWS CLI commands not covered in v1 to prioritize v2:
 2. **All deterministic examples pass** — E1-E8
 3. **All fault injection tests pass** — F1-F3
 4. **All security tests pass** — SEC1-SEC3
-5. **Golden file corpus passes** — All 118 infra/cloud entries
+5. **Golden file corpus passes** — All 132 infra/cloud entries
 6. **Pattern reachability 100%** — Every destructive pattern reachable across
-   all 6 packs (52 patterns total)
+   all 6 packs (58 patterns total)
 7. **Cross-pack isolation verified** — P6 passes
 8. **Universal env sensitivity verified** — P3 passes for all 6 packs
 9. **Auto-approve severity split verified** — P4 passes
@@ -1027,12 +1067,27 @@ Manually evaluate AWS CLI commands not covered in v1 to prioritize v2:
 
 ### Tracked Metrics
 
-- Pattern count by pack (safe + destructive) — target: 17 safe + 52 destructive
+- Pattern count by pack (safe + destructive) — target: 17 safe + 58 destructive
   across 6 packs
 - Test count by category (unit, reachability, golden, property, security)
-- Golden file entry count — target: 118 entries across 6 packs
+- Golden file entry count — target: 132 entries across 6 packs
 - ArgAt matching latency per pattern (from B1)
 - Environment sensitivity coverage: 6 of 6 packs (100%)
 - Upstream comparison divergence count and categorization
 - Cross-cloud severity consistency: 0 unexpected differences
 - AWS pattern count by service
+
+---
+
+## Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-reviewer | P1 | P2 comment references Not(ArgContent("rm")) | Incorporated | Updated P2 comment to reference ArgAt(1) positional matching |
+| 2 | dcg-reviewer | P1 | Missing golden entries for safe terraform ops | Incorporated | E1 updated from 16 to 25 cases |
+| 3 | dcg-reviewer | P1 | MQ3 terraform state push no conclusion | Incorporated | MQ3 updated with expected behavior |
+| 4 | dcg-alt-reviewer | P1 | P4 auto-approve test missing pulumi up pair | Incorporated | P4 updated with pulumi-up-yes/pulumi-up pair |
+| 5 | dcg-alt-reviewer | P2 | Golden file count 118 | Incorporated | All counts updated to 132 |
+| 6 | dcg-alt-reviewer | P3 | O2 missing container deletion tier | Incorporated | O2 added container/project/stack deletion tier |
+| 7 | dcg-alt-reviewer | P3 | SEC1 flag ordering test coverage | Incorporated | SEC1 added aws flag-between-subcommands test |
+| 8 | N/A | N/A | Pattern and golden count updates | Incorporated | E1-E5, B2-B3, O1, O3, exit criteria updated for new patterns |
