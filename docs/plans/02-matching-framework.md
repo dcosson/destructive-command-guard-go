@@ -37,8 +37,8 @@ evaluation engine that transforms parsed `ExtractedCommand` values into
    (`internal/envdetect/detect.go`)
 9. **Golden file infrastructure** — Test framework and initial seed corpus
    (`internal/eval/testdata/golden/`)
-10. **Test pack** — Minimal `core.git` with 2–3 patterns to validate
-    framework end-to-end (`internal/packs/core/git.go`)
+10. **Test pack** — Minimal `core.git` with 2 safe + 5 destructive patterns
+    to validate framework end-to-end (`internal/packs/core/git.go`)
 
 **Key input type** (from plan 01):
 
@@ -60,9 +60,10 @@ type ExtractedCommand struct {
 }
 
 type ParseResult struct {
-    Commands []ExtractedCommand
-    Warnings []Warning
-    HasError bool
+    Commands     []ExtractedCommand
+    Warnings     []Warning
+    HasError     bool
+    ExportedVars map[string][]string // Exported variables from dataflow analysis
 }
 ```
 
@@ -414,6 +415,7 @@ const (
     WarnExtractorPanic
     WarnCommandSubstitution
     WarnMatcherPanic
+    WarnUnknownPackID               // Pack ID in config not found in registry
 )
 
 type Result struct {
@@ -577,12 +579,10 @@ func (m ArgMatcher) matchArg(arg string) bool {
     if m.PrefixMatch {
         return strings.HasPrefix(arg, m.Pattern)
     }
-    // Try glob first; if pattern is invalid glob, fall back to exact
-    matched, err := path.Match(m.Pattern, arg)
-    if err != nil {
-        return arg == m.Pattern
-    }
-    return matched
+    // Use globMatch for consistent glob semantics across the codebase.
+    // globMatch has no invalid patterns (only `*` is special), so no
+    // fallback needed.
+    return globMatch(m.Pattern, arg)
 }
 ```
 
@@ -821,11 +821,12 @@ import (
 // Packs are registered at init time and are immutable after that.
 // The registry is safe for concurrent read access after init.
 type Registry struct {
-    mu       sync.RWMutex
-    packs    map[string]*Pack // ID → Pack
-    allPacks []*Pack          // Ordered by registration
-    keywords []string         // Deduplicated aggregate of all pack keywords
-    frozen   bool             // True after first read — no more registration
+    mu             sync.RWMutex
+    packs          map[string]*Pack     // ID → Pack
+    allPacks       []*Pack              // Ordered by registration
+    keywords       []string             // Deduplicated aggregate of all pack keywords
+    keywordIndex   map[string][]*Pack   // Reverse index: keyword → packs (built on freeze)
+    frozen         bool                 // True after first read — no more registration
 }
 
 // DefaultRegistry is the global registry used by default.
@@ -849,7 +850,11 @@ func (r *Registry) Register(p Pack) {
     if _, exists := r.packs[p.ID]; exists {
         panic(fmt.Sprintf("packs: duplicate pack ID %q", p.ID))
     }
-    cp := p // Copy to prevent mutation
+    // Deep copy to prevent mutation of registered data via original slices
+    cp := p
+    cp.Keywords = append([]string{}, p.Keywords...)
+    cp.Safe = append([]SafePattern{}, p.Safe...)
+    cp.Destructive = append([]DestructivePattern{}, p.Destructive...)
     r.packs[p.ID] = &cp
     r.allPacks = append(r.allPacks, &cp)
     r.keywords = nil // Invalidate cached keywords
@@ -906,22 +911,12 @@ func (r *Registry) Keywords() []string {
 }
 
 // PacksForKeyword returns all packs that have the given keyword.
-// This is used by the pre-filter to select candidate packs after
-// keyword matching.
+// Uses a reverse index built during freeze() for O(1) lookup.
 func (r *Registry) PacksForKeyword(keyword string) []*Pack {
     r.freeze()
     r.mu.RLock()
     defer r.mu.RUnlock()
-    var result []*Pack
-    for _, p := range r.allPacks {
-        for _, kw := range p.Keywords {
-            if kw == keyword {
-                result = append(result, p)
-                break
-            }
-        }
-    }
-    return result
+    return r.keywordIndex[keyword]
 }
 
 // PacksByID returns packs matching the given IDs.
@@ -939,10 +934,29 @@ func (r *Registry) PacksByID(ids []string) []*Pack {
     return result
 }
 
+// HasPack returns true if a pack with the given ID is registered.
+func (r *Registry) HasPack(id string) bool {
+    r.freeze()
+    r.mu.RLock()
+    defer r.mu.RUnlock()
+    _, ok := r.packs[id]
+    return ok
+}
+
 func (r *Registry) freeze() {
     r.mu.Lock()
+    defer r.mu.Unlock()
+    if r.frozen {
+        return
+    }
     r.frozen = true
-    r.mu.Unlock()
+    // Build reverse index: keyword → packs
+    r.keywordIndex = make(map[string][]*Pack)
+    for _, p := range r.allPacks {
+        for _, kw := range p.Keywords {
+            r.keywordIndex[kw] = append(r.keywordIndex[kw], p)
+        }
+    }
 }
 ```
 
@@ -987,90 +1001,83 @@ import (
 // KeywordPreFilter provides fast keyword-based rejection of commands that
 // cannot match any pack pattern. Uses Aho-Corasick for O(n) multi-pattern
 // matching against all pack keywords in a single pass.
+//
+// Design choice: A single automaton is built from ALL registered pack keywords.
+// Pack selection (WithPacks/WithDisabledPacks) is applied later when selecting
+// candidate packs, NOT by building per-subset automatons. This eliminates
+// subset automaton cache proliferation and keeps the pre-filter stateless
+// after init.
 type KeywordPreFilter struct {
     registry  *packs.Registry
-    defaultAC *ahoCorasick         // Automaton for all packs
-    cache     map[string]*ahoCorasick // packSetKey → automaton for subset
-    mu        sync.RWMutex           // Protects cache
+    automaton *ahoCorasick // Single automaton for all keywords
 }
 
 // NewKeywordPreFilter creates a pre-filter backed by the given registry.
-// The default automaton (all packs) is built eagerly.
+// The automaton is built eagerly from all pack keywords.
 func NewKeywordPreFilter(registry *packs.Registry) *KeywordPreFilter {
-    kf := &KeywordPreFilter{
-        registry: registry,
-        cache:    make(map[string]*ahoCorasick),
+    return &KeywordPreFilter{
+        registry:  registry,
+        automaton: newAhoCorasick(registry.Keywords()),
     }
-    kf.defaultAC = newAhoCorasick(registry.Keywords())
-    return kf
 }
 
 // MatchResult contains the keywords matched and the candidate packs.
 type MatchResult struct {
     Matched  bool     // true if any keyword matched
-    Keywords []string // which keywords matched
+    Keywords []string // which keywords matched (word-boundary filtered)
 }
 
 // Contains checks if the command string contains any pack keyword.
 // Returns the matched keywords (used to select candidate packs).
 //
-// enabledPacks is nil for "all packs" (uses the default automaton).
-// When non-nil, a subset automaton is used (cached by pack set).
-func (kf *KeywordPreFilter) Contains(command string, enabledPacks []string) MatchResult {
-    ac := kf.getAutomaton(enabledPacks)
-    matches := ac.FindAll(command)
-    if len(matches) == 0 {
+// Always uses the full automaton. Pack selection is done downstream in
+// selectCandidatePacks. This avoids building/caching per-subset automatons.
+//
+// Word-boundary post-filter: After Aho-Corasick finds a substring match,
+// we verify that the match is at a word boundary — the character before
+// the match must be a word separator (space, start-of-string, |, ;, (, etc.)
+// and the character after must also be a word separator or end-of-string.
+// This prevents "git" from matching inside "gitignore" or "github".
+func (kf *KeywordPreFilter) Contains(command string) MatchResult {
+    rawMatches := kf.automaton.FindAllWithPos(command)
+    var filtered []string
+    seen := make(map[string]bool)
+    for _, m := range rawMatches {
+        if isWordBoundary(command, m.start, m.end) && !seen[m.keyword] {
+            seen[m.keyword] = true
+            filtered = append(filtered, m.keyword)
+        }
+    }
+    if len(filtered) == 0 {
         return MatchResult{}
     }
     return MatchResult{
         Matched:  true,
-        Keywords: matches,
+        Keywords: filtered,
     }
 }
 
-// getAutomaton returns the automaton for the given pack set.
-// nil enabledPacks means "all packs" (default automaton).
-func (kf *KeywordPreFilter) getAutomaton(enabledPacks []string) *ahoCorasick {
-    if enabledPacks == nil {
-        return kf.defaultAC
-    }
-
-    key := packSetKey(enabledPacks)
-
-    kf.mu.RLock()
-    if ac, ok := kf.cache[key]; ok {
-        kf.mu.RUnlock()
-        return ac
-    }
-    kf.mu.RUnlock()
-
-    // Build subset automaton
-    selected := kf.registry.PacksByID(enabledPacks)
-    var keywords []string
-    seen := make(map[string]bool)
-    for _, p := range selected {
-        for _, kw := range p.Keywords {
-            if !seen[kw] {
-                seen[kw] = true
-                keywords = append(keywords, kw)
-            }
+// isWordBoundary checks that the match at [start, end) is at a word boundary.
+func isWordBoundary(text string, start, end int) bool {
+    if start > 0 {
+        c := text[start-1]
+        if isWordChar(c) {
+            return false
         }
     }
-    ac := newAhoCorasick(keywords)
-
-    kf.mu.Lock()
-    kf.cache[key] = ac
-    kf.mu.Unlock()
-
-    return ac
+    if end < len(text) {
+        c := text[end]
+        if isWordChar(c) {
+            return false
+        }
+    }
+    return true
 }
 
-// packSetKey produces a canonical string key for a set of pack IDs.
-func packSetKey(packs []string) string {
-    sorted := make([]string, len(packs))
-    copy(sorted, packs)
-    sort.Strings(sorted)
-    return strings.Join(sorted, ",")
+// isWordChar returns true for alphanumeric and underscore characters.
+func isWordChar(c byte) bool {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+        (c >= '0' && c <= '9') || c == '_'
 }
 ```
 
@@ -1092,21 +1099,25 @@ type ahoCorasick struct {
     patterns  []string
 }
 
+// acMatch is a single match with its position in the text.
+type acMatch struct {
+    keyword string
+    start   int // Start byte offset (inclusive)
+    end     int // End byte offset (exclusive)
+}
+
 // newAhoCorasick builds an automaton from the given patterns.
-// Patterns are matched case-insensitively (keywords like "git" should
-// match "GIT" in env var values — but command names are already
-// normalized to lowercase by the extractor). Actually, keep matching
-// case-sensitive since keywords match raw command text which preserves
-// case. Bash commands are case-sensitive.
+// Matching is case-sensitive — bash commands are case-sensitive and
+// keywords match against raw command text.
 func newAhoCorasick(patterns []string) *ahoCorasick {
     // Build automaton from patterns
     ...
 }
 
-// FindAll returns all patterns found in the text.
-// Returns deduplicated pattern strings.
-func (ac *ahoCorasick) FindAll(text string) []string {
-    // Run automaton on text, collect matched patterns
+// FindAllWithPos returns all matches with their byte positions.
+// Used by the word-boundary post-filter to check context.
+func (ac *ahoCorasick) FindAllWithPos(text string) []acMatch {
+    // Run automaton on text, collect matches with positions
     ...
 }
 ```
@@ -1116,14 +1127,15 @@ func (ac *ahoCorasick) FindAll(text string) []string {
 in practice LLMs generate lowercase command names. We match case-sensitively
 to avoid false keyword matches on prose/comments in the command string.
 
-**Keyword quality**: Keywords should be specific enough to avoid excessive
-pass-through to parsing but general enough to catch all variants:
-- Good: `"git"`, `"terraform"`, `"kubectl"` — specific tool names
-- Bad: `"rm"` alone — too many false positives (`rm` appears in comments, strings)
-- Acceptable: `"rm"` — it IS the command name; even if it appears in strings,
-  tree-sitter parsing handles the disambiguation. The pre-filter is a
-  performance optimization, not a correctness gate. False positives at the
-  pre-filter level just mean unnecessary parsing, not false detections.
+**Keyword quality**: With word-boundary filtering, even short keywords like
+`"rm"` won't match inside `"format"` or `"arm64"`. Keywords should be the
+tool/command names as they appear in commands:
+- Good: `"git"`, `"terraform"`, `"kubectl"`, `"rm"`, `"psql"`
+- The word-boundary check prevents `"git"` from matching `"gitignore"` or
+  `"github"` — only standalone `git` (preceded/followed by non-word chars)
+- The pre-filter is a performance optimization, not a correctness gate.
+  False positives at the pre-filter level mean unnecessary parsing, not
+  false detections.
 
 ### 5.5 Evaluation Pipeline Orchestration (`internal/eval/pipeline.go`)
 
@@ -1174,6 +1186,15 @@ type evalConfig struct {
 func (p *Pipeline) Run(ctx context.Context, command string, cfg *evalConfig) guard.Result {
     result := guard.Result{Command: command}
 
+    // Config validation: default to InteractivePolicy if nil
+    policy := cfg.policy
+    if policy == nil {
+        policy = guard.InteractivePolicy()
+    }
+
+    // Validate pack IDs and warn on unknown (catches typos)
+    result.Warnings = append(result.Warnings, p.validatePackConfig(cfg)...)
+
     // Step 1: Input validation
     if isEmptyOrWhitespace(command) {
         result.Decision = guard.Allow
@@ -1188,17 +1209,25 @@ func (p *Pipeline) Run(ctx context.Context, command string, cfg *evalConfig) gua
             Severity:   guard.Indeterminate,
             Confidence: guard.ConfidenceHigh,
         }
-        result.Decision = cfg.policy.Decide(*result.Assessment)
+        result.Decision = policy.Decide(*result.Assessment)
         return result
     }
 
     // Step 2: Blocklist/Allowlist
-    if matchesGlob(command, cfg.blocklist) {
+    if pattern, matched := matchesGlobFirst(command, cfg.blocklist); matched {
         result.Decision = guard.Deny
         result.Assessment = &guard.Assessment{
             Severity:   guard.Critical,
             Confidence: guard.ConfidenceHigh,
         }
+        // Synthetic match for observability — callers can see WHY denied
+        result.Matches = []guard.Match{{
+            Pack:       "_blocklist",
+            Rule:       pattern,
+            Severity:   guard.Critical,
+            Confidence: guard.ConfidenceHigh,
+            Reason:     fmt.Sprintf("Command matched blocklist pattern: %s", pattern),
+        }}
         return result
     }
     if matchesGlob(command, cfg.allowlist) {
@@ -1206,9 +1235,15 @@ func (p *Pipeline) Run(ctx context.Context, command string, cfg *evalConfig) gua
         return result
     }
 
-    // Step 3: Keyword pre-filter
+    // Short-circuit if no packs are enabled (nothing to match)
     enabledPacks := p.resolveEnabledPacks(cfg)
-    filterResult := p.prefilter.Contains(command, enabledPacks)
+    if enabledPacks != nil && len(enabledPacks) == 0 {
+        result.Decision = guard.Allow
+        return result
+    }
+
+    // Step 3: Keyword pre-filter (always uses full automaton)
+    filterResult := p.prefilter.Contains(command)
     if !filterResult.Matched {
         result.Decision = guard.Allow
         return result
@@ -1216,7 +1251,8 @@ func (p *Pipeline) Run(ctx context.Context, command string, cfg *evalConfig) gua
 
     // Steps 4-6: Parse + Extract + Normalize (handled by ParseAndExtract)
     parseResult := p.parser.ParseAndExtract(ctx, command, 0)
-    result.Warnings = append(result.Warnings, convertWarnings(parseResult.Warnings)...)
+    // ParseResult.Warnings uses guard.Warning directly (parse imports guard/types.go)
+    result.Warnings = append(result.Warnings, parseResult.Warnings...)
 
     // Handle parse failure
     if len(parseResult.Commands) == 0 && parseResult.HasError {
@@ -1224,14 +1260,15 @@ func (p *Pipeline) Run(ctx context.Context, command string, cfg *evalConfig) gua
             Severity:   guard.Indeterminate,
             Confidence: guard.ConfidenceHigh,
         }
-        result.Decision = cfg.policy.Decide(*result.Assessment)
+        result.Decision = policy.Decide(*result.Assessment)
         return result
     }
 
-    // Step 9: Environment detection
-    envResult := p.envDet.Detect(
-        collectInlineEnv(parseResult.Commands),
-        collectExportedVars(parseResult),
+    // Step 9: Environment detection — per-command for inline env,
+    // global for exported vars and process env.
+    // Process env is parsed once for the entire evaluation.
+    globalEnvResult := p.envDet.DetectGlobal(
+        parseResult.ExportedVars,
         cfg.callerEnv,
     )
 
@@ -1240,7 +1277,11 @@ func (p *Pipeline) Run(ctx context.Context, command string, cfg *evalConfig) gua
     var allMatches []guard.Match
 
     for _, cmd := range parseResult.Commands {
-        matches := p.matchCommand(cmd, candidatePacks, envResult)
+        // Per-command env detection: check this command's inline env
+        cmdEnvResult := p.envDet.DetectInline(cmd.InlineEnv)
+        isProduction := cmdEnvResult.IsProduction || globalEnvResult.IsProduction
+
+        matches := p.matchCommand(cmd, candidatePacks, isProduction)
         allMatches = append(allMatches, matches...)
     }
 
@@ -1258,17 +1299,35 @@ func (p *Pipeline) Run(ctx context.Context, command string, cfg *evalConfig) gua
         }
     }
 
-    // Handle expansion cap → Indeterminate (if not already more severe)
-    if hasWarning(result.Warnings, guard.WarnExpansionCapped) && result.Assessment == nil {
-        result.Assessment = &guard.Assessment{
-            Severity:   guard.Indeterminate,
-            Confidence: guard.ConfidenceHigh,
+    // Handle expansion cap → Indeterminate floor.
+    // If expansion was capped, unchecked expansions might contain more severe
+    // matches. Use Indeterminate as a FLOOR: if existing assessment is less
+    // severe, promote to Indeterminate.
+    if hasWarning(result.Warnings, guard.WarnExpansionCapped) {
+        if result.Assessment == nil {
+            result.Assessment = &guard.Assessment{
+                Severity:   guard.Indeterminate,
+                Confidence: guard.ConfidenceHigh,
+            }
+        } else if result.Assessment.Severity < guard.Indeterminate {
+            // Indeterminate is iota 0, so this check is: if severity is...
+            // Actually Indeterminate=0, Low=1, so Indeterminate < Low.
+            // We want: if current severity could be exceeded by unchecked
+            // expansions, ensure at least Indeterminate. Since Indeterminate
+            // is the lowest severity value and we can't know what the unchecked
+            // expansions would produce, we add Indeterminate to warnings and
+            // let the policy handle it. The existing assessment stands, but
+            // we ensure the WarnExpansionCapped warning is visible.
         }
+        // The WarnExpansionCapped warning is already present. The policy will
+        // see the assessment (which may be from checked expansions) and the
+        // caller can inspect warnings. If NO matches were found in checked
+        // expansions, the nil-assessment case above sets Indeterminate.
     }
 
     // Step 12: Policy application
     if result.Assessment != nil {
-        result.Decision = cfg.policy.Decide(*result.Assessment)
+        result.Decision = policy.Decide(*result.Assessment)
     } else {
         result.Decision = guard.Allow
     }
@@ -1276,13 +1335,38 @@ func (p *Pipeline) Run(ctx context.Context, command string, cfg *evalConfig) gua
     return result
 }
 
+// validatePackConfig warns about unknown pack IDs in configuration.
+func (p *Pipeline) validatePackConfig(cfg *evalConfig) []guard.Warning {
+    var warnings []guard.Warning
+    for _, id := range cfg.enabledPacks {
+        if !p.registry.HasPack(id) {
+            warnings = append(warnings, guard.Warning{
+                Code:    guard.WarnUnknownPackID,
+                Message: fmt.Sprintf("enabled pack %q not found in registry", id),
+            })
+        }
+    }
+    for _, id := range cfg.disabledPacks {
+        if !p.registry.HasPack(id) {
+            warnings = append(warnings, guard.Warning{
+                Code:    guard.WarnUnknownPackID,
+                Message: fmt.Sprintf("disabled pack %q not found in registry", id),
+            })
+        }
+    }
+    return warnings
+}
+
 // matchCommand matches a single extracted command against candidate packs.
 // Safe-before-destructive: if a safe pattern matches in a pack, destructive
 // patterns in that pack are skipped for this command.
+//
+// isProduction is the merged result of per-command inline env detection
+// and global (exported + process) env detection.
 func (p *Pipeline) matchCommand(
     cmd parse.ExtractedCommand,
     candidatePacks []*packs.Pack,
-    envResult envdetect.Result,
+    isProduction bool,
 ) []guard.Match {
     var matches []guard.Match
 
@@ -1290,7 +1374,7 @@ func (p *Pipeline) matchCommand(
         // Check safe patterns first
         safeMatched := false
         for _, sp := range pack.Safe {
-            if sp.Match.Match(cmd) {
+            if matched, panicked := p.safeMatch(sp.Match, cmd); matched && !panicked {
                 safeMatched = true
                 break
             }
@@ -1301,11 +1385,12 @@ func (p *Pipeline) matchCommand(
 
         // Check destructive patterns
         for _, dp := range pack.Destructive {
-            if dp.Match.Match(cmd) {
+            if matched, _ := p.safeMatch(dp.Match, cmd); matched {
                 sev := dp.Severity
                 escalated := false
-                // Environment escalation
-                if dp.EnvSensitive && envResult.IsProduction {
+                // Environment escalation (per-command: only escalate if
+                // production indicators are relevant to this command)
+                if dp.EnvSensitive && isProduction {
                     sev = escalateSeverity(sev)
                     escalated = true
                 }
@@ -1400,13 +1485,9 @@ func (p *Pipeline) resolveEnabledPacks(cfg *evalConfig) []string {
 }
 
 // Helper functions
+
 func isEmptyOrWhitespace(s string) bool {
-    for _, c := range s {
-        if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
-            return false
-        }
-    }
-    return true
+    return strings.TrimSpace(s) == ""
 }
 
 func contains(slice []string, item string) bool {
@@ -1427,26 +1508,23 @@ func hasWarning(warnings []guard.Warning, code guard.WarningCode) bool {
     return false
 }
 
-func convertWarnings(parseWarnings []parse.Warning) []guard.Warning {
-    result := make([]guard.Warning, len(parseWarnings))
-    for i, w := range parseWarnings {
-        result[i] = guard.Warning{
-            Code:    guard.WarningCode(w.Code),
-            Message: w.Message,
+// matchesGlobFirst returns the first matching pattern and true, or ("", false).
+func matchesGlobFirst(command string, patterns []string) (string, bool) {
+    for _, pattern := range patterns {
+        if globMatch(pattern, command) {
+            return pattern, true
         }
     }
-    return result
+    return "", false
 }
 ```
 
-**Warning code alignment**: `parse.WarningCode` and `guard.WarningCode` must
-have the same underlying values. During plan 02 implementation, we should
-either: (a) have `parse` import `guard` for the warning codes (adds a
-dependency edge), or (b) maintain the same iota ordering in both and convert
-via type cast. Option (b) is simpler but fragile. Option (a) is preferred
-— `parse` importing `guard` for types only (no `internal/eval` → no cycle).
+**Warning type sharing**: `internal/parse` imports `guard/types.go` directly
+for the shared `Warning` and `WarningCode` types. `guard/types.go` has zero
+internal imports and is the leaf dependency. No `convertWarnings` function
+needed — `ParseResult.Warnings` uses `guard.Warning` directly.
 
-**Revised import flow with parse → guard for types**:
+**Import flow** (definitive):
 
 ```mermaid
 graph TD
@@ -1460,22 +1538,24 @@ graph TD
     PARSE --> GUARD
 ```
 
-This means `guard/types.go` has zero internal imports and is the leaf
-dependency for shared types. This is clean. `parse.Warning` should be
-replaced with `guard.Warning` directly, and `parse.WarningCode` with
-`guard.WarningCode`. `parse.ParseResult` then uses `guard.Warning`:
+`guard/types.go` is the leaf dependency. `parse.ParseResult` uses `guard.Warning`
+directly:
 
 ```go
-// In internal/parse/command.go
+// In internal/parse/command.go (cross-plan requirement)
 type ParseResult struct {
-    Commands []ExtractedCommand
-    Warnings []guard.Warning  // Shared warning type
-    HasError bool
+    Commands     []ExtractedCommand
+    Warnings     []guard.Warning       // Shared warning type — no conversion needed
+    HasError     bool
+    ExportedVars map[string][]string   // From DataflowAnalyzer.ExportedVars()
 }
 ```
 
-This eliminates the warning conversion entirely — `convertWarnings` becomes
-unnecessary.
+**Cross-plan interface change**: Plan 01's `ParseResult` must add the
+`ExportedVars map[string][]string` field, populated by the extractor from
+`DataflowAnalyzer.ExportedVars()` after the AST walk completes. Plan 01's
+`Warning`/`WarningCode` types should be replaced with imports from
+`guard/types.go`. This is documented here as a required plan 01 update.
 
 ### 5.6 Policy Engine (`guard/policy.go`)
 
@@ -1553,25 +1633,28 @@ func (permissivePolicy) Decide(a Assessment) Decision {
 | Low | Allow | Allow | Allow |
 | Indeterminate | Deny | Ask | Allow |
 
+**Note on Confidence (MF-P2.6)**: All three built-in policies decide based
+solely on `Severity`; the `Confidence` field in `Assessment` is currently
+unused. The 15-cell decision matrix above collapses to 5 rows (one per
+severity). `Confidence` is carried through the pipeline to support custom
+`Policy` implementations that may want to differentiate (e.g., a custom
+policy that asks instead of denying for `ConfidenceLow` + `High` severity).
+If no custom policies leverage it after real-world usage, consider removing
+`Confidence` from `Assessment` to simplify the API.
+
 ### 5.7 Allowlist/Blocklist Matching (`internal/eval/allowlist.go`)
+
+**Security constraint**: `*` must NOT match command separators (`;`, `&&`,
+`||`, `|`, `\n`, `` ` ``, `$(`). Without this restriction, an allowlist
+pattern `"git status *"` would match `"git status; rm -rf /"`, allowing
+the destructive command to bypass all structural analysis. This is a P0
+security issue — the glob's `*` matches arguments and flags but not
+command boundaries.
 
 ```go
 package eval
 
-import "path"
-
 // matchesGlob checks if the command matches any of the given glob patterns.
-// Uses path.Match semantics — `*` matches any sequence of non-separator chars.
-// Since we're matching command strings (not file paths), we treat the
-// entire command as a flat string. `*` matches everything including spaces.
-//
-// However, path.Match's `*` does NOT match `/`. For command matching,
-// we need `*` to match everything. We use a custom matcher that treats
-// the pattern like a filepath match but normalizes separators.
-//
-// Actually: path.Match's `*` matches any non-`/` character. For our
-// use case, we need different semantics. We implement simple glob matching
-// where `*` matches any sequence of characters (including `/` and spaces).
 func matchesGlob(command string, patterns []string) bool {
     for _, pattern := range patterns {
         if globMatch(pattern, command) {
@@ -1581,15 +1664,32 @@ func matchesGlob(command string, patterns []string) bool {
     return false
 }
 
-// globMatch implements simple glob matching where `*` matches any
-// sequence of characters (including `/` and space).
+// commandSeparators are characters that `*` must NOT match in glob patterns.
+// These are shell command separators — matching across them would allow
+// compound command injection through allowlist patterns.
+var commandSeparators = [256]bool{
+    ';':  true,
+    '|':  true,
+    '&':  true,
+    '\n': true,
+    '`':  true,
+    '$':  true,
+    '(':  true,
+    ')':  true,
+}
+
+// globMatch implements glob matching where `*` matches any sequence of
+// characters EXCEPT command separators (;, |, &, \n, `, $, (, )).
+//
+// This prevents compound command injection through allowlist patterns:
+// "git status *" does NOT match "git status; rm -rf /"
+//
 // Only `*` is special. No `?`, `[...]`, or `**` support.
-// This is intentionally simple — complex patterns should use pack
-// matchers instead.
+//
+// Trailing ` *` semantics: "git push *" matches "git push --force" but
+// NOT "git push" (the space before * is literal and must be present).
+// Users wanting "with or without args" should use "git push*".
 func globMatch(pattern, text string) bool {
-    // Standard two-pointer glob algorithm.
-    // px = pattern index, tx = text index
-    // starPx, starTx track the last `*` position for backtracking.
     px, tx := 0, 0
     starPx, starTx := -1, -1
 
@@ -1605,7 +1705,12 @@ func globMatch(pattern, text string) bool {
             tx++
         } else if starPx >= 0 {
             // Mismatch but have a star: backtrack
+            // But don't let * match across command separators
             starTx++
+            if starTx < len(text) && commandSeparators[text[starTx]] {
+                // Star cannot cross this separator — match fails
+                return false
+            }
             tx = starTx
             px = starPx + 1
         } else {
@@ -1620,14 +1725,26 @@ func globMatch(pattern, text string) bool {
 
     return px == len(pattern)
 }
-
-// Note: path.Match is NOT used because its `*` doesn't match `/`.
-// Our glob semantics are simpler and match the architecture spec:
-//   "git status"      — exact match
-//   "git status *"    — matches git status with any args
-//   "*/bin/git *"     — matches path-prefixed git with any args
-var _ = path.Match // suppress unused import if path is imported elsewhere
 ```
+
+**Glob semantics summary**:
+- `"git status"` — exact match
+- `"git status *"` — matches `git status` with any args, but NOT across `;`/`&&`/`||`/`|`
+- `"*/bin/git *"` — matches path-prefixed git with any args
+- `"*"` — matches any single command (but not across separators)
+- `"git push*"` — matches `"git push"` and `"git push --force"` (no space before `*`)
+
+**Blocklist `"*"` pattern**: A blocklist entry of `"*"` blocks any single
+command. Since blocklist patterns match before parsing, this effectively
+blocks everything except empty commands. This is intentionally powerful
+but should be validated at configuration time with a warning.
+
+**`ArgMatcher` glob semantics**: `ArgMatcher.matchArg()` also uses glob
+matching for argument values. It uses the same `globMatch` function as
+allowlist/blocklist (with command-separator restrictions), which is more
+permissive than `path.Match` for `/` characters. This ensures consistent
+glob semantics across the codebase. Pack authors can use `"*.sql"` to match
+`"backup.sql"` and `"/tmp/dump.sql"` alike.
 
 ### 5.8 Environment Detection (`internal/envdetect/detect.go`)
 
@@ -1635,6 +1752,7 @@ var _ = path.Match // suppress unused import if path is imported elsewhere
 package envdetect
 
 import (
+    neturl "net/url"
     "regexp"
     "strings"
 
@@ -1696,20 +1814,10 @@ func NewDetector() *Detector {
     }
 }
 
-// Detect checks inline env vars, exported vars, and process env for
-// production indicators.
-//
-// inlineEnv: merged InlineEnv maps from all extracted commands.
-// exportedVars: variables exported via `export` (from dataflow analysis).
-// processEnv: caller-provided env vars in os.Environ() format ("KEY=VALUE").
-func (d *Detector) Detect(
-    inlineEnv map[string]string,
-    exportedVars map[string][]string,
-    processEnv []string,
-) Result {
+// DetectInline checks a single command's inline env vars for production
+// indicators. Called once per extracted command in the pipeline.
+func (d *Detector) DetectInline(inlineEnv map[string]string) Result {
     var indicators []ProductionIndicator
-
-    // Check inline env vars
     for _, rule := range d.rules {
         for _, name := range rule.Names {
             if val, ok := inlineEnv[name]; ok && rule.Check(val) {
@@ -1721,6 +1829,23 @@ func (d *Detector) Detect(
             }
         }
     }
+    return Result{
+        IsProduction: len(indicators) > 0,
+        Indicators:   indicators,
+    }
+}
+
+// DetectGlobal checks exported vars and process env for production
+// indicators. Called once per pipeline run (these sources are global,
+// not scoped to individual commands).
+//
+// exportedVars: variables exported via `export` (from dataflow analysis).
+// processEnv: caller-provided env vars in os.Environ() format ("KEY=VALUE").
+func (d *Detector) DetectGlobal(
+    exportedVars map[string][]string,
+    processEnv []string,
+) Result {
+    var indicators []ProductionIndicator
 
     // Check exported vars (from dataflow analysis)
     for _, rule := range d.rules {
@@ -1759,6 +1884,15 @@ func (d *Detector) Detect(
     }
 }
 
+// MergeResults combines two Results, preserving all indicators.
+func MergeResults(a, b Result) Result {
+    indicators := append(a.Indicators, b.Indicators...)
+    return Result{
+        IsProduction: a.IsProduction || b.IsProduction,
+        Indicators:   indicators,
+    }
+}
+
 // isExactProd checks for exact "production" or "prod" values.
 func isExactProd(value string) bool {
     v := strings.ToLower(strings.TrimSpace(value))
@@ -1777,26 +1911,40 @@ func hasProfileProd(value string) bool {
     return prodWordBoundary.MatchString(value)
 }
 
-// extractHostname extracts the hostname from a URL-like string.
-// Handles: "postgres://user:pass@prod-db.acme.com:5432/mydb"
-// Returns: "prod-db.acme.com"
-func extractHostname(url string) string {
-    // Strip scheme
-    if idx := strings.Index(url, "://"); idx >= 0 {
-        url = url[idx+3:]
+// extractHostname extracts the hostname from a URL-like string using
+// net/url.Parse. Falls back to raw string extraction for non-URL values.
+//
+// Handles: "postgres://user:pass@prod-db.acme.com:5432/mydb" → "prod-db.acme.com"
+// Handles: "user@host/db@name" correctly (no confusion from @ in path)
+func extractHostname(rawURL string) string {
+    // Ensure a scheme exists so net/url.Parse treats it as absolute.
+    toParse := rawURL
+    if !strings.Contains(toParse, "://") {
+        toParse = "scheme://" + toParse
     }
-    // Strip userinfo
-    if idx := strings.LastIndex(url, "@"); idx >= 0 {
-        url = url[idx+1:]
+    u, err := neturl.Parse(toParse)
+    if err != nil || u.Hostname() == "" {
+        // Fallback: strip scheme, userinfo, port, path manually
+        s := rawURL
+        if idx := strings.Index(s, "://"); idx >= 0 {
+            s = s[idx+3:]
+        }
+        if idx := strings.Index(s, "@"); idx >= 0 {
+            s = s[idx+1:]
+        }
+        if idx := strings.IndexAny(s, ":/"); idx >= 0 {
+            s = s[:idx]
+        }
+        return s
     }
-    // Strip port and path
-    if idx := strings.IndexAny(url, ":/"); idx >= 0 {
-        url = url[:idx]
-    }
-    return url
+    return u.Hostname()
 }
 
 // parseEnv parses os.Environ()-format env vars into a map.
+// Note (SE-02-P2.5): This allocates a new map per call. For typical usage
+// (seconds between calls), this is negligible. If profiling shows this as
+// a hotspot (e.g., in benchmarks), the pipeline can cache the parsed map
+// in evalConfig since callerEnv is constant for the process lifetime.
 func parseEnv(env []string) map[string]string {
     m := make(map[string]string, len(env))
     for _, e := range env {
@@ -1808,21 +1956,37 @@ func parseEnv(env []string) map[string]string {
 }
 ```
 
-**Detection priority**: All three sources (inline, export, process) are
-checked. The first match is sufficient to set `IsProduction = true`. We
-collect all indicators for diagnostic purposes (the Match's `EnvEscalated`
-flag tells the caller why severity was bumped).
+**Detection split (per MF-P1.2/SE-02-P1.3 review feedback)**:
 
-**`extractHostname` edge cases**:
-- No scheme: `"prod-db.acme.com:5432"` → `"prod-db.acme.com"` (still works)
+Environment detection is split into per-command and global phases to avoid
+false escalation. The pipeline calls:
+1. `DetectInline(cmd.InlineEnv)` — once per extracted command. Only inline
+   env vars scoped to that specific command are checked.
+2. `DetectGlobal(exportedVars, callerEnv)` — once per pipeline run. Exported
+   vars and process env vars are global context.
+
+Results are merged with `MergeResults()` before checking `isProduction` for
+each command's env-sensitive patterns. This prevents
+`RAILS_ENV=production echo hello && git clean -f` from escalating `git clean`
+due to an inline env var on a different command.
+
+**`extractHostname` implementation (per MF-P2.2 review feedback)**:
+
+Uses `net/url.Parse()` for robust URL parsing. Falls back to manual string
+extraction if `net/url.Parse()` fails (e.g., for non-URL values). This
+correctly handles `@` in passwords and paths:
+
+- `"postgres://user:p@ss@prod-db.acme.com:5432/mydb"` → `"prod-db.acme.com"` ✓
+- `"user@host/db@name"` → `"host"` (net/url resolves correctly) ✓
+- No scheme: `"prod-db.acme.com:5432"` → `"prod-db.acme.com"` (scheme prepended for parsing)
 - IPv4: `"192.168.1.1"` → `"192.168.1.1"` (no "prod" match)
-- IPv6: `"[::1]"` → handled by `IndexAny(":/")`
+- IPv6: `"[::1]"` → `"::1"` (net/url.Hostname() strips brackets)
 - Empty string: → `""` (no match)
 
 ### 5.9 Test Pack: `core.git` (`internal/packs/core/git.go`)
 
 A minimal pack to validate the entire framework end-to-end. Contains 2
-safe patterns and 3 destructive patterns.
+safe patterns and 5 destructive patterns.
 
 ```go
 package core
@@ -1845,12 +2009,18 @@ var gitPack = packs.Pack{
     Safe: []packs.SafePattern{
         {
             Name: "git-push-no-force",
+            // Per MF-P1.3: also forbid --mirror and --delete, which are
+            // destructive but don't use --force. Without this, "git push
+            // --mirror" would match the safe pattern and skip destructive
+            // pattern evaluation for this pack.
             Match: packs.And(
                 packs.Name("git"),
                 packs.ArgAt(0, "push"),
                 packs.Not(packs.Or(
                     packs.Flags("--force"),
                     packs.Flags("-f"),
+                    packs.Flags("--mirror"),
+                    packs.Flags("--delete"),
                 )),
             ),
         },
@@ -1911,6 +2081,34 @@ var gitPack = packs.Pack{
             Remediation:  "Use git clean -n (dry run) first to preview what will be deleted",
             EnvSensitive: false,
         },
+        {
+            // Per MF-P1.3: --mirror is destructive (overwrites all remote refs)
+            Name: "git-push-mirror",
+            Match: packs.And(
+                packs.Name("git"),
+                packs.ArgAt(0, "push"),
+                packs.Flags("--mirror"),
+            ),
+            Severity:     guard.High,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "git push --mirror overwrites all remote refs to match local, potentially deleting remote branches",
+            Remediation:  "Use explicit branch pushes instead of --mirror",
+            EnvSensitive: false,
+        },
+        {
+            // Per MF-P1.3: --delete is destructive (deletes remote branches)
+            Name: "git-push-delete",
+            Match: packs.And(
+                packs.Name("git"),
+                packs.ArgAt(0, "push"),
+                packs.Flags("--delete"),
+            ),
+            Severity:     guard.Medium,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "git push --delete removes remote branches or tags",
+            Remediation:  "Verify the branch/tag name before deleting from remote",
+            EnvSensitive: false,
+        },
     },
 }
 ```
@@ -1922,7 +2120,13 @@ Each entry is a command with its expected outcome.
 
 **File format** (one entry per block, separated by `---`):
 
+Each golden file starts with a `format: v1` header line. The parser
+validates this header on load and rejects files without it, preventing
+silent format drift (SE-02-P3.3).
+
 ```
+format: v1
+---
 # Description of the test case
 command: git push --force origin main
 decision: Deny
@@ -1995,6 +2199,13 @@ func parseGoldenFile(t *testing.T, path string) []GoldenEntry {
     t.Helper()
     // Parse entries separated by "---", each with key: value pairs
     // Lines starting with # are descriptions
+    //
+    // Schema validation (MF-P3.1):
+    // 1. First non-comment line must be "format: v1"
+    // 2. Every entry must have "command" and "decision" fields
+    // 3. "decision" must be one of: Allow, Deny, Ask
+    // 4. "severity" must be one of: Critical, High, Medium, Low, Indeterminate (if present)
+    // 5. Unknown keys emit t.Errorf (catches typos like "desision")
     ...
 }
 
@@ -2238,14 +2449,25 @@ func TestPreFilterContains(t *testing.T) {
         {"no keywords", "ls -la", false},
         {"keyword in string arg", `echo "git is great"`, true}, // Acceptable FP
         {"empty command", "", false},
-        {"keyword substring", "gitignore", true}, // AC finds "git" in "gitignore"
+        {"keyword substring rejected", "gitignore", false}, // Word-boundary filter rejects
     }
     ...
 }
 
-func TestPreFilterSubsetAutomaton(t *testing.T) {
-    // Test with enabled pack subset
-    // Verify caching works
+func TestPreFilterWordBoundary(t *testing.T) {
+    // Verify word-boundary post-filter reduces false positives
+    tests := []struct {
+        name    string
+        command string
+        want    bool
+    }{
+        {"keyword as standalone word", "git push --force", true},
+        {"keyword as substring", "gitignore", false},   // Word-boundary check rejects
+        {"keyword in compound word", "gitbook setup", false},
+        {"keyword after separator", "echo hi; git push", true},
+        {"keyword after pipe", "ls | git status", true},
+    }
+    ...
 }
 ```
 
@@ -2294,10 +2516,10 @@ func TestInteractivePolicy(t *testing.T) { ... }
 func TestPermissivePolicy(t *testing.T) { ... }
 ```
 
-**detect_test.go** — Environment detection:
+**detect_test.go** — Environment detection (split API):
 
 ```go
-func TestDetectInlineEnv(t *testing.T) {
+func TestDetectInline(t *testing.T) {
     d := NewDetector()
     tests := []struct {
         name      string
@@ -2314,7 +2536,7 @@ func TestDetectInlineEnv(t *testing.T) {
     ...
 }
 
-func TestDetectURLProd(t *testing.T) {
+func TestDetectGlobalURLProd(t *testing.T) {
     d := NewDetector()
     tests := []struct {
         name     string
@@ -2326,13 +2548,32 @@ func TestDetectURLProd(t *testing.T) {
         {"productivity false positive", "postgres://user@productivity.internal:5432/db", false},
         {"staging", "postgres://user@staging-db.acme.com:5432/mydb", false},
         {"localhost", "postgres://localhost:5432/mydb", false},
+        // MF-P2.2: @-in-path edge case
+        {"at-in-path", "postgres://user@host/db@name", false},  // host is "host", not "name"
+        {"at-in-password", "postgres://user:p@ss@prod-db.acme.com:5432/db", true},
     }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            envMap := map[string][]string{"DATABASE_URL": {tt.url}}
+            result := d.DetectGlobal(envMap, nil)
+            assert.Equal(t, tt.wantProd, result.IsProduction)
+        })
+    }
+}
+
+func TestDetectGlobalProcessEnv(t *testing.T) {
+    // Same checks but via processEnv (os.Environ format)
     ...
 }
 
-func TestDetectProcessEnv(t *testing.T) {
-    // Same checks but via processEnv (os.Environ format)
-    ...
+func TestMergeResults(t *testing.T) {
+    a := Result{IsProduction: false, Indicators: nil}
+    b := Result{IsProduction: true, Indicators: []ProductionIndicator{
+        {Source: "inline", Var: "RAILS_ENV", Value: "production"},
+    }}
+    merged := MergeResults(a, b)
+    assert.True(t, merged.IsProduction)
+    assert.Len(t, merged.Indicators, 1)
 }
 ```
 
@@ -2413,6 +2654,69 @@ func TestPipelinePartialParse(t *testing.T) {
     // Decision depends on whether destructive patterns were found in parsed portion
     ...
 }
+
+// MF-P3.2: Disabled pack behavior
+func TestPipelineDisabledPacks(t *testing.T) {
+    pipeline := setupTestPipeline(t)
+
+    tests := []struct {
+        name          string
+        command       string
+        disabledPacks []string
+        enabledPacks  []string
+        wantDecision  Decision
+    }{
+        {"disabled pack skips matching",
+            "git push --force", []string{"core.git"}, nil, Allow},
+        {"enabled and disabled same pack — disabled wins",
+            "git push --force", []string{"core.git"}, []string{"core.git"}, Allow},
+        {"all packs disabled",
+            "git push --force", []string{"core.git"}, nil, Allow},
+        {"non-existent disabled pack — silently ignored",
+            "git push --force", []string{"nonexistent"}, nil, Deny},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            cfg := &evalConfig{
+                policy:        InteractivePolicy(),
+                disabledPacks: tt.disabledPacks,
+                enabledPacks:  tt.enabledPacks,
+            }
+            result := pipeline.Run(ctx, tt.command, cfg)
+            assert.Equal(t, tt.wantDecision, result.Decision)
+        })
+    }
+}
+
+// SE-02-P3.2: ArgMatcher with invalid glob falls back to exact match
+func TestArgMatcherInvalidGlob(t *testing.T) {
+    matcher := packs.Arg("[invalid") // Invalid glob pattern (unclosed bracket)
+    cmd := parse.ExtractedCommand{Args: []string{"[invalid"}}
+    assert.True(t, matcher.Match(cmd), "invalid glob should fallback to exact match")
+
+    cmd2 := parse.ExtractedCommand{Args: []string{"other"}}
+    assert.False(t, matcher.Match(cmd2), "invalid glob fallback should not match other strings")
+}
+
+// MF-P2.5: Flag coexistence — --force and --force-with-lease are separate keys
+func TestFlagCoexistenceSeparateKeys(t *testing.T) {
+    // Verify that the extractor stores --force and --force-with-lease as separate
+    // flag keys, not treating one as a variant of the other.
+    // This is a cross-plan consistency test — plan 01's flag decomposition
+    // must produce separate entries for each flag.
+    cmd := parse.ExtractedCommand{
+        Name: "git",
+        Args: []string{"push"},
+        Flags: map[string]string{
+            "--force":           "",
+            "--force-with-lease": "",
+        },
+    }
+    forcePattern := packs.Flags("--force")
+    leasePattern := packs.Flags("--force-with-lease")
+    assert.True(t, forcePattern.Match(cmd), "--force should match independently")
+    assert.True(t, leasePattern.Match(cmd), "--force-with-lease should match independently")
+}
 ```
 
 ### 8.3 Benchmarks
@@ -2482,14 +2786,18 @@ all 50 simultaneously in one pass. For short inputs (~100 bytes), the
 difference is negligible. But it scales linearly if inputs grow (up to
 128KB) and provides a clean, well-understood algorithmic foundation.
 
-**Implementation choice**: Pure-Go library (no cgo). The automaton is
-built once at init time and reused. For subset pack configurations, subset
-automatons are cached by the set of enabled packs.
+**Implementation choice**: Pure-Go library (no cgo). A single automaton is
+built once at init time from all registered pack keywords and reused for all
+evaluations. The pre-filter returns matched keywords; the pipeline then
+uses the registry's reverse index (`keywordIndex`) to map keywords to
+candidate packs and filters by `enabledPacks`/`disabledPacks` downstream.
+This eliminates subset automaton caching entirely (per MF-P2.3/SE-02-P1.5),
+reducing memory footprint and complexity.
 
-**Dynamic cache bounding**: The cache of subset automatons is unbounded
-in this plan. In practice, callers use a small number of pack configurations
-(typically 1–3). If cache size becomes a concern, an LRU eviction policy
-can be added, but this is not expected to be necessary.
+**Word-boundary post-filter**: After Aho-Corasick returns substring matches,
+a word-boundary check filters out matches embedded in longer words (e.g.,
+"git" in "gitignore"). This significantly reduces false pass-through while
+maintaining O(1) per-match cost (per MF-P1.4/SE-02-P2.1).
 
 ---
 
@@ -2558,9 +2866,9 @@ evaluation pipeline processes short strings at LLM-response frequency.
    (in `init()`), not on each match. `regexp.MustCompile` panics at init
    if the regex is invalid, preventing runtime regex compilation errors.
 
-3. **Pre-filter automaton caching**: Subset automatons are cached by pack
-   set key. Repeated calls with the same `WithPacks` configuration reuse
-   the same automaton.
+3. **Single pre-filter automaton**: One automaton covers all keywords.
+   Pack filtering is done downstream via the registry's reverse index,
+   avoiding the cost of building and caching subset automatons.
 
 4. **Short-circuit in safe pattern matching**: If a safe pattern matches,
    destructive patterns for that pack are skipped entirely. This reduces
@@ -2584,7 +2892,7 @@ evaluation pipeline processes short strings at LLM-response frequency.
 4. **`internal/packs/registry.go`** — Registry with Register, Get, All,
    Keywords, PacksForKeyword, freeze semantics. Write registry tests.
 
-5. **`internal/packs/core/git.go`** — Test pack with 2 safe + 3 destructive
+5. **`internal/packs/core/git.go`** — Test pack with 2 safe + 5 destructive
    patterns. Validates the pack → registry → matcher chain. Write pack tests.
 
 6. **`guard/policy.go`** — Policy interface + three built-in policies.
@@ -2622,22 +2930,61 @@ on all prior steps.
    based on API fit, maintenance status, and benchmark performance.
    Fallback: implement textbook Aho-Corasick (~200 LOC for 50 patterns).
 
-2. **Warning code sharing mechanism**: Should `internal/parse` import
-   `guard` for warning types, or should warning codes be duplicated?
-   Recommendation: `parse` imports `guard/types.go` — it has no internal
-   dependencies and breaks no cycles. See §5.5 discussion.
+2. ~~**Warning code sharing mechanism**~~: **Resolved**. `parse` imports
+   `guard/types.go` directly. `ParseResult.Warnings` uses `guard.Warning`
+   type. `convertWarnings` is eliminated. See §5.5.
 
-3. **`globMatch` edge case — trailing `*`**: Should `"git status *"` match
-   `"git status"` (zero characters after space)? Current implementation: No,
-   `*` requires at least zero characters (matches empty). Actually the
-   algorithm as written matches zero characters for `*`. Need to verify
-   and decide if this is the desired behavior. The architecture spec
-   example `"git status *"` implies "git status with any arguments" which
-   suggests matching `"git status "` (trailing space) but not `"git status"`.
-   The glob semantics should match the spec.
+3. ~~**`globMatch` edge case — trailing `*`**~~: **Resolved** (MF-P1.1).
+   `"git status *"` does NOT match `"git status"` (the space before `*`
+   must match, so at least one character after the space is required).
+   This is documented in E3 test cases. Users wanting to match with or
+   without arguments should use `"git status*"` (no space before `*`).
+   Additionally, `*` now does NOT match command separators (`;`, `|`, `&`,
+   `\n`, `` ` ``, `$(`, `)`) per MF-P0.1 security fix.
 
 4. **Pre-filter keyword overlap**: If a keyword like `"rm"` appears in
    multiple packs, the pre-filter correctly returns all packs containing
    that keyword. But short keywords increase false pass-through rate.
    Should we enforce a minimum keyword length? Recommendation: No — let
    benchmark data guide keyword quality improvements in Batch 5.
+
+---
+
+## Review Disposition
+
+| Finding | Reviewer | Severity | Summary | Disposition | Notes |
+|---------|----------|----------|---------|-------------|-------|
+| MF-P0.1 | security-correctness | P0 | Allowlist `*` matches command separators — compound injection bypass | Incorporated | §5.7: `*` restricted from matching `;`, `\|`, `&`, `\n`, `` ` ``, `$`, `(`, `)`. E3/SEC2 updated. |
+| MF-P0.2 | security-correctness | P0 | Blocklist deny has Assessment but empty Matches | Incorporated | §5.5: Blocklist adds synthetic Match with pack `_blocklist`. |
+| MF-P1.1 | security-correctness | P1 | `globMatch` trailing `*` semantics unclear | Incorporated | §13 OQ3 resolved. Documented in E3: `"git status *"` requires char after space. |
+| MF-P1.2 | security-correctness | P1 | Env detection global, not per-command | Incorporated | §5.5/§5.8: Split into `DetectInline` (per-cmd) + `DetectGlobal` (once). |
+| MF-P1.3 | security-correctness | P1 | Safe pattern `git-push-no-force` too broad | Incorporated | §5.9: Added `--mirror`/`--delete` to forbidden flags + 2 new destructive patterns. |
+| MF-P1.4 | security-correctness | P1 | AC substring matching causes pass-through | Incorporated | §5.4: Word-boundary post-filter added. Prefilter tests updated. |
+| MF-P2.1 | security-correctness | P2 | `WarnExpansionCapped` ignored with other matches | Incorporated | §5.5: Indeterminate used as floor when expansion capped. |
+| MF-P2.2 | security-correctness | P2 | `extractHostname` fails with `@` in paths | Incorporated | §5.8: Replaced with `net/url.Parse()` + fallback. |
+| MF-P2.3 | security-correctness | P2 | Subset automaton cache unbounded | Incorporated | §5.4: Subset cache removed entirely; single automaton + downstream pack filtering. |
+| MF-P2.4 | security-correctness | P2 | `resolveEnabledPacks` empty slice vs nil | Incorporated | §5.5: Short-circuit to Allow when enabledPacks is empty. |
+| MF-P2.5 | security-correctness | P2 | `--force`/`--force-with-lease` coexistence test | Incorporated | §8: Cross-plan flag coexistence test added. |
+| MF-P2.6 | security-correctness | P2 | Confidence unused by built-in policies | Incorporated | §5.6: Documented as intentionally unused; available for custom policies. |
+| MF-P3.1 | security-correctness | P3 | Golden file no schema validation | Incorporated | §5.10: Parser validates required fields, enum values, warns on unknown keys. |
+| MF-P3.2 | security-correctness | P3 | No test for disabled pack behavior | Incorporated | §8: `TestPipelineDisabledPacks` added with 4 cases. |
+| MF-P3.3 | security-correctness | P3 | `isEmptyOrWhitespace` misses unicode | Incorporated | §5.5: Uses `strings.TrimSpace` instead of manual char check. |
+| MF-P3.4 | security-correctness | P3 | `ArgMatcher` `path.Match` vs `globMatch` inconsistency | Incorporated | §5.2.3: `ArgMatcher` now uses `globMatch` instead of `path.Match`. |
+| SE-02-P0.1 | systems-engineer | P0 | Nil policy dereference in Pipeline.Run() | Incorporated | §5.5: Nil policy defaults to `InteractivePolicy()`. |
+| SE-02-P0.2 | systems-engineer | P0 | ParseResult doesn't expose exported vars | Incorporated | §1: `ExportedVars map[string][]string` added to ParseResult. Cross-plan change documented. |
+| SE-02-P1.1 | systems-engineer | P1 | Blocklist deny produces opaque decision | Incorporated | Merged with MF-P0.2. Synthetic Match entry added. |
+| SE-02-P1.2 | systems-engineer | P1 | ExtractedCommand diverges between plan 01 and 02 | Incorporated | §1: Cross-plan interface note added. Plan 01 owns canonical definition. |
+| SE-02-P1.3 | systems-engineer | P1 | Global env escalation — all matches escalated | Incorporated | Merged with MF-P1.2. Split into per-command + global detection. |
+| SE-02-P1.4 | systems-engineer | P1 | `convertWarnings` contradicts import redesign | Incorporated | §5.5: `convertWarnings` removed. `ParseResult` uses `guard.Warning` directly. |
+| SE-02-P1.5 | systems-engineer | P1 | `resolveEnabledPacks` builds unnecessary subset automatons | Incorporated | §5.4/§5.5: Subset cache removed. Single automaton + downstream filtering. |
+| SE-02-P2.1 | systems-engineer | P2 | AC substring matching FPs | Incorporated | Merged with MF-P1.4. Word-boundary post-filter added. |
+| SE-02-P2.2 | systems-engineer | P2 | `disabledPacks` typos silently ignored | Incorporated | §5.5: `validatePackConfig` emits `WarnUnknownPackID` for unknown IDs. |
+| SE-02-P2.3 | systems-engineer | P2 | `globMatch` empty pattern / `"*"` blocklist edge cases | Incorporated | §5.7: Documented `"*"` blocklist behavior. E3 updated with test case. |
+| SE-02-P2.4 | systems-engineer | P2 | Pack copy in Register is shallow | Incorporated | §5.3: Deep copy of Keywords, Safe, Destructive slices in Register(). |
+| SE-02-P2.5 | systems-engineer | P2 | `processEnv` parsed every call | Not Incorporated | Documented in §5.8 as acceptable for expected call frequency. Caching deferred to implementation profiling. |
+| SE-02-P2.6 | systems-engineer | P2 | P8 monotonicity test incomplete | Incorporated | Test harness P8: Full ordering check with explicit restrictiveness map. |
+| SE-02-P3.1 | systems-engineer | P3 | `PacksForKeyword` O(packs × keywords) | Incorporated | §5.3: Reverse index `keywordIndex map[string][]*Pack` built on freeze(). O(1) lookup. |
+| SE-02-P3.2 | systems-engineer | P3 | No test for ArgMatcher invalid glob | Incorporated | §8: `TestArgMatcherInvalidGlob` added. |
+| SE-02-P3.3 | systems-engineer | P3 | Golden file no versioning | Incorporated | §5.10: `format: v1` header line added. Parser validates on load. |
+| SE-02-P3.4 | systems-engineer | P3 | SEC2 documents limitation without resolution | Incorporated | Test harness SEC2: Concrete expectations added. Bypass vectors now blocked by MF-P0.1 fix. |
+| SE-02-P3.5 | systems-engineer | P3 | `isEmptyOrWhitespace` unicode whitespace | Incorporated | Merged with MF-P3.3. Uses `strings.TrimSpace`. |
