@@ -122,14 +122,12 @@ func TestPropertyAllPacksHaveKeywords(t *testing.T) {
 }
 ```
 
-### P6: Safe/Destructive Mutual Exclusion on Reachability Set
+### P6: (Merged into P2)
 
-**Invariant**: For each destructive pattern's reachability command, no safe
-pattern within the same pack matches. (Strengthened version of P2 — this
-ensures the reachability test set is authoritative.)
-
-This is identical to P2 but with the additional constraint that the
-reachability command set covers every destructive pattern.
+P6 was originally a strengthened version of P2 ensuring the reachability
+command set covers every destructive pattern. Since P1 already guarantees
+every destructive pattern has a reachability command, P1 + P2 = P6. The
+P2 test above is the authoritative safe/destructive mutual exclusion test.
 
 ### P7: No Destructive Pattern Matches Empty Command
 
@@ -152,10 +150,11 @@ func TestPropertyEmptyCommandMatchesNothing(t *testing.T) {
 
 ## E: Deterministic Examples
 
-### E1: core.git Pattern Matrix (40+ cases)
+### E1: core.git Pattern Matrix (60+ cases)
 
 Complete test matrix for all git patterns. Each row tests one specific
-command variant against both safe and destructive patterns.
+command variant against both safe and destructive patterns. Uses
+InteractivePolicy for decision column.
 
 ```
 # git push variants
@@ -167,6 +166,9 @@ git push --force-with-lease --force      → Deny/High (git-push-force)
 git push --mirror                        → Deny/High (git-push-mirror)
 git push --delete origin feature         → Ask/Medium (git-push-delete)
 git push -d origin feature               → Ask/Medium (git-push-delete)
+git push origin :feature-branch          → Ask/Medium (git-push-refspec-delete)
+git push origin +main:main               → Deny/High (git-push-force-refspec)
+git push origin main:main                → Allow (git-push-safe, normal refspec)
 
 # git reset variants
 git reset --hard HEAD~3                  → Deny/High (git-reset-hard)
@@ -177,8 +179,16 @@ git reset --mixed HEAD                   → Allow (git-reset-safe)
 
 # git checkout variants
 git checkout -- .                        → Deny/High (git-checkout-discard-all)
+git checkout .                           → Deny/High (git-checkout-dot)
 git checkout -- src/main.go              → Allow/Low (git-checkout-discard-file)
 git checkout main                        → Allow (no pattern match — checkout to branch)
+
+# git restore variants
+git restore .                            → Deny/High (git-restore-worktree-all)
+git restore --worktree .                 → Deny/High (git-restore-worktree-all)
+git restore --source HEAD~3 file.go      → Deny/High (git-restore-source)
+git restore --staged file.go             → Allow (git-restore-staged-safe)
+git restore file.go                      → Allow/Low (git-restore-file)
 
 # git clean variants
 git clean -f                             → Ask/Medium (git-clean-force)
@@ -196,13 +206,23 @@ git branch --delete --force old          → Ask/Medium (git-branch-force-delete
 # git rebase
 git rebase main                          → Deny/High (git-rebase, ConfidenceMedium)
 git rebase -i HEAD~5                     → Deny/High (git-rebase, ConfidenceMedium)
-git rebase --abort                       → Deny/High (git-rebase — see OQ1)
+git rebase --abort                       → Allow (git-rebase-recovery)
+git rebase --continue                    → Allow (git-rebase-recovery)
+git rebase --skip                        → Allow (git-rebase-recovery)
 
 # git stash
 git stash                                → Allow (no match)
 git stash pop                            → Allow (no match)
 git stash drop stash@{0}                 → Ask/Medium (git-stash-drop)
 git stash clear                          → Ask/Medium (git-stash-drop)
+
+# git reflog / gc / filter
+git reflog expire --expire=now --all     → Deny/High (git-reflog-expire)
+git reflog                               → Allow (no match)
+git gc --prune=now                       → Ask/Medium (git-gc-prune)
+git gc                                   → Allow (no match)
+git filter-branch --tree-filter 'rm f'   → Deny/High (git-filter-branch)
+git filter-repo --path secret --invert   → Deny/High (git-filter-branch)
 
 # Read-only commands
 git status                               → Allow (git-status safe)
@@ -212,12 +232,15 @@ git fetch origin                         → Allow (git-fetch safe)
 git show HEAD                            → Allow (no pattern match)
 ```
 
-### E2: core.filesystem Pattern Matrix (35+ cases)
+### E2: core.filesystem Pattern Matrix (40+ cases)
+
+Uses InteractivePolicy for decision column.
 
 ```
 # rm variants
 rm file.txt                              → Allow (rm-single-safe)
 rm -i file.txt                           → Allow (rm-single-safe)
+rm -f file.txt                           → Allow (rm-single-safe, -f allowed)
 rm -rf /                                 → Deny/Critical (rm-rf-root)
 rm -rf /*                                → Deny/Critical (rm-rf-root)
 rm -rf /tmp/build                        → Deny/High (rm-recursive-force)
@@ -227,7 +250,6 @@ rm --recursive --force ./build           → Deny/High (rm-recursive-force)
 rm -r ./build                            → Ask/Medium (rm-recursive)
 rm -R ./build                            → Ask/Medium (rm-recursive)
 rm --recursive ./build                   → Ask/Medium (rm-recursive)
-rm -f file.txt                           → Allow (no match — see OQ2)
 
 # mkfs variants
 mkfs.ext4 /dev/sda1                      → Deny/Critical (mkfs-any)
@@ -252,7 +274,8 @@ chmod +x script.sh                       → Allow (chmod-single-safe)
 chmod -R 755 ./app                       → Ask/Medium (chmod-recursive)
 chmod --recursive 644 ./app              → Ask/Medium (chmod-recursive)
 chmod 777 script.sh                      → Ask/Medium (chmod-777)
-chmod -R 777 ./app                       → Ask/Medium (chmod-recursive, higher priority)
+chmod -R 777 ./app                       → Ask/Medium (both chmod-recursive and chmod-777 match; chmod-recursive listed as primary match due to evaluation order)
+chmod 000 important.conf                 → Ask/Medium (chmod-000)
 
 # chown variants
 chown user:group file.txt                → Allow (chown-single-safe)
@@ -262,6 +285,10 @@ chown --recursive www:www /var/www       → Ask/Medium (chown-recursive)
 # mv variants
 mv file.txt backup/                      → Allow (mv-safe)
 mv important.db /dev/null                → Ask/Medium (mv-to-devnull)
+
+# truncate variants
+truncate -s 0 /var/log/app.log           → Ask/Medium (truncate-zero)
+truncate --size 0 data.db                → Ask/Medium (truncate-zero)
 ```
 
 ### E3: Cross-Pack Non-Interference (10+ cases)
@@ -470,10 +497,14 @@ func BenchmarkFilesystemPackMatch(b *testing.B) {
 }
 ```
 
-**Targets**:
+**Targets** (initial — adjust after baseline measurement):
 - Safe pattern match (short-circuit): < 100ns per command
 - Destructive pattern match: < 200ns per command
 - Full pack evaluation (all patterns): < 500ns per command
+
+The first implementation should establish actual baselines before freezing
+targets. These numbers are aspirational and may need adjustment based on
+real map lookup and string comparison costs.
 
 ### B2: Golden File Corpus Throughput
 
@@ -686,7 +717,7 @@ Manually test edge cases that are hard to automate:
 2. **All deterministic examples pass** — E1-E3
 3. **All fault injection tests pass** — F1-F3
 4. **All security tests pass** — SEC1-SEC2
-5. **Golden file corpus passes** — All 60+ entries
+5. **Golden file corpus passes** — All 84 entries
 6. **Pattern reachability 100%** — Every destructive pattern reachable
 7. **Pack completeness check passes** — All packs have required fields
 8. **No data races** — S1 passes with -race flag
@@ -702,7 +733,21 @@ Manually test edge cases that are hard to automate:
 
 - Pattern count by pack (safe + destructive)
 - Test count by category (unit, reachability, golden, property)
-- Golden file entry count (target: 60+ for core packs)
+- Golden file entry count (target: 84 for core packs)
 - Pattern condition coverage (every branch in every matcher exercised)
 - Benchmark latency per pack per command type
 - Upstream comparison divergence count and categorization
+
+---
+
+## Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-alt-reviewer | P2 | SEC1 uses raw strings not ExtractedCommands (CP-P2.5) | Not Incorporated | SEC1 as integration test is by design |
+| 2 | dcg-alt-reviewer | P2 | Golden file decisions depend on policy (CP-P2.6) | Incorporated | E1/E2 specify InteractivePolicy |
+| 3 | dcg-alt-reviewer | P3 | E2 "higher priority" misleading (CP-P3.2) | Incorporated | Comment reworded to explain evaluation order |
+| 4 | dcg-alt-reviewer | P3 | Oracle lacks divergence schema (CP-P3.4) | Not Incorporated | Deferred to implementation phase |
+| 5 | dcg-reviewer | P3 | Benchmark targets aggressive (P3-3) | Incorporated | B1 targets marked as initial |
+| 6 | dcg-reviewer | P3 | P6 redundant with P2 (P3-4) | Incorporated | P6 merged into P2 with note |
+| 7 | dcg-reviewer | P3 | mv keyword false triggers (P3-5) | Not Incorporated | Performance negligible |

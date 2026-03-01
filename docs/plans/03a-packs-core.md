@@ -25,12 +25,13 @@ These packs are the template. They demonstrate:
 
 **Scope**:
 
-1. **`core.git` pack** — 8 safe patterns, 11 destructive patterns covering
-   all dangerous git operations identified in shaping
-2. **`core.filesystem` pack** — 4 safe patterns, 10 destructive patterns
-   covering rm, dd, shred, chmod, chown, mkfs, and mv-to-null
+1. **`core.git` pack** — 11 safe patterns, 20 destructive patterns covering
+   all dangerous git operations identified in shaping plus git restore,
+   reflog expire, gc prune, filter-branch, refspec tricks
+2. **`core.filesystem` pack** — 4 safe patterns, 12 destructive patterns
+   covering rm, dd, shred, chmod, chown, mkfs, mv-to-null, and truncate
 3. **Pack authoring guide** — The canonical reference for writing packs
-4. **Golden file entries** — 80+ entries covering both packs
+4. **Golden file entries** — 60+ entries covering both packs
 5. **Per-pattern unit tests** — Match and near-miss test cases for every pattern
 
 **Key design constraint**: Neither pack is `EnvSensitive`. Environment
@@ -155,8 +156,11 @@ var myPack = packs.Pack{
 ### 4.3 Pack ID Convention
 
 Format: `category.tool` where:
-- `category`: one of `core`, `database`, `containers`, `infrastructure`, `cloud`, `kubernetes`, `frameworks`, `remote`, `secrets`, `platform`
+- `category`: one of `core`, `database`, `containers`, `infrastructure`, `cloud`, `kubernetes`, `frameworks`, `remote`, `secrets`, `platform`, `other`
 - `tool`: lowercase tool name (e.g., `git`, `filesystem`, `postgresql`)
+
+This list is extensible — new categories can be added as needed. The `other`
+category is used for tools that don't fit existing categories (plan 03e).
 
 ### 4.4 Keyword Selection Rules
 
@@ -185,6 +189,14 @@ for that command. This means:
    a command has both safe and destructive forms (e.g., `git push` vs
    `git push --force`). Don't add safe patterns for commands where all
    invocations are destructive (e.g., `shred` — always destructive).
+
+**Shadowing caveat**: Because safe patterns short-circuit all destructive
+evaluation within the pack, a broad safe pattern can "shadow" a destructive
+pattern, making it unreachable. If you add a new destructive pattern, verify
+it's not shadowed by an existing safe pattern. The **reachability test**
+(§7.1) is the safety net — it fails if any destructive pattern has no
+reachability command that bypasses all safe patterns. Always run reachability
+tests after adding or modifying patterns.
 
 ### 4.6 Destructive Pattern Rules
 
@@ -303,6 +315,54 @@ import (
 The `internal/eval/pipeline.go` imports all pack packages to ensure registration.
 Plan 04 (API & CLI) defines the exact import set.
 
+### 4.10 Advanced Matching
+
+This section covers `ExtractedCommand` fields beyond `Name`, `Args`, and
+`Flags` that pack authors may need for 03b-03e.
+
+**`RawArgs` vs `Args`**: `Args` contains arguments after normalization
+(plan 01). `RawArgs` contains the pre-normalization form. Use `Args` for
+structural matching (command structure, flag presence). Use `RawArgs` when
+you need to match the exact original text (e.g., variable references like
+`$TABLE` that may not be resolved).
+
+**`DataflowResolved`**: Boolean indicating whether variable references in
+the command were resolved by the dataflow analyzer. If `false`, args may
+contain unresolved `$VAR` references. Pack authors should consider:
+- If your pattern matches argument **structure** (flag names, positions),
+  `DataflowResolved` doesn't matter.
+- If your pattern matches argument **content** (e.g., SQL keywords in an
+  argument value), check `DataflowResolved` — if `false`, the value may be
+  a variable reference, not the actual content.
+
+**`InlineEnv`**: Map of environment variables set inline
+(`FOO=bar command args`). Useful for infrastructure packs (03c) where
+`AWS_PROFILE=production terraform destroy` should escalate severity.
+
+**dd-style key=value arguments**: The tree-sitter extractor (plan 01) places
+`dd`-style `key=value` arguments (e.g., `of=/dev/sda`, `bs=4M`) into the
+`Args` slice, not `Flags`. This is because `dd` uses non-standard argument
+syntax without dashes. The `ArgPrefix("of=")` matcher checks `Args` entries.
+This behavior is a cross-plan contract with plan 01's `CommandExtractor`.
+
+**`--` (option terminator)**: The tree-sitter extractor places `--` into the
+`Flags` map as a key with empty value. Matchers that need to detect `--`
+should use `packs.Flags("--")`, not `packs.Arg("--")`. This is a cross-plan
+contract with plan 01.
+
+**`ArgPrefix` matcher**: `ArgPrefix(prefix string)` checks if any element in
+`Args` starts with the given prefix. This is defined in plan 02's matcher DSL
+(cross-plan update needed if not yet present). Used for `dd`'s `of=` syntax
+and similar key=value argument patterns.
+
+**Decision flowchart for content matching**:
+1. Does your pattern match argument structure only (flags, positions)? → Use
+   `Flags()`, `ArgAt()`, `Arg()` — no dataflow concern.
+2. Does your pattern match argument content (SQL keywords, file paths)? →
+   Consider using `ArgContent(regex)` and check `DataflowResolved`.
+3. Does your pattern need inline environment context? → Check `InlineEnv`
+   and set `EnvSensitive: true`.
+
 ---
 
 ## 5. Detailed Design
@@ -311,8 +371,8 @@ Plan 04 (API & CLI) defines the exact import set.
 
 **Pack ID**: `core.git`
 **Keywords**: `["git"]`
-**Safe Patterns**: 8
-**Destructive Patterns**: 11
+**Safe Patterns**: 11
+**Destructive Patterns**: 20
 **EnvSensitive**: None (git operations are equally destructive regardless of environment)
 
 ```go
@@ -334,7 +394,7 @@ var gitPack = packs.Pack{
     Keywords:    []string{"git"},
 
     Safe: []packs.SafePattern{
-        // S1: Normal push (no force, no mirror, no delete)
+        // S1: Normal push (no force, no mirror, no delete, no refspec tricks)
         {
             Name: "git-push-safe",
             Match: packs.And(
@@ -343,10 +403,15 @@ var gitPack = packs.Pack{
                 packs.Not(packs.Or(
                     packs.Flags("--force"),
                     packs.Flags("-f"),
+                    packs.Flags("--force-with-lease"),
                     packs.Flags("--mirror"),
                     packs.Flags("--delete"),
                     packs.Flags("-d"),
                 )),
+                // Exclude colon refspecs (:branch = remote branch deletion)
+                packs.Not(packs.ArgContent("^:")),
+                // Exclude + refspecs (+ref:ref = force push individual ref)
+                packs.Not(packs.ArgContent("^\\+")),
             ),
         },
         // S2: Force-with-lease push (safer alternative to --force)
@@ -384,7 +449,21 @@ var gitPack = packs.Pack{
                 packs.Not(packs.Flags("--hard")),
             ),
         },
-        // S5: Read-only git commands (status, log, diff, show, ls-files, etc.)
+        // S5: git rebase recovery commands (--abort, --continue, --skip)
+        // These are not destructive — they're recovery/continuation operations
+        {
+            Name: "git-rebase-recovery",
+            Match: packs.And(
+                packs.Name("git"),
+                packs.ArgAt(0, "rebase"),
+                packs.Or(
+                    packs.Flags("--abort"),
+                    packs.Flags("--continue"),
+                    packs.Flags("--skip"),
+                ),
+            ),
+        },
+        // S6-S8: Read-only git commands (status, log, diff, show, ls-files, etc.)
         // These are implicitly safe because they don't have destructive
         // patterns. Listed here to ensure they short-circuit the pack
         // evaluation for common commands.
@@ -409,7 +488,17 @@ var gitPack = packs.Pack{
                 packs.ArgAt(0, "diff"),
             ),
         },
-        // S6: git fetch (always safe — only downloads, doesn't modify local state)
+        // S10: git restore --staged (unstaging is safe — doesn't discard changes)
+        {
+            Name: "git-restore-staged-safe",
+            Match: packs.And(
+                packs.Name("git"),
+                packs.ArgAt(0, "restore"),
+                packs.Flags("--staged"),
+                packs.Not(packs.Flags("--worktree")), // --staged --worktree discards changes
+            ),
+        },
+        // S11: git fetch (always safe — only downloads, doesn't modify local state)
         {
             Name: "git-fetch",
             Match: packs.And(
@@ -620,6 +709,146 @@ var gitPack = packs.Pack{
             Remediation:  "Use git stash to save changes first, or verify you want to discard these specific files",
             EnvSensitive: false,
         },
+        // D12: git checkout . (without --) — discards all working directory changes
+        // Same semantics as `git checkout -- .` in modern git
+        {
+            Name: "git-checkout-dot",
+            Match: packs.And(
+                packs.Name("git"),
+                packs.ArgAt(0, "checkout"),
+                packs.Arg("."),
+                packs.Not(packs.Flags("--")), // Without explicit --, separate from D4
+            ),
+            Severity:     guard.High,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "git checkout . discards all working directory changes permanently",
+            Remediation:  "Use git stash to save changes, or use git checkout <specific-file>",
+            EnvSensitive: false,
+        },
+        // D13: git push :branch (colon refspec — deletes remote branch)
+        // Equivalent to git push --delete but uses refspec syntax
+        {
+            Name: "git-push-refspec-delete",
+            Match: packs.And(
+                packs.Name("git"),
+                packs.ArgAt(0, "push"),
+                packs.ArgContent("^:"), // Arg starting with : = empty left side = deletion
+            ),
+            Severity:     guard.Medium,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "git push :branch deletes a remote branch using refspec deletion syntax",
+            Remediation:  "Use git push --delete <branch> for clarity, and verify the branch name",
+            EnvSensitive: false,
+        },
+        // D14: git push +refspec (force push individual ref)
+        // Equivalent to --force but only for the specific ref
+        {
+            Name: "git-push-force-refspec",
+            Match: packs.And(
+                packs.Name("git"),
+                packs.ArgAt(0, "push"),
+                packs.ArgContent("^\\+"), // Arg starting with + = force push
+            ),
+            Severity:     guard.High,
+            Confidence:   guard.ConfidenceMedium,
+            Reason:       "git push +refspec force-pushes an individual ref, overwriting remote history for that ref",
+            Remediation:  "Use git push --force-with-lease for safer force pushing",
+            EnvSensitive: false,
+        },
+        // D15: git restore --worktree . (discard all working tree changes)
+        // Modern replacement for git checkout -- .
+        {
+            Name: "git-restore-worktree-all",
+            Match: packs.And(
+                packs.Name("git"),
+                packs.ArgAt(0, "restore"),
+                packs.Arg("."),
+            ),
+            Severity:     guard.High,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "git restore . discards all working tree changes permanently",
+            Remediation:  "Use git stash to save changes first, or restore specific files",
+            EnvSensitive: false,
+        },
+        // D16: git restore --source (restore from specific commit)
+        // Can overwrite working tree from arbitrary commit
+        {
+            Name: "git-restore-source",
+            Match: packs.And(
+                packs.Name("git"),
+                packs.ArgAt(0, "restore"),
+                packs.Flags("--source"),
+            ),
+            Severity:     guard.High,
+            Confidence:   guard.ConfidenceMedium,
+            Reason:       "git restore --source overwrites working tree files from a specific commit",
+            Remediation:  "Use git stash first, or verify the source commit is correct",
+            EnvSensitive: false,
+        },
+        // D17: git reflog expire (removes recovery safety net)
+        {
+            Name: "git-reflog-expire",
+            Match: packs.And(
+                packs.Name("git"),
+                packs.ArgAt(0, "reflog"),
+                packs.ArgAt(1, "expire"),
+            ),
+            Severity:     guard.High,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "git reflog expire removes reflog entries, eliminating the safety net for recovering from git reset --hard and git rebase",
+            Remediation:  "Avoid expiring reflogs unless you are certain previous states are no longer needed",
+            EnvSensitive: false,
+        },
+        // D18: git gc --prune (permanently removes unreachable objects)
+        {
+            Name: "git-gc-prune",
+            Match: packs.And(
+                packs.Name("git"),
+                packs.ArgAt(0, "gc"),
+                packs.Flags("--prune"),
+            ),
+            Severity:     guard.Medium,
+            Confidence:   guard.ConfidenceMedium,
+            Reason:       "git gc --prune permanently removes unreachable objects, making recovery from reflog impossible",
+            Remediation:  "Use git gc without --prune (default 2-week prune age is safe)",
+            EnvSensitive: false,
+        },
+        // D19: git filter-branch (rewrites entire repository history)
+        {
+            Name: "git-filter-branch",
+            Match: packs.And(
+                packs.Name("git"),
+                packs.Or(
+                    packs.ArgAt(0, "filter-branch"),
+                    packs.ArgAt(0, "filter-repo"),
+                ),
+            ),
+            Severity:     guard.High,
+            Confidence:   guard.ConfidenceMedium,
+            Reason:       "git filter-branch/filter-repo rewrites entire repository history, modifying all commits",
+            Remediation:  "Create a backup branch before running. Consider if BFG Repo-Cleaner is a safer alternative.",
+            EnvSensitive: false,
+        },
+
+        // ---- Low ----
+
+        // D20: git restore <file> (discard single file changes)
+        // Modern replacement for git checkout -- <file>
+        {
+            Name: "git-restore-file",
+            Match: packs.And(
+                packs.Name("git"),
+                packs.ArgAt(0, "restore"),
+                packs.Not(packs.Arg(".")),
+                packs.Not(packs.Flags("--staged")),
+                packs.Not(packs.Flags("--source")),
+            ),
+            Severity:     guard.Low,
+            Confidence:   guard.ConfidenceMedium,
+            Reason:       "git restore <file> discards uncommitted changes to specified files",
+            Remediation:  "Use git stash to save changes first",
+            EnvSensitive: false,
+        },
     },
 }
 ```
@@ -631,10 +860,12 @@ from matching, ensuring no dead patterns:
 
 | Safe Pattern | Prevents Destructive | Key Distinguishing Condition |
 |-------------|---------------------|----------------------------|
-| git-push-safe | git-push-force, git-push-mirror, git-push-delete | `Not(--force \| -f \| --mirror \| --delete \| -d)` |
+| git-push-safe | git-push-force, git-push-mirror, git-push-delete, git-push-refspec-delete, git-push-force-refspec | `Not(--force \| -f \| --force-with-lease \| --mirror \| --delete \| -d \| arg ^: \| arg ^+)` |
 | git-push-force-with-lease | git-push-force | `--force-with-lease AND Not(--force \| -f)` |
 | git-branch-safe | git-branch-force-delete | `Not(-D \| --force \| -f)` |
 | git-reset-safe | git-reset-hard | `Not(--hard)` |
+| git-rebase-recovery | git-rebase | `--abort \| --continue \| --skip` |
+| git-restore-staged-safe | git-restore-worktree-all, git-restore-source, git-restore-file | `--staged AND Not(--worktree)` |
 | git-status | (none — no destructive `git status`) | Subcommand = `status` |
 | git-log | (none) | Subcommand = `log` |
 | git-diff | (none) | Subcommand = `diff` |
@@ -648,25 +879,27 @@ This is verified by the pattern reachability test (§7.1).
 
 Complete decision table for `git push` variants:
 
-| Command | --force | -f | --force-with-lease | --mirror | --delete/-d | Decision | Rule |
-|---------|---------|----|--------------------|----------|-------------|----------|------|
-| `git push` | | | | | | Allow | git-push-safe |
-| `git push --force` | ✓ | | | | | Deny (High) | git-push-force |
-| `git push -f` | | ✓ | | | | Deny (High) | git-push-force |
-| `git push --force-with-lease` | | | ✓ | | | Allow | git-push-force-with-lease |
-| `git push --force-with-lease --force` | ✓ | | ✓ | | | Deny (High) | git-push-force |
-| `git push --mirror` | | | | ✓ | | Deny (High) | git-push-mirror |
-| `git push --delete` | | | | | ✓ | Ask (Medium) | git-push-delete |
-| `git push --force --mirror` | ✓ | | | ✓ | | Deny (High) | git-push-force + git-push-mirror |
+| Command | --force | -f | --force-with-lease | --mirror | --delete/-d | refspec | Decision | Rule |
+|---------|---------|----|--------------------|----------|-------------|---------|----------|------|
+| `git push` | | | | | | | Allow | git-push-safe |
+| `git push --force` | ✓ | | | | | | Deny (High) | git-push-force |
+| `git push -f` | | ✓ | | | | | Deny (High) | git-push-force |
+| `git push --force-with-lease` | | | ✓ | | | | Allow | git-push-force-with-lease |
+| `git push --force-with-lease --force` | ✓ | | ✓ | | | | Deny (High) | git-push-force |
+| `git push --mirror` | | | | ✓ | | | Deny (High) | git-push-mirror |
+| `git push --delete` | | | | | ✓ | | Ask (Medium) | git-push-delete |
+| `git push origin :branch` | | | | | | `:branch` | Ask (Medium) | git-push-refspec-delete |
+| `git push origin +main:main` | | | | | | `+main:main` | Deny (High) | git-push-force-refspec |
+| `git push --force --mirror` | ✓ | | | ✓ | | | Deny (High) | git-push-force + git-push-mirror |
 
 ---
 
 ### 5.2 `core.filesystem` Pack (`internal/packs/core/filesystem.go`)
 
 **Pack ID**: `core.filesystem`
-**Keywords**: `["rm", "dd", "shred", "chmod", "chown", "mkfs", "mv"]`
+**Keywords**: `["rm", "dd", "shred", "chmod", "chown", "mkfs", "mv", "truncate"]`
 **Safe Patterns**: 4
-**Destructive Patterns**: 10
+**Destructive Patterns**: 12
 **EnvSensitive**: None
 
 ```go
@@ -684,11 +917,14 @@ func init() {
 var fsPack = packs.Pack{
     ID:          "core.filesystem",
     Name:        "Filesystem",
-    Description: "Filesystem destructive operations: rm, dd, shred, chmod, chown, mkfs, mv",
-    Keywords:    []string{"rm", "dd", "shred", "chmod", "chown", "mkfs", "mv"},
+    Description: "Filesystem destructive operations: rm, dd, shred, chmod, chown, mkfs, mv, truncate",
+    Keywords:    []string{"rm", "dd", "shred", "chmod", "chown", "mkfs", "mv", "truncate"},
 
     Safe: []packs.SafePattern{
-        // S1: rm without -r or -f (single file removal, with confirmation)
+        // S1: rm without -r (single file removal)
+        // Note: -f is allowed here — single-file rm with -f is low-risk
+        // (it only suppresses confirmation for read-only files). The risk
+        // difference between `rm file` and `rm -f file` is minimal.
         {
             Name: "rm-single-safe",
             Match: packs.And(
@@ -697,8 +933,6 @@ var fsPack = packs.Pack{
                     packs.Flags("-r"),
                     packs.Flags("-R"),
                     packs.Flags("--recursive"),
-                    packs.Flags("-f"),
-                    packs.Flags("--force"),
                     packs.Flags("-rf"),
                     packs.Flags("-fr"),
                 )),
@@ -921,6 +1155,39 @@ var fsPack = packs.Pack{
             Remediation:  "Use rm to explicitly delete files instead of mv to /dev/null",
             EnvSensitive: false,
         },
+        // D11: chmod 000 (removes all permissions — file becomes inaccessible)
+        {
+            Name: "chmod-000",
+            Match: packs.And(
+                packs.Name("chmod"),
+                packs.Arg("000"),
+            ),
+            Severity:     guard.Medium,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "chmod 000 removes all permissions from a file, making it completely inaccessible",
+            Remediation:  "Use more appropriate permissions (e.g., 644 for files, 600 for private files)",
+            EnvSensitive: false,
+        },
+        // D12: truncate -s 0 (empties file contents)
+        {
+            Name: "truncate-zero",
+            Match: packs.And(
+                packs.Name("truncate"),
+                packs.Or(
+                    packs.Flags("-s"),
+                    packs.Flags("--size"),
+                ),
+                packs.Or(
+                    packs.Arg("0"),
+                    packs.ArgContent("^0$"),
+                ),
+            ),
+            Severity:     guard.Medium,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "truncate -s 0 empties a file's contents completely, causing irreversible data loss",
+            Remediation:  "Back up the file first, or verify this is the intended operation",
+            EnvSensitive: false,
+        },
     },
 }
 ```
@@ -967,12 +1234,20 @@ because `/dev/null` is a character device, not a directory. However, some
 systems or configurations allow it, and it's a common "discard file" idiom
 that indicates risky intent. We flag it as Medium.
 
+**rm-rf-root path traversal note**: The `rm-rf-root` pattern matches literal
+`/`, `/*`, and `/..` as targets. Path traversal sequences that resolve to
+root at runtime (e.g., `rm -rf /tmp/../..`) are not detected at Critical
+severity. They ARE caught by `rm-recursive-force` at High severity, so there
+are no false negatives. The severity underclassification is accepted because
+path canonicalization at static analysis time is unreliable, and High severity
+still results in Deny under both Strict and Interactive policies.
+
 #### 5.2.2 Filesystem Pattern Interaction Matrix
 
 | Safe Pattern | Prevents Destructive | Key Distinguishing Condition |
 |-------------|---------------------|----------------------------|
-| rm-single-safe | rm-rf-root, rm-recursive-force, rm-recursive | `Not(-r \| -R \| --recursive \| -f \| --force \| -rf \| -fr)` |
-| chmod-single-safe | chmod-recursive, chmod-777 | `Not(-R \| --recursive) AND Not(777 \| 000)` |
+| rm-single-safe | rm-rf-root, rm-recursive-force, rm-recursive | `Not(-r \| -R \| --recursive \| -rf \| -fr)` |
+| chmod-single-safe | chmod-recursive, chmod-777, chmod-000 | `Not(-R \| --recursive) AND Not(777 \| 000)` |
 | chown-single-safe | chown-recursive | `Not(-R \| --recursive)` |
 | mv-safe | mv-to-devnull | `Not(arg "/dev/null")` |
 
@@ -980,10 +1255,16 @@ that indicates risky intent. We flag it as Medium.
 
 ## 6. Golden File Entries
 
+**Policy**: All golden file entries in this section use `InteractivePolicy`
+unless otherwise specified. The `decision` column reflects InteractivePolicy
+behavior. Under StrictPolicy, all Ask decisions become Deny. Under
+PermissivePolicy, Low severity Allow decisions remain Allow.
+
 ### 6.1 `core.git` Golden Entries (`internal/eval/testdata/golden/core_git.txt`)
 
 ```
 format: v1
+policy: interactive
 ---
 # D1: git push --force — denied
 command: git push --force origin main
@@ -1081,6 +1362,18 @@ confidence: Medium
 pack: core.git
 rule: git-rebase
 ---
+# S5: git rebase --abort — allowed (recovery command)
+command: git rebase --abort
+decision: Allow
+---
+# S5: git rebase --continue — allowed (continuation command)
+command: git rebase --continue
+decision: Allow
+---
+# S5: git rebase --skip — allowed (recovery command)
+command: git rebase --skip
+decision: Allow
+---
 # D6: git clean -f — ask (medium)
 command: git clean -f
 decision: Ask
@@ -1169,6 +1462,106 @@ decision: Allow
 command: git fetch origin
 decision: Allow
 ---
+# D12: git checkout . (without --) — denied
+command: git checkout .
+decision: Deny
+severity: High
+confidence: High
+pack: core.git
+rule: git-checkout-dot
+---
+# D13: git push origin :branch — refspec deletion
+command: git push origin :feature-branch
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.git
+rule: git-push-refspec-delete
+---
+# D14: git push +main:main — force push via refspec
+command: git push origin +main:main
+decision: Deny
+severity: High
+confidence: Medium
+pack: core.git
+rule: git-push-force-refspec
+---
+# Edge: git push local:remote — normal refspec, allowed
+command: git push origin main:main
+decision: Allow
+---
+# D15: git restore . — discard all working tree changes
+command: git restore .
+decision: Deny
+severity: High
+confidence: High
+pack: core.git
+rule: git-restore-worktree-all
+---
+# D15: git restore --worktree . — explicit form
+command: git restore --worktree .
+decision: Deny
+severity: High
+confidence: High
+pack: core.git
+rule: git-restore-worktree-all
+---
+# D16: git restore --source HEAD~3 — restore from commit
+command: git restore --source HEAD~3 file.go
+decision: Deny
+severity: High
+confidence: Medium
+pack: core.git
+rule: git-restore-source
+---
+# S10: git restore --staged — unstaging is safe
+command: git restore --staged file.go
+decision: Allow
+---
+# D20: git restore file.go — discard single file changes
+command: git restore file.go
+decision: Allow
+severity: Low
+confidence: Medium
+pack: core.git
+rule: git-restore-file
+---
+# D17: git reflog expire — removes recovery safety net
+command: git reflog expire --expire=now --all
+decision: Deny
+severity: High
+confidence: High
+pack: core.git
+rule: git-reflog-expire
+---
+# D18: git gc --prune — permanently removes unreachable objects
+command: git gc --prune=now
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: core.git
+rule: git-gc-prune
+---
+# Edge: git gc (without --prune) — safe
+command: git gc
+decision: Allow
+---
+# D19: git filter-branch — rewrites history
+command: git filter-branch --tree-filter 'rm secrets.txt' HEAD
+decision: Deny
+severity: High
+confidence: Medium
+pack: core.git
+rule: git-filter-branch
+---
+# D19: git filter-repo — rewrites history
+command: git filter-repo --path secret.txt --invert-paths
+decision: Deny
+severity: High
+confidence: Medium
+pack: core.git
+rule: git-filter-branch
+---
 # Edge: path-prefixed git — same detection
 command: /usr/bin/git push --force origin main
 decision: Deny
@@ -1206,6 +1599,7 @@ rule: git-reset-hard
 
 ```
 format: v1
+policy: interactive
 ---
 # D1: rm -rf / — critical
 command: rm -rf /
@@ -1261,6 +1655,10 @@ decision: Allow
 ---
 # S1: rm -i file.txt (interactive) — allowed
 command: rm -i file.txt
+decision: Allow
+---
+# S1: rm -f file.txt (force single file) — allowed (safe, no -r)
+command: rm -f file.txt
 decision: Allow
 ---
 # D2: mkfs.ext4 /dev/sda1 — critical
@@ -1371,6 +1769,30 @@ rule: mv-to-devnull
 command: mv file.txt backup/
 decision: Allow
 ---
+# D11: chmod 000 file — medium (removes all permissions)
+command: chmod 000 important.conf
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.filesystem
+rule: chmod-000
+---
+# D12: truncate -s 0 file — medium (empties file)
+command: truncate -s 0 /var/log/app.log
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.filesystem
+rule: truncate-zero
+---
+# D12: truncate --size 0 — medium (long form)
+command: truncate --size 0 data.db
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.filesystem
+rule: truncate-zero
+---
 # Compound: safe ; destructive — both evaluated
 command: ls -la && rm -rf /tmp/build
 decision: Deny
@@ -1384,7 +1806,7 @@ command: rm
 decision: Allow
 ```
 
-**Total golden file entries**: 33 (core.git) + 27 (core.filesystem) = **60 entries**
+**Total golden file entries**: 51 (core.git) + 33 (core.filesystem) = **84 entries**
 
 ---
 
@@ -1536,8 +1958,29 @@ func TestGitRebase(t *testing.T) {
     }{
         {"git rebase main", cmd("git", []string{"rebase", "main"}, nil), true},
         {"git rebase -i HEAD~5", cmd("git", []string{"rebase", "HEAD~5"}, m("-i", "")), true},
-        {"git rebase --abort", cmd("git", []string{"rebase"}, m("--abort", "")), true},
+        // Note: --abort, --continue, --skip are caught by the safe pattern
+        // git-rebase-recovery and will never reach this destructive pattern
         {"git merge main", cmd("git", []string{"merge", "main"}, nil), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+func TestGitRebaseRecoverySafe(t *testing.T) {
+    pattern := gitPack.Safe[indexOfSafe("git-rebase-recovery")].Match
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"git rebase --abort", cmd("git", []string{"rebase"}, m("--abort", "")), true},
+        {"git rebase --continue", cmd("git", []string{"rebase"}, m("--continue", "")), true},
+        {"git rebase --skip", cmd("git", []string{"rebase"}, m("--skip", "")), true},
+        {"git rebase main (no recovery flag)", cmd("git", []string{"rebase", "main"}, nil), false},
+        {"git rebase -i HEAD~5", cmd("git", []string{"rebase", "HEAD~5"}, m("-i", "")), false},
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
@@ -1623,7 +2066,175 @@ func TestGitStashDrop(t *testing.T) {
     }
 }
 
+func TestGitCheckoutDot(t *testing.T) {
+    pattern := gitPack.Destructive[indexOfDestructive("git-checkout-dot")].Match
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"git checkout .", cmd("git", []string{"checkout", "."}, nil), true},
+        {"git checkout -- . (has --)", cmd("git", []string{"checkout", "."}, m("--", "")), false},
+        {"git checkout main", cmd("git", []string{"checkout", "main"}, nil), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+func TestGitPushRefspecDelete(t *testing.T) {
+    pattern := gitPack.Destructive[indexOfDestructive("git-push-refspec-delete")].Match
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"git push origin :branch", cmd("git", []string{"push", "origin", ":feature"}, nil), true},
+        {"git push origin :main", cmd("git", []string{"push", "origin", ":main"}, nil), true},
+        // Normal refspec (local:remote) should NOT match — colon is not first char
+        {"git push origin main:main", cmd("git", []string{"push", "origin", "main:main"}, nil), false},
+        {"git push origin main", cmd("git", []string{"push", "origin", "main"}, nil), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+func TestGitPushForceRefspec(t *testing.T) {
+    pattern := gitPack.Destructive[indexOfDestructive("git-push-force-refspec")].Match
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"git push +main:main", cmd("git", []string{"push", "origin", "+main:main"}, nil), true},
+        {"git push +HEAD:main", cmd("git", []string{"push", "origin", "+HEAD:main"}, nil), true},
+        {"git push main:main", cmd("git", []string{"push", "origin", "main:main"}, nil), false},
+        {"git push origin main", cmd("git", []string{"push", "origin", "main"}, nil), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+func TestGitRestoreWorktreeAll(t *testing.T) {
+    pattern := gitPack.Destructive[indexOfDestructive("git-restore-worktree-all")].Match
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"git restore .", cmd("git", []string{"restore", "."}, nil), true},
+        {"git restore --worktree .", cmd("git", []string{"restore", "."}, m("--worktree", "")), true},
+        {"git restore file.go", cmd("git", []string{"restore", "file.go"}, nil), false},
+        {"git restore --staged .", cmd("git", []string{"restore", "."}, m("--staged", "")), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+func TestGitRestoreSource(t *testing.T) {
+    pattern := gitPack.Destructive[indexOfDestructive("git-restore-source")].Match
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"git restore --source HEAD~3 file", cmd("git", []string{"restore", "file"}, m("--source", "HEAD~3")), true},
+        {"git restore file (no source)", cmd("git", []string{"restore", "file"}, nil), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+func TestGitReflogExpire(t *testing.T) {
+    pattern := gitPack.Destructive[indexOfDestructive("git-reflog-expire")].Match
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"git reflog expire", cmd("git", []string{"reflog", "expire"}, m("--expire", "now")), true},
+        {"git reflog (show)", cmd("git", []string{"reflog"}, nil), false},
+        {"git reflog show", cmd("git", []string{"reflog", "show"}, nil), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+func TestGitGcPrune(t *testing.T) {
+    pattern := gitPack.Destructive[indexOfDestructive("git-gc-prune")].Match
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"git gc --prune=now", cmd("git", []string{"gc"}, m("--prune", "now")), true},
+        {"git gc (no prune)", cmd("git", []string{"gc"}, nil), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+func TestGitFilterBranch(t *testing.T) {
+    pattern := gitPack.Destructive[indexOfDestructive("git-filter-branch")].Match
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"git filter-branch", cmd("git", []string{"filter-branch", "--tree-filter", "rm secrets.txt"}, nil), true},
+        {"git filter-repo", cmd("git", []string{"filter-repo", "--path", "secrets.txt"}, nil), true},
+        {"git log (not filter)", cmd("git", []string{"log"}, nil), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+func TestGitRestoreFile(t *testing.T) {
+    pattern := gitPack.Destructive[indexOfDestructive("git-restore-file")].Match
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"git restore file.go", cmd("git", []string{"restore", "file.go"}, nil), true},
+        {"git restore . (all)", cmd("git", []string{"restore", "."}, nil), false},
+        {"git restore --staged file", cmd("git", []string{"restore", "file.go"}, m("--staged", "")), false},
+        {"git restore --source file", cmd("git", []string{"restore", "file.go"}, m("--source", "HEAD~3")), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
 // --- Safe pattern tests ---
+
+// Note: Path normalization (e.g., /usr/bin/git → git) is handled by plan 01's
+// CommandExtractor. Unit tests operate on normalized ExtractedCommands.
 
 func TestGitPushSafe(t *testing.T) {
     pattern := gitPack.Safe[indexOfSafe("git-push-safe")].Match
@@ -1634,12 +2245,17 @@ func TestGitPushSafe(t *testing.T) {
     }{
         {"git push origin main", cmd("git", []string{"push", "origin", "main"}, nil), true},
         {"git push", cmd("git", []string{"push"}, nil), true},
+        {"git push main:main (normal refspec)", cmd("git", []string{"push", "origin", "main:main"}, nil), true},
         // Must NOT match these (destructive variants)
         {"git push --force", cmd("git", []string{"push"}, m("--force", "")), false},
         {"git push -f", cmd("git", []string{"push"}, m("-f", "")), false},
+        {"git push --force-with-lease", cmd("git", []string{"push"}, m("--force-with-lease", "")), false},
         {"git push --mirror", cmd("git", []string{"push"}, m("--mirror", "")), false},
         {"git push --delete", cmd("git", []string{"push"}, m("--delete", "")), false},
         {"git push -d", cmd("git", []string{"push"}, m("-d", "")), false},
+        // Refspec tricks must not match safe
+        {"git push :branch", cmd("git", []string{"push", "origin", ":feature"}, nil), false},
+        {"git push +main:main", cmd("git", []string{"push", "origin", "+main:main"}, nil), false},
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
@@ -1673,17 +2289,26 @@ func TestGitPatternReachability(t *testing.T) {
     // that: (1) does NOT match any safe pattern, and (2) DOES match the
     // destructive pattern. This ensures no dead patterns.
     destructiveCmds := map[string]parse.ExtractedCommand{
-        "git-push-force":         cmd("git", []string{"push"}, m("--force", "")),
-        "git-push-mirror":        cmd("git", []string{"push"}, m("--mirror", "")),
-        "git-reset-hard":         cmd("git", []string{"reset"}, m("--hard", "")),
-        "git-checkout-discard-all": cmd("git", []string{"checkout", "."}, m("--", "")),
-        "git-rebase":             cmd("git", []string{"rebase", "main"}, nil),
-        "git-clean-force":        cmd("git", []string{"clean"}, m("-f", "")),
-        "git-clean-force-dirs":   cmd("git", []string{"clean"}, m("-f", "", "-d", "")),
-        "git-branch-force-delete": cmd("git", []string{"branch", "feat"}, m("-D", "")),
-        "git-push-delete":        cmd("git", []string{"push", "origin", "feat"}, m("--delete", "")),
-        "git-stash-drop":         cmd("git", []string{"stash", "drop"}, nil),
+        "git-push-force":            cmd("git", []string{"push"}, m("--force", "")),
+        "git-push-mirror":           cmd("git", []string{"push"}, m("--mirror", "")),
+        "git-reset-hard":            cmd("git", []string{"reset"}, m("--hard", "")),
+        "git-checkout-discard-all":  cmd("git", []string{"checkout", "."}, m("--", "")),
+        "git-rebase":                cmd("git", []string{"rebase", "main"}, nil),
+        "git-clean-force":           cmd("git", []string{"clean"}, m("-f", "")),
+        "git-clean-force-dirs":      cmd("git", []string{"clean"}, m("-f", "", "-d", "")),
+        "git-branch-force-delete":   cmd("git", []string{"branch", "feat"}, m("-D", "")),
+        "git-push-delete":           cmd("git", []string{"push", "origin", "feat"}, m("--delete", "")),
+        "git-stash-drop":            cmd("git", []string{"stash", "drop"}, nil),
         "git-checkout-discard-file": cmd("git", []string{"checkout", "file.go"}, m("--", "")),
+        "git-checkout-dot":          cmd("git", []string{"checkout", "."}, nil),
+        "git-push-refspec-delete":   cmd("git", []string{"push", "origin", ":feature"}, nil),
+        "git-push-force-refspec":    cmd("git", []string{"push", "origin", "+main:main"}, nil),
+        "git-restore-worktree-all":  cmd("git", []string{"restore", "."}, nil),
+        "git-restore-source":        cmd("git", []string{"restore", "file"}, m("--source", "HEAD~3")),
+        "git-reflog-expire":         cmd("git", []string{"reflog", "expire"}, m("--expire", "now")),
+        "git-gc-prune":              cmd("git", []string{"gc"}, m("--prune", "now")),
+        "git-filter-branch":         cmd("git", []string{"filter-branch", "--tree-filter", "rm f"}, nil),
+        "git-restore-file":          cmd("git", []string{"restore", "file.go"}, nil),
     }
 
     for _, dp := range gitPack.Destructive {
@@ -1898,6 +2523,42 @@ func TestMvToDevNull(t *testing.T) {
 
 // --- Safe pattern tests ---
 
+func TestChmod000(t *testing.T) {
+    pattern := fsPack.Destructive[indexOfFsDestructive("chmod-000")].Match
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"chmod 000 file", cmd("chmod", []string{"000", "file.conf"}, nil), true},
+        {"chmod 644 file", cmd("chmod", []string{"644", "file.conf"}, nil), false},
+        {"chmod 777 file", cmd("chmod", []string{"777", "file.conf"}, nil), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+func TestTruncateZero(t *testing.T) {
+    pattern := fsPack.Destructive[indexOfFsDestructive("truncate-zero")].Match
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"truncate -s 0 file", cmd("truncate", []string{"0", "file.log"}, m("-s", "")), true},
+        {"truncate --size 0 file", cmd("truncate", []string{"0", "file.log"}, m("--size", "")), true},
+        {"truncate -s 1024 file (not zero)", cmd("truncate", []string{"1024", "file.log"}, m("-s", "")), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
 func TestRmSingleSafe(t *testing.T) {
     pattern := fsPack.Safe[indexOfFsSafe("rm-single-safe")].Match
     tests := []struct {
@@ -1907,9 +2568,9 @@ func TestRmSingleSafe(t *testing.T) {
     }{
         {"rm file.txt", cmd("rm", []string{"file.txt"}, nil), true},
         {"rm -i file.txt", cmd("rm", []string{"file.txt"}, m("-i", "")), true},
+        {"rm -f file.txt (safe — single file)", cmd("rm", []string{"file.txt"}, m("-f", "")), true},
         {"rm -rf dir (not safe)", cmd("rm", []string{"dir"}, m("-rf", "")), false},
         {"rm -r dir (not safe)", cmd("rm", []string{"dir"}, m("-r", "")), false},
-        {"rm -f file (not safe)", cmd("rm", []string{"file"}, m("-f", "")), false},
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
@@ -1932,6 +2593,8 @@ func TestFilesystemPatternReachability(t *testing.T) {
         "chmod-777":         cmd("chmod", []string{"777", "script.sh"}, nil),
         "chown-recursive":   cmd("chown", []string{"root:root", "/var"}, m("-R", "")),
         "mv-to-devnull":     cmd("mv", []string{"file", "/dev/null"}, nil),
+        "chmod-000":         cmd("chmod", []string{"000", "file.conf"}, nil),
+        "truncate-zero":     cmd("truncate", []string{"0", "file.log"}, m("-s", "")),
     }
 
     for _, dp := range fsPack.Destructive {
@@ -2124,7 +2787,7 @@ with both packs. Every destructive pattern has at least 3 entries (match,
 near-miss, safe variant). This creates an audit trail — any behavior change
 must be explicitly acknowledged.
 
-**Measurement**: 60+ golden file entries for core packs. Every pattern has
+**Measurement**: 84 golden file entries for core packs. Every pattern has
 ≥3 entries.
 
 ---
@@ -2163,25 +2826,61 @@ Steps 1 and 2 can be parallelized. Steps 3–5 depend on 1 and 2.
 
 ---
 
-## 13. Open Questions
+## 13. Open Questions (Resolved)
 
-1. **`git rebase --abort` / `--continue`**: Should these be excluded from the
-   git-rebase destructive pattern? `git rebase --abort` is actually a recovery
-   command, not destructive. However, the current pattern matches all `git rebase`
-   regardless. A future refinement could add `--abort` and `--continue` to a
-   safe pattern or use `Not(Flags("--abort"))` in the destructive pattern.
-   For v1, we flag all rebase operations and rely on the Medium confidence to
-   communicate uncertainty.
+1. **`git rebase --abort` / `--continue`**: ~~For v1, we flag all rebase
+   operations.~~ **Resolved (R1)**: Added safe pattern `git-rebase-recovery`
+   for `--abort`, `--continue`, and `--skip`. These are recovery/continuation
+   commands and should not be flagged as destructive.
 
-2. **`rm -f` without `-r`**: Should `rm -f file` (force delete single file)
-   be flagged? Currently it's caught by the safe pattern exclusion (not safe
-   because `-f` is present) but has no destructive pattern (no `-r`). This
-   means it passes through to the pipeline's "no match" path and gets
-   Allowed. This seems correct — forcing deletion of a single file is a
-   low-risk operation. If users want to catch it, they can add it to their
-   blocklist.
+2. **`rm -f` without `-r`**: ~~Seems correct — forcing deletion of a single
+   file is a low-risk operation.~~ **Resolved (R1)**: Removed `-f` and
+   `--force` from `rm-single-safe`'s exclusion list. Single-file `rm` with or
+   without `-f` is equally low-risk — `-f` only suppresses confirmation for
+   read-only files. Now `rm -f file.txt` matches the safe pattern.
 
-3. **`git checkout` vs `git restore`**: Modern git recommends `git restore`
-   over `git checkout --` for file restoration. Should we add patterns for
-   `git restore --source` and `git restore --worktree`? These are less
-   commonly generated by LLMs currently. Deferred to a future pack update.
+3. **`git checkout` vs `git restore`**: ~~Deferred to a future pack update.~~
+   **Resolved (R1)**: Added `git restore` patterns: `git-restore-worktree-all`
+   (High), `git-restore-source` (High), `git-restore-file` (Low), and
+   `git-restore-staged-safe` safe pattern. `git restore` is the modern
+   replacement for `git checkout --` and LLMs commonly generate it.
+
+---
+
+## Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-alt-reviewer | P0 | git push colon refspec bypass (CP-P0.1) | Incorporated | §5.1 S1 exclusion + D13 git-push-refspec-delete |
+| 2 | dcg-alt-reviewer | P0 | git push +refspec bypass (CP-P0.2) | Incorporated | §5.1 S1 exclusion + D14 git-push-force-refspec |
+| 3 | dcg-alt-reviewer | P1 | rm -rf path traversal severity (CP-P1.1) | Not Incorporated | Accepted gap per reviewer's own recommendation (b). High severity still caught. Added documentation note in §5.2.1. |
+| 4 | dcg-alt-reviewer | P1 | git rebase --abort FP (CP-P1.2) | Incorporated | §5.1 S5 git-rebase-recovery safe pattern |
+| 5 | dcg-alt-reviewer | P1 | Missing reflog expire / gc prune (CP-P1.3) | Incorporated | §5.1 D17 git-reflog-expire, D18 git-gc-prune |
+| 6 | dcg-alt-reviewer | P1 | Template omits RawArgs/DataflowResolved/InlineEnv (CP-P1.4) | Incorporated | §4.10 Advanced Matching section added |
+| 7 | dcg-alt-reviewer | P2 | chmod 000 gap (CP-P2.1) | Incorporated | §5.2 D11 chmod-000 |
+| 8 | dcg-alt-reviewer | P2 | Missing git restore (CP-P2.2) | Incorporated | §5.1 D15-D16, D20, S10 git-restore patterns |
+| 9 | dcg-alt-reviewer | P2 | Missing git filter-branch (CP-P2.3) | Incorporated | §5.1 D19 git-filter-branch |
+| 10 | dcg-alt-reviewer | P2 | Missing truncate command (CP-P2.4) | Incorporated | §5.2 D12 truncate-zero, keyword added |
+| 11 | dcg-alt-reviewer | P2 | SEC1 uses raw strings (CP-P2.5) | Not Incorporated | SEC1 as integration test is by design. Pack-level unit tests cover ExtractedCommand behavior. |
+| 12 | dcg-alt-reviewer | P2 | Golden file policy dependency (CP-P2.6) | Incorporated | Added `policy: interactive` to golden file format header |
+| 13 | dcg-alt-reviewer | P3 | mv keyword false triggers (CP-P3.1) | Not Incorporated | Performance negligible with word-boundary matching |
+| 14 | dcg-alt-reviewer | P3 | E2 "higher priority" misleading (CP-P3.2) | Incorporated | Test harness E2 comment reworded |
+| 15 | dcg-alt-reviewer | P3 | checkout -- . only literal (CP-P3.3) | Not Incorporated | :/ and quoted glob pathspecs extremely rare, not LLM-generated |
+| 16 | dcg-alt-reviewer | P3 | Oracle lacks divergence schema (CP-P3.4) | Not Incorporated | Deferred to implementation phase |
+| 17 | dcg-reviewer | P0 | rm -f detection gap (P0-1) | Incorporated | §5.2 S1 rm-single-safe updated to allow -f. OQ2 resolved. |
+| 18 | dcg-reviewer | P0 | git restore missing (P0-2) | Incorporated | Same as #8 above. §5.1 D15-D16, D20, S10. OQ3 resolved. |
+| 19 | dcg-reviewer | P1 | push-safe doesn't exclude --force-with-lease (P1-1) | Incorporated | §5.1 S1 now excludes --force-with-lease |
+| 20 | dcg-reviewer | P1 | chmod 000 gap (P1-2) | Incorporated | Same as #7 above |
+| 21 | dcg-reviewer | P1 | dd ArgPrefix extraction (P1-3) | Incorporated | §4.10 documents dd key=value → Args behavior |
+| 22 | dcg-reviewer | P1 | checkout -- flag contract (P1-4) | Incorporated | §4.10 documents -- → Flags map cross-plan contract |
+| 23 | dcg-reviewer | P1 | Shadowing caveat for authoring guide (P1-5) | Incorporated | §4.5 shadowing warning added |
+| 24 | dcg-reviewer | P2 | git checkout . without -- (P2-1) | Incorporated | §5.1 D12 git-checkout-dot pattern |
+| 25 | dcg-reviewer | P2 | Golden file count mismatch (P2-2) | Incorporated | §1 summary fixed from 80+ to 60+ (now 84 with additions) |
+| 26 | dcg-reviewer | P2 | ArgPrefix not in plan 02 (P2-3) | Incorporated | §4.10 documents ArgPrefix and notes cross-plan update needed |
+| 27 | dcg-reviewer | P2 | rm -f test missing (P2-4) | Incorporated | Golden file entry + unit test added for rm -f |
+| 28 | dcg-reviewer | P2 | rebase --abort FP (P2-5) | Incorporated | Same as #4 above |
+| 29 | dcg-reviewer | P3 | Category list incomplete (P3-1) | Incorporated | §4.3 added `other` + extensibility note |
+| 30 | dcg-reviewer | P3 | No path-prefix unit test (P3-2) | Incorporated | Comment added noting normalization is plan 01 responsibility |
+| 31 | dcg-reviewer | P3 | Benchmark targets aggressive (P3-3) | Incorporated | Test harness B1 targets marked as initial |
+| 32 | dcg-reviewer | P3 | P6 redundant with P2 (P3-4) | Incorporated | Test harness P6 merged into P2 |
+| 33 | dcg-reviewer | P3 | mv keyword false triggers (P3-5) | Not Incorporated | Same as #13 — performance negligible |
