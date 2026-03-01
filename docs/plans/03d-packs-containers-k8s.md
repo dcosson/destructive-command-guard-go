@@ -44,8 +44,8 @@ This plan defines 4 container and Kubernetes orchestration packs:
 
 **Scope**:
 - 4 packs, each with safe + destructive patterns
-- 17 safe + 30 destructive patterns
-- 99 golden file entries across all 4 packs
+- 17 safe + 35 destructive patterns
+- 116 golden file entries across all 4 packs
 - Per-pattern unit tests with match and near-miss cases
 - Reachability tests for every destructive pattern
 - Environment escalation tests for kubectl and helm packs
@@ -185,12 +185,15 @@ dangerous than others:
 
 | Tier | Resource types | Severity | Rationale |
 |------|---------------|----------|-----------|
-| **Critical** | namespace | Critical | Cascading deletion of all resources in namespace |
-| **High** | deployment, statefulset, pvc, node, service, configmap, secret | High | Direct impact on running workloads or data |
-| **Medium** | pod, job, cronjob, ingress, networkpolicy, all other | Medium | Individual resources, typically recreatable |
+| **Critical** | namespace; any resource with `--all-namespaces`/`-A` | Critical | Cascading deletion of all resources in namespace; cluster-wide deletion |
+| **High** | deployment, statefulset, pvc, node, service, secret; any resource with `--all` | High | Direct impact on running workloads, data, or auth material |
+| **Medium** | pod, job, cronjob, ingress, configmap, networkpolicy, all other | Medium | Individual resources, typically recreatable |
 
-We implement Critical and High tiers with specific patterns, and a
-Medium catch-all for `kubectl delete` on any resource.
+We implement Critical and High tiers with specific patterns, flag-based
+escalation patterns (`--all-namespaces` → Critical, `--all` → High),
+and a Medium catch-all for `kubectl delete` on any resource. Both
+singular and plural resource type names are matched (e.g., `namespace`
+and `namespaces`).
 
 ---
 
@@ -201,7 +204,7 @@ Medium catch-all for `kubectl delete` on any resource.
 **Pack ID**: `containers.docker`
 **Keywords**: `["docker"]`
 **Safe Patterns**: 8
-**Destructive Patterns**: 10
+**Destructive Patterns**: 12
 **EnvSensitive**: No
 
 Docker manages containers, images, volumes, and networks locally.
@@ -355,13 +358,29 @@ var dockerPack = packs.Pack{
             ),
             Severity:   guard.Critical,
             Confidence: guard.ConfidenceHigh,
-            Reason:     "docker system prune -af removes ALL stopped containers, ALL unused images, and ALL build cache",
-            Remediation: "Run docker system df first to see what will be removed. Consider targeted cleanup instead.",
+            Reason:     "docker system prune -af removes ALL stopped containers, ALL unused images, and ALL build cache. Add --volumes to also remove unused volumes (permanent data loss).",
+            Remediation: "Run docker system df first to see what will be removed. Run docker volume ls to check volumes. Consider targeted cleanup instead.",
+        },
+
+        // D1b: docker system prune -f --volumes (force prune including volumes)
+        {
+            Name: "docker-system-prune-volumes",
+            Match: packs.And(
+                packs.Name("docker"),
+                packs.ArgAt(0, "system"),
+                packs.ArgAt(1, "prune"),
+                packs.Flags("-f"),
+                packs.Flags("--volumes"),
+            ),
+            Severity:   guard.Critical,
+            Confidence: guard.ConfidenceHigh,
+            Reason:     "docker system prune -f --volumes force-removes stopped containers, dangling images, build cache, AND all unused volumes — permanent data loss",
+            Remediation: "Run docker volume ls first to see affected volumes. Remove --volumes to preserve volume data.",
         },
 
         // ---- High ----
 
-        // D2: docker system prune (without -a or without -f)
+        // D2: docker system prune (without -a -f or -f --volumes)
         {
             Name: "docker-system-prune",
             Match: packs.And(
@@ -500,6 +519,19 @@ var dockerPack = packs.Pack{
             Reason:     "docker stop/kill terminates running containers — causes service interruption",
             Remediation: "Verify container names/IDs with docker ps.",
         },
+        // D11: docker network prune (remove all unused networks)
+        {
+            Name: "docker-network-prune",
+            Match: packs.And(
+                packs.Name("docker"),
+                packs.ArgAt(0, "network"),
+                packs.ArgAt(1, "prune"),
+            ),
+            Severity:   guard.Medium,
+            Confidence: guard.ConfidenceHigh,
+            Reason:     "docker network prune removes all unused networks — containers referencing custom networks by name may lose connectivity on restart",
+            Remediation: "Run docker network ls first to see affected networks. Use --filter for selective cleanup.",
+        },
     },
 }
 ```
@@ -510,24 +542,32 @@ var dockerPack = packs.Pack{
   destructive. Even `docker run --rm` just means the container is
   automatically removed when it exits.
 - **`docker exec`**: Classified as safe. It executes a command inside a
-  running container. The command itself could be destructive (e.g.,
-  `docker exec db rm -rf /data`) but we can't inspect the inner command
-  at the pack level — the core.filesystem pack handles inner commands if
-  they are shell commands in the overall pipeline.
+  running container. **Important**: inner commands in docker exec are NOT
+  detected by the pack system. For `docker exec prod-db rm -rf /data`,
+  the tree-sitter parser yields Name="docker" with Args=["exec",
+  "prod-db", "rm", "/data"] — the core.filesystem pack matches
+  `Name("rm")` which won't trigger since the command name is "docker".
+  This is a known gap — v2 may add destructive patterns for docker exec
+  with known-dangerous arg content.
 - **`docker stop` vs `docker rm`**: Stop is Medium, rm is also Medium.
   Stop is reversible (docker start), but still causes service disruption.
   Rm is permanent but containers are typically stateless.
 - **`docker system prune -af`**: Critical because it removes everything —
   stopped containers, all unused images (not just dangling), and build cache.
-  With `--volumes` it also removes unused volumes. Without `-a` it only
-  removes dangling images, which is less destructive.
+  Without `-a` it only removes dangling images, which is less destructive.
+- **`docker system prune --volumes`**: The `--volumes` flag adds volume
+  pruning to system prune. `docker system prune -f --volumes` is Critical
+  (D1b) because it force-removes volumes without prompt — permanent data
+  loss. Without `-f`, Docker prompts for confirmation so it falls to D2
+  at High.
 - **Not env-sensitive**: Docker typically runs locally. Production Docker
   operations go through orchestrators (k8s, swarm, ECS) which have their
   own packs.
-- **`docker network prune`**: Not explicitly covered as a separate
-  pattern. Falls through as unmatched. Network pruning removes unused
-  networks, which is generally safe since active networks can't be pruned.
-  Accepted as unmatched for v1.
+- **`docker network prune`**: Covered by D11 at Medium. While active
+  networks can't be pruned, unused custom networks referenced by name in
+  compose files or container configurations may cause connectivity issues
+  when containers restart. S8 already excludes `ArgAt(1, "prune")` so
+  there is no safe pattern conflict.
 - **`docker builder prune`**: Not covered. Build cache cleanup is low risk.
 
 ---
@@ -593,6 +633,9 @@ var composePack = packs.Pack{
             ),
         },
         // S3: docker-compose/docker compose up, build, pull, push, exec, run
+        //     Note: "restart" intentionally excluded — it stops and restarts
+        //     all containers, causing service interruption similar to compose stop.
+        //     Falls through as Indeterminate.
         {
             Name: "compose-up-build-safe",
             Match: packs.Or(
@@ -607,7 +650,6 @@ var composePack = packs.Pack{
                         packs.ArgAt(0, "run"),
                         packs.ArgAt(0, "create"),
                         packs.ArgAt(0, "start"),
-                        packs.ArgAt(0, "restart"),
                         packs.ArgAt(0, "pause"),
                         packs.ArgAt(0, "unpause"),
                     ),
@@ -624,7 +666,6 @@ var composePack = packs.Pack{
                         packs.ArgAt(1, "run"),
                         packs.ArgAt(1, "create"),
                         packs.ArgAt(1, "start"),
-                        packs.ArgAt(1, "restart"),
                         packs.ArgAt(1, "pause"),
                         packs.ArgAt(1, "unpause"),
                     ),
@@ -752,6 +793,15 @@ var composePack = packs.Pack{
 - **`docker compose rm` without `-f`**: Falls through as unmatched.
   Without `-f`, it prompts for confirmation, which is a sufficient safety
   net. Only the `-f` variant is flagged.
+- **`docker compose restart`**: Falls through as Indeterminate.
+  Restart stops and restarts all containers, causing brief service
+  interruption — similar to `compose stop` (Medium). Intentionally
+  excluded from S3 safe list.
+- **`docker compose down -v --rmi all`**: Matches D1 (compose-down-volumes)
+  at High. D2 (compose-down-rmi) also matches but is never reached since
+  D1 evaluates first. Both are High, so no severity underclassification.
+  The D1 pattern name and reason focus on volume deletion, which is the
+  more impactful aspect of the combined operation.
 - **Not env-sensitive**: Compose is primarily used for local development.
   Production container orchestration uses Kubernetes, ECS, etc.
 - **Keyword overlap with docker pack**: Both packs share the `"docker"`
@@ -767,8 +817,8 @@ var composePack = packs.Pack{
 **Pack ID**: `kubernetes.kubectl`
 **Keywords**: `["kubectl"]`
 **Safe Patterns**: 4
-**Destructive Patterns**: 10
-**EnvSensitive**: Yes (all 10 destructive patterns)
+**Destructive Patterns**: 13
+**EnvSensitive**: Yes (all 13 destructive patterns)
 
 kubectl is the primary CLI for Kubernetes cluster management. Destructive
 operations can remove workloads, data, and affect cluster availability.
@@ -825,6 +875,8 @@ var kubectlPack = packs.Pack{
         //     kubectl annotate, kubectl set, kubectl patch, kubectl edit,
         //     kubectl run, kubectl cp, kubectl attach
         //     (These modify the cluster but are not destructive — they add/update)
+        //     Note: kubectl apply --prune is excluded — it deletes resources
+        //     not present in the applied manifests.
         {
             Name: "kubectl-modify-safe",
             Match: packs.And(
@@ -845,6 +897,7 @@ var kubectlPack = packs.Pack{
                     packs.ArgAt(0, "rollout"),
                     packs.ArgAt(0, "scale"),
                 ),
+                packs.Not(packs.Flags("--prune")),
             ),
         },
     },
@@ -860,6 +913,7 @@ var kubectlPack = packs.Pack{
                 packs.ArgAt(0, "delete"),
                 packs.Or(
                     packs.ArgAt(1, "namespace"),
+                    packs.ArgAt(1, "namespaces"),
                     packs.ArgAt(1, "ns"),
                 ),
             ),
@@ -880,10 +934,13 @@ var kubectlPack = packs.Pack{
                 packs.ArgAt(0, "delete"),
                 packs.Or(
                     packs.ArgAt(1, "deployment"),
+                    packs.ArgAt(1, "deployments"),
                     packs.ArgAt(1, "deploy"),
                     packs.ArgAt(1, "statefulset"),
+                    packs.ArgAt(1, "statefulsets"),
                     packs.ArgAt(1, "sts"),
                     packs.ArgAt(1, "daemonset"),
+                    packs.ArgAt(1, "daemonsets"),
                     packs.ArgAt(1, "ds"),
                 ),
             ),
@@ -902,8 +959,10 @@ var kubectlPack = packs.Pack{
                 packs.Or(
                     packs.ArgAt(1, "pvc"),
                     packs.ArgAt(1, "persistentvolumeclaim"),
+                    packs.ArgAt(1, "persistentvolumeclaims"),
                     packs.ArgAt(1, "pv"),
                     packs.ArgAt(1, "persistentvolume"),
+                    packs.ArgAt(1, "persistentvolumes"),
                 ),
             ),
             Severity:     guard.High,
@@ -918,7 +977,10 @@ var kubectlPack = packs.Pack{
             Match: packs.And(
                 packs.Name("kubectl"),
                 packs.ArgAt(0, "delete"),
-                packs.ArgAt(1, "node"),
+                packs.Or(
+                    packs.ArgAt(1, "node"),
+                    packs.ArgAt(1, "nodes"),
+                ),
             ),
             Severity:     guard.High,
             Confidence:   guard.ConfidenceHigh,
@@ -926,21 +988,24 @@ var kubectlPack = packs.Pack{
             Remediation:  "Drain the node first with kubectl drain. Verify no critical workloads are running.",
             EnvSensitive: true,
         },
-        // D5: kubectl delete service
+        // D5: kubectl delete service/secret (network routing and auth material)
         {
-            Name: "kubectl-delete-service",
+            Name: "kubectl-delete-service-secret",
             Match: packs.And(
                 packs.Name("kubectl"),
                 packs.ArgAt(0, "delete"),
                 packs.Or(
                     packs.ArgAt(1, "service"),
+                    packs.ArgAt(1, "services"),
                     packs.ArgAt(1, "svc"),
+                    packs.ArgAt(1, "secret"),
+                    packs.ArgAt(1, "secrets"),
                 ),
             ),
             Severity:     guard.High,
             Confidence:   guard.ConfidenceHigh,
-            Reason:       "kubectl delete service removes network routing — dependent pods lose connectivity",
-            Remediation:  "Verify no active traffic routes through this service.",
+            Reason:       "kubectl delete service/secret removes network routing or auth material — services lose connectivity, secrets cause cascading auth/TLS failures for pods mounting them",
+            Remediation:  "For services: verify no active traffic routes through this service. For secrets: check which pods mount the secret with kubectl get pods -o json | grep secretName.",
             EnvSensitive: true,
         },
         // D6: kubectl drain (evict all pods from a node)
@@ -970,6 +1035,51 @@ var kubectlPack = packs.Pack{
             Remediation:  "Use kubectl apply instead for zero-downtime updates.",
             EnvSensitive: true,
         },
+        // D7b: kubectl apply --prune (deletes resources not in applied manifests)
+        {
+            Name: "kubectl-apply-prune",
+            Match: packs.And(
+                packs.Name("kubectl"),
+                packs.ArgAt(0, "apply"),
+                packs.Flags("--prune"),
+            ),
+            Severity:     guard.High,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "kubectl apply --prune deletes resources not present in the applied manifests — can remove arbitrary resources in the namespace",
+            Remediation:  "Remove --prune flag. Apply manifests without pruning, then manually delete unwanted resources.",
+            EnvSensitive: true,
+        },
+        // D7c: kubectl delete --all-namespaces (cluster-wide deletion)
+        {
+            Name: "kubectl-delete-all-namespaces",
+            Match: packs.And(
+                packs.Name("kubectl"),
+                packs.ArgAt(0, "delete"),
+                packs.Or(
+                    packs.Flags("--all-namespaces"),
+                    packs.Flags("-A"),
+                ),
+            ),
+            Severity:     guard.Critical,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "kubectl delete --all-namespaces deletes resources across ALL namespaces including system namespaces — cluster-wide impact",
+            Remediation:  "Use -n <namespace> to target a specific namespace instead.",
+            EnvSensitive: true,
+        },
+        // D7d: kubectl delete --all (all resources of a type in namespace)
+        {
+            Name: "kubectl-delete-all",
+            Match: packs.And(
+                packs.Name("kubectl"),
+                packs.ArgAt(0, "delete"),
+                packs.Flags("--all"),
+            ),
+            Severity:     guard.High,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "kubectl delete --all removes ALL resources of the specified type in the namespace",
+            Remediation:  "Delete specific resources by name instead of using --all.",
+            EnvSensitive: true,
+        },
 
         // ---- Medium ----
 
@@ -982,20 +1092,36 @@ var kubectlPack = packs.Pack{
                 // Exclude already-handled resource types (D1-D5)
                 packs.Not(packs.Or(
                     packs.ArgAt(1, "namespace"),
+                    packs.ArgAt(1, "namespaces"),
                     packs.ArgAt(1, "ns"),
                     packs.ArgAt(1, "deployment"),
+                    packs.ArgAt(1, "deployments"),
                     packs.ArgAt(1, "deploy"),
                     packs.ArgAt(1, "statefulset"),
+                    packs.ArgAt(1, "statefulsets"),
                     packs.ArgAt(1, "sts"),
                     packs.ArgAt(1, "daemonset"),
+                    packs.ArgAt(1, "daemonsets"),
                     packs.ArgAt(1, "ds"),
                     packs.ArgAt(1, "pvc"),
                     packs.ArgAt(1, "persistentvolumeclaim"),
+                    packs.ArgAt(1, "persistentvolumeclaims"),
                     packs.ArgAt(1, "pv"),
                     packs.ArgAt(1, "persistentvolume"),
+                    packs.ArgAt(1, "persistentvolumes"),
                     packs.ArgAt(1, "node"),
+                    packs.ArgAt(1, "nodes"),
                     packs.ArgAt(1, "service"),
+                    packs.ArgAt(1, "services"),
                     packs.ArgAt(1, "svc"),
+                    packs.ArgAt(1, "secret"),
+                    packs.ArgAt(1, "secrets"),
+                )),
+                // Exclude flag-based escalation patterns (D7c, D7d)
+                packs.Not(packs.Or(
+                    packs.Flags("--all-namespaces"),
+                    packs.Flags("-A"),
+                    packs.Flags("--all"),
                 )),
             ),
             Severity:     guard.Medium,
@@ -1036,26 +1162,41 @@ var kubectlPack = packs.Pack{
 
 #### 5.3.1 kubectl Notes
 
-- **`kubectl apply`**: Classified as safe. It declaratively applies
-  resource configurations. While it can modify resources, it's the
-  standard way to update Kubernetes state and is not directly
-  destructive.
+- **`kubectl apply`**: Classified as safe (S4) unless `--prune` is used.
+  Normal apply declaratively applies resource configurations. `kubectl
+  apply --prune` deletes resources not present in the applied manifests —
+  this is caught by D7b (kubectl-apply-prune) at High.
 - **`kubectl delete -f`**: Matches D8 (kubectl-delete-resource). The
   `-f` flag specifies a file, but the resource type in the file
   determines the actual impact. Since we can't inspect file contents,
   D8 catches all `kubectl delete` commands not handled by more specific
   patterns (D1-D5).
-- **`kubectl delete --all`**: Also matches D8 or the specific resource
-  pattern. The `--all` flag is dangerous but we don't currently
-  escalate severity for it. Could be a v2 enhancement.
+- **`kubectl delete --all`**: Escalated to High by D7d
+  (kubectl-delete-all). Deletes ALL resources of the specified type in
+  the current namespace.
+- **`kubectl delete --all-namespaces`**: Escalated to Critical by D7c
+  (kubectl-delete-all-namespaces). Deletes resources across ALL
+  namespaces including system namespaces — cluster-wide impact.
+- **Plural resource types**: All kubectl delete patterns (D1-D5) match
+  both singular and plural forms (e.g., `namespace`/`namespaces`,
+  `deployment`/`deployments`). kubectl accepts both forms. The D8
+  exclusion list is synchronized to include all forms.
 - **`kubectl rollout`**: Classified as safe (S4). Rollout operations
   (restart, status, history, undo, pause, resume) are operational but
   not destructive — they manage existing deployments. Even `kubectl
   rollout restart` just triggers a rolling restart.
 - **`kubectl scale`**: Classified as safe (S4). Scaling to zero pods is
   operational, not destructive — the deployment still exists and can be
-  scaled back up.
-- **Env-sensitive**: All 10 destructive patterns are env-sensitive.
+  scaled back up. **Known gap**: `kubectl scale --replicas=0` effectively
+  causes a service outage. The matching framework cannot inspect flag
+  values (can't distinguish `--replicas=0` from `--replicas=5`). This
+  is a known limitation for v2.
+- **`kubectl delete secret`**: Elevated to High (D5) alongside service.
+  Secrets contain TLS certificates, API keys, and database credentials.
+  Deleting a secret causes cascading failures: pods mounting the secret
+  fail on restart, ingress controllers lose TLS certs, service accounts
+  lose credentials.
+- **Env-sensitive**: All 13 destructive patterns are env-sensitive.
   Deleting a namespace in production vs. dev has vastly different impact.
 
 ---
@@ -1109,6 +1250,7 @@ var helmPack = packs.Pack{
             ),
         },
         // S2: helm install, helm upgrade (add/update releases)
+        //     Excludes --force (D3) and --reset-values (D4) for upgrades.
         {
             Name: "helm-install-upgrade-safe",
             Match: packs.And(
@@ -1117,6 +1259,8 @@ var helmPack = packs.Pack{
                     packs.ArgAt(0, "install"),
                     packs.ArgAt(0, "upgrade"),
                 ),
+                packs.Not(packs.Flags("--force")),
+                packs.Not(packs.Flags("--reset-values")),
             ),
         },
     },
@@ -1206,9 +1350,11 @@ var helmPack = packs.Pack{
 - **`helm install`**: Classified as safe (S2). It creates a new release.
   While it deploys resources, it's additive and the standard workflow.
 - **`helm upgrade`**: Classified as safe (S2) unless `--force` or
-  `--reset-values` is used. Normal upgrades do rolling updates.
-  `--force` is destructive because it deletes and recreates resources.
-  `--reset-values` is risky because it discards custom configuration.
+  `--reset-values` is used. S2 has `Not(Flags("--force"))` and
+  `Not(Flags("--reset-values"))` to ensure D3 and D4 are reachable.
+  Normal upgrades do rolling updates. `--force` is destructive because
+  it deletes and recreates resources. `--reset-values` is risky because
+  it discards custom configuration.
 - **`helm delete`**: This is an alias for `helm uninstall` (Helm 3).
   In Helm 2 it was the primary command. Both are matched by D1.
 - **`helm rollback`**: Medium severity because rolling back can cause
@@ -1226,12 +1372,14 @@ var helmPack = packs.Pack{
 
 ## 6. Golden File Entries
 
-### 6.1 `containers.docker` (30 entries)
+### 6.1 `containers.docker` (34 entries)
 
 ```
 # docker — Destructive — Critical
 docker system prune -a -f                           → Deny/Critical (docker-system-prune-all)
 docker system prune -af                             → Deny/Critical (docker-system-prune-all)
+docker system prune -f --volumes                    → Deny/Critical (docker-system-prune-volumes)
+docker system prune -a -f --volumes                 → Deny/Critical (docker-system-prune-all)
 
 # docker — Destructive — High
 docker system prune                                 → Deny/High (docker-system-prune)
@@ -1253,6 +1401,8 @@ docker image prune -a                               → Ask/Medium (docker-image
 docker container prune                              → Ask/Medium (docker-container-prune)
 docker network rm my-network                        → Ask/Medium (docker-network-rm)
 docker network remove my-network                    → Ask/Medium (docker-network-rm)
+docker network prune                                → Ask/Medium (docker-network-prune)
+docker network prune -f                             → Ask/Medium (docker-network-prune)
 docker stop my-container                            → Ask/Medium (docker-stop-kill)
 docker kill my-container                            → Ask/Medium (docker-stop-kill)
 docker container stop my-container                  → Ask/Medium (docker-stop-kill)
@@ -1300,32 +1450,44 @@ docker-compose config                               → Allow (compose-readonly-
 docker compose config                               → Allow (compose-readonly-safe)
 ```
 
-### 6.3 `kubernetes.kubectl` (27 entries)
+### 6.3 `kubernetes.kubectl` (42 entries)
 
 ```
 # kubectl — Destructive — Critical
 kubectl delete namespace production                 → Deny/Critical (kubectl-delete-namespace)
+kubectl delete namespaces production                → Deny/Critical (kubectl-delete-namespace)
 kubectl delete ns staging                           → Deny/Critical (kubectl-delete-namespace)
+kubectl delete pods --all-namespaces                → Deny/Critical (kubectl-delete-all-namespaces)
+kubectl delete pods -A                              → Deny/Critical (kubectl-delete-all-namespaces)
 
 # kubectl — Destructive — High
 kubectl delete deployment my-app                    → Deny/High (kubectl-delete-workload)
+kubectl delete deployments my-app                   → Deny/High (kubectl-delete-workload)
 kubectl delete deploy my-app -n production          → Deny/High (kubectl-delete-workload)
 kubectl delete statefulset my-db                    → Deny/High (kubectl-delete-workload)
+kubectl delete statefulsets my-db                   → Deny/High (kubectl-delete-workload)
 kubectl delete sts my-db                            → Deny/High (kubectl-delete-workload)
 kubectl delete daemonset my-ds                      → Deny/High (kubectl-delete-workload)
 kubectl delete pvc my-data                          → Deny/High (kubectl-delete-storage)
 kubectl delete persistentvolumeclaim my-data        → Deny/High (kubectl-delete-storage)
+kubectl delete persistentvolumeclaims my-data       → Deny/High (kubectl-delete-storage)
 kubectl delete pv my-volume                         → Deny/High (kubectl-delete-storage)
 kubectl delete node worker-1                        → Deny/High (kubectl-delete-node)
-kubectl delete service my-svc                       → Deny/High (kubectl-delete-service)
-kubectl delete svc my-svc                           → Deny/High (kubectl-delete-service)
+kubectl delete nodes worker-1                       → Deny/High (kubectl-delete-node)
+kubectl delete service my-svc                       → Deny/High (kubectl-delete-service-secret)
+kubectl delete services my-svc                      → Deny/High (kubectl-delete-service-secret)
+kubectl delete svc my-svc                           → Deny/High (kubectl-delete-service-secret)
+kubectl delete secret my-secret                     → Deny/High (kubectl-delete-service-secret)
+kubectl delete secrets my-secret                    → Deny/High (kubectl-delete-service-secret)
 kubectl drain worker-1 --ignore-daemonsets          → Deny/High (kubectl-drain)
 kubectl replace --force -f deployment.yaml          → Deny/High (kubectl-replace-force)
+kubectl apply --prune -f manifests/                 → Deny/High (kubectl-apply-prune)
+kubectl apply --prune --all -f manifests/           → Deny/High (kubectl-apply-prune)
+kubectl delete pods --all                           → Deny/High (kubectl-delete-all)
 
 # kubectl — Destructive — Medium
 kubectl delete pod my-pod                           → Ask/Medium (kubectl-delete-resource)
 kubectl delete configmap my-config                  → Ask/Medium (kubectl-delete-resource)
-kubectl delete secret my-secret                     → Ask/Medium (kubectl-delete-resource)
 kubectl delete ingress my-ingress                   → Ask/Medium (kubectl-delete-resource)
 kubectl delete -f resources.yaml                    → Ask/Medium (kubectl-delete-resource)
 kubectl cordon worker-1                             → Ask/Medium (kubectl-cordon)
@@ -1369,7 +1531,11 @@ helm repo add bitnami https://charts.bitnami.com    → Allow (helm-readonly-saf
 helm lint my-chart                                  → Allow (helm-readonly-safe)
 ```
 
-**Total golden entries**: 99 across 4 packs (30 + 22 + 27 + 20)
+**Total golden entries**: 116 across 4 packs (34 + 22 + 42 + 20)
+
+Note: `kubectl delete secret` moved from Medium (D8 catch-all) to High
+(D5 kubectl-delete-service-secret). Removed from Medium section, added
+to High section.
 
 ---
 
@@ -1417,39 +1583,44 @@ that bypasses all safe patterns in the same pack:
 ```go
 var containerK8sReachabilityCommands = map[string]parse.ExtractedCommand{
     // Docker
-    "docker-system-prune-all":  cmd("docker", []string{"system", "prune"}, m("-a", "", "-f", "")),
-    "docker-system-prune":      cmd("docker", []string{"system", "prune"}, nil),
-    "docker-volume-rm":         cmd("docker", []string{"volume", "rm", "my-vol"}, nil),
-    "docker-volume-prune":      cmd("docker", []string{"volume", "prune"}, nil),
-    "docker-rm":                cmd("docker", []string{"rm", "my-container"}, nil),
-    "docker-rmi":               cmd("docker", []string{"rmi", "my-image"}, nil),
-    "docker-image-prune":       cmd("docker", []string{"image", "prune"}, nil),
-    "docker-container-prune":   cmd("docker", []string{"container", "prune"}, nil),
-    "docker-network-rm":        cmd("docker", []string{"network", "rm", "my-net"}, nil),
-    "docker-stop-kill":         cmd("docker", []string{"stop", "my-container"}, nil),
+    "docker-system-prune-all":     cmd("docker", []string{"system", "prune"}, m("-a", "", "-f", "")),
+    "docker-system-prune-volumes": cmd("docker", []string{"system", "prune"}, m("-f", "", "--volumes", "")),
+    "docker-system-prune":         cmd("docker", []string{"system", "prune"}, nil),
+    "docker-volume-rm":            cmd("docker", []string{"volume", "rm", "my-vol"}, nil),
+    "docker-volume-prune":         cmd("docker", []string{"volume", "prune"}, nil),
+    "docker-rm":                   cmd("docker", []string{"rm", "my-container"}, nil),
+    "docker-rmi":                  cmd("docker", []string{"rmi", "my-image"}, nil),
+    "docker-image-prune":          cmd("docker", []string{"image", "prune"}, nil),
+    "docker-container-prune":      cmd("docker", []string{"container", "prune"}, nil),
+    "docker-network-rm":           cmd("docker", []string{"network", "rm", "my-net"}, nil),
+    "docker-network-prune":        cmd("docker", []string{"network", "prune"}, nil),
+    "docker-stop-kill":            cmd("docker", []string{"stop", "my-container"}, nil),
     // Compose
-    "compose-down-volumes":     cmd("docker-compose", []string{"down"}, m("-v", "")),
-    "compose-down-rmi":         cmd("docker-compose", []string{"down"}, m("--rmi", "all")),
-    "compose-down":             cmd("docker-compose", []string{"down"}, nil),
-    "compose-rm-force":         cmd("docker-compose", []string{"rm"}, m("-f", "")),
-    "compose-stop":             cmd("docker-compose", []string{"stop"}, nil),
+    "compose-down-volumes":        cmd("docker-compose", []string{"down"}, m("-v", "")),
+    "compose-down-rmi":            cmd("docker-compose", []string{"down"}, m("--rmi", "all")),
+    "compose-down":                cmd("docker-compose", []string{"down"}, nil),
+    "compose-rm-force":            cmd("docker-compose", []string{"rm"}, m("-f", "")),
+    "compose-stop":                cmd("docker-compose", []string{"stop"}, nil),
     // kubectl
-    "kubectl-delete-namespace": cmd("kubectl", []string{"delete", "namespace", "production"}, nil),
-    "kubectl-delete-workload":  cmd("kubectl", []string{"delete", "deployment", "my-app"}, nil),
-    "kubectl-delete-storage":   cmd("kubectl", []string{"delete", "pvc", "my-data"}, nil),
-    "kubectl-delete-node":      cmd("kubectl", []string{"delete", "node", "worker-1"}, nil),
-    "kubectl-delete-service":   cmd("kubectl", []string{"delete", "service", "my-svc"}, nil),
-    "kubectl-drain":            cmd("kubectl", []string{"drain", "worker-1"}, nil),
-    "kubectl-replace-force":    cmd("kubectl", []string{"replace"}, m("--force", "", "-f", "deployment.yaml")),
-    "kubectl-delete-resource":  cmd("kubectl", []string{"delete", "pod", "my-pod"}, nil),
-    "kubectl-cordon":           cmd("kubectl", []string{"cordon", "worker-1"}, nil),
-    "kubectl-taint":            cmd("kubectl", []string{"taint", "nodes", "worker-1"}, nil),
+    "kubectl-delete-namespace":       cmd("kubectl", []string{"delete", "namespace", "production"}, nil),
+    "kubectl-delete-workload":        cmd("kubectl", []string{"delete", "deployment", "my-app"}, nil),
+    "kubectl-delete-storage":         cmd("kubectl", []string{"delete", "pvc", "my-data"}, nil),
+    "kubectl-delete-node":            cmd("kubectl", []string{"delete", "node", "worker-1"}, nil),
+    "kubectl-delete-service-secret":  cmd("kubectl", []string{"delete", "service", "my-svc"}, nil),
+    "kubectl-drain":                  cmd("kubectl", []string{"drain", "worker-1"}, nil),
+    "kubectl-replace-force":          cmd("kubectl", []string{"replace"}, m("--force", "", "-f", "deployment.yaml")),
+    "kubectl-apply-prune":            cmd("kubectl", []string{"apply"}, m("--prune", "", "-f", "manifests/")),
+    "kubectl-delete-all-namespaces":  cmd("kubectl", []string{"delete", "pods"}, m("--all-namespaces", "")),
+    "kubectl-delete-all":             cmd("kubectl", []string{"delete", "pods"}, m("--all", "")),
+    "kubectl-delete-resource":        cmd("kubectl", []string{"delete", "pod", "my-pod"}, nil),
+    "kubectl-cordon":                 cmd("kubectl", []string{"cordon", "worker-1"}, nil),
+    "kubectl-taint":                  cmd("kubectl", []string{"taint", "nodes", "worker-1"}, nil),
     // Helm
-    "helm-uninstall":           cmd("helm", []string{"uninstall", "my-release"}, nil),
-    "helm-rollback":            cmd("helm", []string{"rollback", "my-release", "1"}, nil),
-    "helm-upgrade-force":       cmd("helm", []string{"upgrade", "my-release", "my-chart"}, m("--force", "")),
-    "helm-upgrade-reset-values": cmd("helm", []string{"upgrade", "my-release", "my-chart"}, m("--reset-values", "")),
-    "helm-test":                cmd("helm", []string{"test", "my-release"}, nil),
+    "helm-uninstall":              cmd("helm", []string{"uninstall", "my-release"}, nil),
+    "helm-rollback":               cmd("helm", []string{"rollback", "my-release", "1"}, nil),
+    "helm-upgrade-force":          cmd("helm", []string{"upgrade", "my-release", "my-chart"}, m("--force", "")),
+    "helm-upgrade-reset-values":   cmd("helm", []string{"upgrade", "my-release", "my-chart"}, m("--reset-values", "")),
+    "helm-test":                   cmd("helm", []string{"test", "my-release"}, nil),
 }
 ```
 
@@ -1480,17 +1651,24 @@ func TestContainerK8sEnvSensitivity(t *testing.T) {
 ### 7.4 Safe Pattern Interaction Matrix — kubectl
 
 ```
-                                   | S1 get | S2 describe | S3 readonly | S4 modify |
-kubectl delete namespace prod      |   ✗    |     ✗       |      ✗      |     ✗     |
-kubectl delete deployment my-app   |   ✗    |     ✗       |      ✗      |     ✗     |
-kubectl delete pvc my-data         |   ✗    |     ✗       |      ✗      |     ✗     |
-kubectl delete pod my-pod          |   ✗    |     ✗       |      ✗      |     ✗     |
-kubectl drain worker-1             |   ✗    |     ✗       |      ✗      |     ✗     |
-kubectl replace --force -f x.yaml  |   ✗    |     ✗       |      ✗      |     ✗     |
-kubectl get pods                   |   ✓    |     ✗       |      ✗      |     ✗     |
-kubectl apply -f x.yaml           |   ✗    |     ✗       |      ✗      |     ✓     |
-kubectl logs my-pod               |   ✗    |     ✗       |      ✓      |     ✗     |
+                                         | S1 get | S2 describe | S3 readonly | S4 modify |
+kubectl delete namespace prod            |   ✗    |     ✗       |      ✗      |     ✗     |
+kubectl delete deployment my-app         |   ✗    |     ✗       |      ✗      |     ✗     |
+kubectl delete pvc my-data               |   ✗    |     ✗       |      ✗      |     ✗     |
+kubectl delete pod my-pod                |   ✗    |     ✗       |      ✗      |     ✗     |
+kubectl delete secret my-secret          |   ✗    |     ✗       |      ✗      |     ✗     |
+kubectl delete pods --all-namespaces     |   ✗    |     ✗       |      ✗      |     ✗     |
+kubectl delete pods --all                |   ✗    |     ✗       |      ✗      |     ✗     |
+kubectl drain worker-1                   |   ✗    |     ✗       |      ✗      |     ✗     |
+kubectl replace --force -f x.yaml        |   ✗    |     ✗       |      ✗      |     ✗     |
+kubectl apply --prune -f manifests/      |   ✗    |     ✗       |      ✗      |     ✗     |
+kubectl get pods                         |   ✓    |     ✗       |      ✗      |     ✗     |
+kubectl apply -f x.yaml                 |   ✗    |     ✗       |      ✗      |     ✓     |
+kubectl logs my-pod                     |   ✗    |     ✗       |      ✓      |     ✗     |
 ```
+
+Note: `kubectl apply --prune` does NOT match S4 due to `Not(Flags("--prune"))`.
+`kubectl apply -f x.yaml` (without --prune) still matches S4.
 
 ---
 
@@ -1609,12 +1787,12 @@ Not applicable for pattern packs. Container/Kubernetes packs use simple
    Compose pack. Establishes the standalone vs plugin dual naming pattern.
 
 3. **`internal/packs/kubernetes/kubectl.go`** + `kubectl_test.go` —
-   kubectl pack. Most complex pack (10 destructive patterns with
-   resource type routing).
+   kubectl pack. Most complex pack (13 destructive patterns with
+   resource type routing and flag-based escalation).
 
 4. **`internal/packs/kubernetes/helm.go`** + `helm_test.go` — Helm pack.
 
-5. **Golden file entries** — Add all 99 entries to
+5. **Golden file entries** — Add all 116 entries to
    `internal/eval/testdata/golden/`.
 
 6. **Run all tests** — Unit, reachability, completeness, golden file.
@@ -1635,13 +1813,12 @@ to establish the dual-syntax matching pattern.
    compose pack's safe patterns handle the distinction correctly.
 
 2. **kubectl `--all` flag**: `kubectl delete pods --all` deletes ALL
-   pods. Should we escalate severity for `--all`? **Decision**: Defer
-   to v2. The catch-all D8 already catches all `kubectl delete` commands,
-   and `--all` is a nuance within that.
+   pods in the namespace. **Decision**: Covered in v1 by D7d
+   (kubectl-delete-all) at High severity.
 
 3. **kubectl `--all-namespaces` flag**: `kubectl delete pods --all-namespaces`
-   is extremely dangerous. Should it be Critical? **Decision**: Defer
-   to v2. Would require additional flag-based severity escalation.
+   deletes across ALL namespaces. **Decision**: Covered in v1 by D7c
+   (kubectl-delete-all-namespaces) at Critical severity.
 
 4. **helm `--dry-run` flag**: Should helm commands with `--dry-run` be
    excluded from destructive matching? **Decision**: Accept over-
@@ -1652,8 +1829,48 @@ to establish the dual-syntax matching pattern.
    Not covered in v1. Build cache is expendable.
 
 6. **v2 additions**:
-   - Docker: `docker builder prune`, `docker network prune`, `docker swarm`
-   - kubectl: `--all` flag escalation, `--all-namespaces` escalation,
-     `kubectl exec` with destructive inner commands
+   - Docker: `docker builder prune`, `docker swarm`,
+     `docker exec` with destructive inner commands (ArgContent-based)
+   - kubectl: `kubectl scale --replicas=0` detection (requires flag value
+     matching), `kubectl exec` with destructive inner commands
    - Helm: `helm upgrade --cleanup-on-fail`
-   - Compose: `docker compose kill`
+   - Compose: `docker compose kill`, `docker compose restart` (currently
+     Indeterminate, could be Medium)
+
+---
+
+## Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-reviewer | P0 | helm S2 short-circuits D3/D4 | Incorporated | Added Not(--force) and Not(--reset-values) to S2 |
+| 2 | dcg-reviewer | P0 | kubectl delete only matches singular types | Incorporated | Added plural forms to D1-D5 and D8 exclusion list |
+| 3 | dcg-alt-reviewer | P0 | helm S2 blocks D3/D4 | Incorporated | Duplicate of #1 |
+| 4 | dcg-alt-reviewer | P0 | kubectl apply --prune classified as safe | Incorporated | Added Not(--prune) to S4, added kubectl-apply-prune at High |
+| 5 | dcg-reviewer | P1 | kubectl delete --all-namespaces at Medium | Incorporated | Added kubectl-delete-all-namespaces at Critical |
+| 6 | dcg-reviewer | P1 | docker exec inner commands undetectable | Incorporated | §5.1.1 corrected — inner commands NOT detected by pack system |
+| 7 | dcg-reviewer | P1 | kubectl delete --all not escalated | Incorporated | Added kubectl-delete-all at High |
+| 8 | dcg-reviewer | P1 | docker system prune --volumes not addressed | Incorporated | Added docker-system-prune-volumes at Critical |
+| 9 | dcg-reviewer | P1 | docker network prune missing | Incorporated | Added docker-network-prune at Medium (D11) |
+| 10 | dcg-alt-reviewer | P1 | kubectl delete --all-namespaces | Incorporated | Duplicate of #5 |
+| 11 | dcg-alt-reviewer | P1 | docker network prune missing | Incorporated | Duplicate of #9 |
+| 12 | dcg-alt-reviewer | P1 | kubectl delete secret at Medium | Incorporated | Added secret/secrets to D5, renamed to kubectl-delete-service-secret |
+| 13 | dcg-alt-reviewer | P1 | kubectl scale --replicas=0 safe | Not Incorporated | Framework cannot match flag values; documented as known gap in §5.3.1 |
+| 14 | dcg-reviewer | P2 | kubectl scale --replicas=0 safe | Not Incorporated | Same as #13 |
+| 15 | dcg-reviewer | P2 | compose down -v --rmi combined severity | Not Incorporated | Both High, no underclassification; documented in §5.2.1 |
+| 16 | dcg-reviewer | P2 | compose S3 includes "restart" | Incorporated | Removed restart from S3; falls through as Indeterminate |
+| 17 | dcg-reviewer | P2 | golden file D3/D4 entries wrong | Incorporated | Fixed by P0-1 fix (S2 Not clauses) |
+| 18 | dcg-reviewer | P2 | missing golden entries for kubectl plurals | Incorporated | Added plural form golden entries |
+| 19 | dcg-alt-reviewer | P2 | docker exec safe | Incorporated | Duplicate of #6 |
+| 20 | dcg-alt-reviewer | P2 | docker system prune -a vs no flags same severity | Not Incorporated | Both High; interactive prompt provides safety net |
+| 21 | dcg-alt-reviewer | P2 | golden file D3/D4 entries | Incorporated | Duplicate of #17 |
+| 22 | dcg-alt-reviewer | P2 | kubectl rollout restart safe | Not Incorporated | Rolling restart is standard operational practice |
+| 23 | dcg-reviewer | P3 | D1 remediation for --volumes | Incorporated | Updated D1 reason/remediation to mention --volumes |
+| 24 | dcg-reviewer | P3 | docker-compose rm without -f | N/A | Confirming deliberate choice |
+| 25 | dcg-reviewer | P3 | P8 update for plural forms | Incorporated | Updated in test harness |
+| 26 | dcg-reviewer | P3 | compose keyword overlap | N/A | Confirming correct behavior |
+| 27 | dcg-reviewer | P3 | golden file total count | Incorporated | Updated to 116 entries |
+| 28 | dcg-alt-reviewer | P3 | compose down -v --rmi matches D1/D2 | Not Incorporated | Duplicate of #15 |
+| 29 | dcg-alt-reviewer | P3 | docker compose kill not covered | N/A | Confirming v2 deferral |
+| 30 | dcg-alt-reviewer | P3 | helm rollback Medium appropriate | N/A | Confirming appropriateness |
+| 31 | dcg-alt-reviewer | P3 | docker builder prune not covered | N/A | Confirming v2 deferral |

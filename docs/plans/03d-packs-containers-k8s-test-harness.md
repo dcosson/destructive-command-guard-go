@@ -64,9 +64,13 @@ func TestPropertyEveryContainerK8sDestructivePatternReachable(t *testing.T) {
 **Invariant**: For each destructive pattern's reachability command, no safe
 pattern in the same pack matches it.
 
-This is critical for docker where S8 includes `"network"` and `"volume"`
-as safe subcommands but must exclude `"rm"`, `"remove"`, and `"prune"`
-operations via Not clauses.
+This is critical for:
+- Docker S8: includes `"network"` and `"volume"` as safe subcommands
+  but must exclude `"rm"`, `"remove"`, and `"prune"` via Not clauses.
+- Helm S2: includes `"upgrade"` as safe but must exclude `--force` and
+  `--reset-values` via Not clauses (so D3/D4 remain reachable).
+- kubectl S4: includes `"apply"` as safe but must exclude `--prune`
+  via Not clause (so kubectl-apply-prune remains reachable).
 
 ```go
 func TestPropertyContainerK8sSafePatternsNeverBlockDestructive(t *testing.T) {
@@ -220,10 +224,11 @@ patterns, and vice versa.
 ```go
 func TestPropertyContainerK8sCrossPackIsolation(t *testing.T) {
     packCommands := map[string]parse.ExtractedCommand{
-        "containers.docker":    cmd("docker", []string{"system", "prune"}, m("-a", "", "-f", "")),
-        "containers.compose":   cmd("docker-compose", []string{"down"}, m("-v", "")),
-        "kubernetes.kubectl":   cmd("kubectl", []string{"delete", "namespace", "prod"}, nil),
-        "kubernetes.helm":      cmd("helm", []string{"uninstall", "my-release"}, nil),
+        "containers.docker":           cmd("docker", []string{"system", "prune"}, m("-a", "", "-f", "")),
+        "containers.compose":          cmd("docker-compose", []string{"down"}, m("-v", "")),
+        "containers.compose-plugin":   cmd("docker", []string{"compose", "down"}, m("-v", "")),
+        "kubernetes.kubectl":          cmd("kubectl", []string{"delete", "namespace", "prod"}, nil),
+        "kubernetes.helm":             cmd("helm", []string{"uninstall", "my-release"}, nil),
     }
 
     packs := map[string]packs.Pack{
@@ -234,17 +239,23 @@ func TestPropertyContainerK8sCrossPackIsolation(t *testing.T) {
     }
 
     for cmdPackID, testCmd := range packCommands {
+        // Map compose-plugin to compose pack for "own pack" check
+        ownPackID := cmdPackID
+        if cmdPackID == "containers.compose-plugin" {
+            ownPackID = "containers.compose"
+        }
         for packID, pack := range packs {
-            if packID == cmdPackID {
+            if packID == ownPackID {
                 continue
             }
             // Special case: docker pack and compose pack share keyword
-            // docker compose commands should match compose pack, not docker
-            if cmdPackID == "containers.compose" && packID == "containers.docker" {
-                // docker-compose commands should not match docker destructive patterns
+            // docker compose commands (both standalone and plugin) should
+            // not match docker destructive patterns
+            if (cmdPackID == "containers.compose" || cmdPackID == "containers.compose-plugin") &&
+                packID == "containers.docker" {
                 for _, dp := range pack.Destructive {
                     assert.False(t, dp.Match.Match(testCmd),
-                        "compose command triggers docker/%s", dp.Name)
+                        "%s command triggers docker/%s", cmdPackID, dp.Name)
                 }
                 continue
             }
@@ -265,16 +276,17 @@ exactly the resource types handled by D1-D5.
 
 ```go
 func TestPropertyKubectlDeleteCatchAllCompleteness(t *testing.T) {
-    // D1-D5 handle these resource types specifically
+    // D1-D5 handle these resource types specifically (singular + plural)
     specificResources := []string{
-        "namespace", "ns",
-        "deployment", "deploy",
-        "statefulset", "sts",
-        "daemonset", "ds",
-        "pvc", "persistentvolumeclaim",
-        "pv", "persistentvolume",
-        "node",
-        "service", "svc",
+        "namespace", "namespaces", "ns",
+        "deployment", "deployments", "deploy",
+        "statefulset", "statefulsets", "sts",
+        "daemonset", "daemonsets", "ds",
+        "pvc", "persistentvolumeclaim", "persistentvolumeclaims",
+        "pv", "persistentvolume", "persistentvolumes",
+        "node", "nodes",
+        "service", "services", "svc",
+        "secret", "secrets",
     }
 
     for _, res := range specificResources {
@@ -532,18 +544,21 @@ func TestComparisonContainerK8sUpstreamRust(t *testing.T) {
 }
 ```
 
-**Comparison corpus**: All 99 golden file commands from §6 of the plan doc.
+**Comparison corpus**: All 116 golden file commands from §6 of the plan doc.
 
 ### O2: Orchestrator Consistency
 
 For equivalent operations across container/k8s tools, verify severity
-assignments are consistent:
+assignments are consistent. Assert equality for same-abstraction-level
+comparisons; document expected differences for cross-level comparisons
+(kubectl/helm operate at different abstraction levels).
 
 ```go
 func TestComparisonOrchestratorConsistency(t *testing.T) {
     equivalents := []struct {
-        name     string
-        commands map[string]parse.ExtractedCommand
+        name           string
+        commands       map[string]parse.ExtractedCommand
+        expectEqual    bool // false for cross-abstraction-level comparisons
     }{
         {
             "Release/deployment deletion",
@@ -551,6 +566,7 @@ func TestComparisonOrchestratorConsistency(t *testing.T) {
                 "kubectl": cmd("kubectl", []string{"delete", "deployment", "my-app"}, nil),
                 "helm":    cmd("helm", []string{"uninstall", "my-release"}, nil),
             },
+            true, // both High
         },
         {
             "Resource removal",
@@ -558,17 +574,31 @@ func TestComparisonOrchestratorConsistency(t *testing.T) {
                 "docker":  cmd("docker", []string{"rm", "my-container"}, nil),
                 "compose": cmd("docker-compose", []string{"rm"}, m("-f", "")),
             },
+            true, // both Medium
         },
     }
 
     for _, eq := range equivalents {
         t.Run(eq.name, func(t *testing.T) {
+            severities := map[string]guard.Severity{}
             for name, testCmd := range eq.commands {
                 pack := containerK8sPackFor(name)
                 for _, dp := range pack.Destructive {
                     if dp.Match.Match(testCmd) {
+                        severities[name] = dp.Severity
                         t.Logf("%s: severity=%v pattern=%s", name, dp.Severity, dp.Name)
                         break
+                    }
+                }
+            }
+            if eq.expectEqual && len(severities) > 1 {
+                var first guard.Severity
+                for _, s := range severities {
+                    if first == 0 {
+                        first = s
+                    } else {
+                        assert.Equal(t, first, s,
+                            "severity mismatch in %q", eq.name)
                     }
                 }
             }
@@ -668,7 +698,7 @@ func BenchmarkContainerK8sGoldenCorpus(b *testing.B) {
 }
 ```
 
-**Target**: Full container/k8s corpus (99 entries) < 2ms total.
+**Target**: Full container/k8s corpus (116 entries) < 2ms total.
 
 ---
 
@@ -783,6 +813,8 @@ func TestSecurityKubectlDeleteResourceEscalation(t *testing.T) {
         {"pvc", guard.High},
         {"node", guard.High},
         {"service", guard.High},
+        {"secret", guard.High},
+        {"secrets", guard.High},
     }
 
     for _, tt := range highImpact {
@@ -799,7 +831,7 @@ func TestSecurityKubectlDeleteResourceEscalation(t *testing.T) {
     }
 
     // Generic resources should be Medium
-    genericResources := []string{"pod", "configmap", "secret", "ingress", "job", "cronjob"}
+    genericResources := []string{"pod", "configmap", "ingress", "job", "cronjob"}
     for _, res := range genericResources {
         t.Run("generic-"+res, func(t *testing.T) {
             testCmd := cmd("kubectl", []string{"delete", res, "test"}, nil)
@@ -914,9 +946,9 @@ Manually verify kubectl delete with all significant resource types:
 2. **All deterministic examples pass** — E1-E7
 3. **All fault injection tests pass** — F1-F3
 4. **All security tests pass** — SEC1-SEC3
-5. **Golden file corpus passes** — All 99 container/k8s entries
+5. **Golden file corpus passes** — All 116 container/k8s entries
 6. **Pattern reachability 100%** — Every destructive pattern reachable across
-   all 4 packs (30 patterns total)
+   all 4 packs (35 patterns total)
 7. **Cross-pack isolation verified** — P7 passes
 8. **Split env sensitivity verified** — P3 passes for all 4 packs
 9. **Docker dual-syntax parity** — P4 passes
@@ -934,13 +966,28 @@ Manually verify kubectl delete with all significant resource types:
 
 ### Tracked Metrics
 
-- Pattern count by pack (safe + destructive) — target: 17 safe + 30 destructive
+- Pattern count by pack (safe + destructive) — target: 17 safe + 35 destructive
   across 4 packs
 - Test count by category (unit, reachability, golden, property, security)
-- Golden file entry count — target: 99 entries across 4 packs
+- Golden file entry count — target: 116 entries across 4 packs
 - ArgAt matching latency per pattern (from B1)
 - Environment sensitivity coverage: kubectl + helm = env-sensitive,
   docker + compose = not env-sensitive
 - Upstream comparison divergence count and categorization
 - Docker dual-syntax coverage: 100% parity verified
 - Compose dual-naming coverage: 100% parity verified
+
+## Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-reviewer | P0 | P2 safe-pattern Not clauses incomplete (helm S2, kubectl S4) | Incorporated | P2 comment updated to mention helm S2 and kubectl S4 Not clause requirements |
+| 2 | dcg-reviewer | P1 | P8 missing plural resource forms | Incorporated | specificResources list expanded with all plural forms and secret/secrets |
+| 3 | dcg-reviewer | P2 | P7 missing compose-plugin form | Incorporated | Added plugin form entry with ownPackID mapping |
+| 4 | dcg-reviewer | P2 | O1 corpus count outdated (99→116) | Incorporated | Updated to 116 throughout |
+| 5 | dcg-reviewer | P3 | B2 corpus count outdated | Incorporated | Updated to 116 |
+| 6 | dcg-alt-reviewer | P0 | P2 safe-pattern Not clauses incomplete | Incorporated | Duplicate of #1; same fix |
+| 7 | dcg-alt-reviewer | P1 | SEC2 secret still at Medium instead of High | Incorporated | Moved secret/secrets from genericResources to highImpact |
+| 8 | dcg-alt-reviewer | P2 | O2 logs but doesn't assert severity equality | Incorporated | Changed to assert with expectEqual field and documented expected differences |
+| 9 | dcg-alt-reviewer | P2 | P7 only uses standalone compose form | Incorporated | Duplicate of #3; same fix |
+| 10 | dcg-alt-reviewer | P2 | Exit criteria counts outdated | Incorporated | Updated to 35 patterns, 116 golden entries |
