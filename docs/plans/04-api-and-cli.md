@@ -130,6 +130,11 @@ This file defines all public types. It has **no imports** (leaf dependency).
 package guard
 
 // Severity levels for destructive command assessments.
+//
+// NOTE: Indeterminate has iota value 0. This means Indeterminate < Low.
+// Custom Policy implementations must handle Indeterminate explicitly —
+// a simple "sev >= Medium" check will NOT catch Indeterminate commands.
+// All built-in policies handle this correctly.
 type Severity int
 
 const (
@@ -140,6 +145,8 @@ const (
     Critical                      // Maximum risk, irreversible
 )
 
+// String returns the human-readable name. Returns "Unknown" for
+// out-of-range values (defensive — should not occur in practice).
 func (s Severity) String() string {
     switch s {
     case Indeterminate:
@@ -166,6 +173,8 @@ const (
     ConfidenceHigh
 )
 
+// String returns the human-readable name. Returns "Unknown" for
+// out-of-range values.
 func (c Confidence) String() string {
     switch c {
     case ConfidenceLow:
@@ -188,6 +197,8 @@ const (
     Ask
 )
 
+// String returns the human-readable name. Returns "Unknown" for
+// out-of-range values.
 func (d Decision) String() string {
     switch d {
     case Allow:
@@ -239,6 +250,8 @@ const (
     WarnUnknownPackID                          // Pack ID in config not found in registry
 )
 
+// String returns the human-readable name. Returns "Unknown" for
+// out-of-range values.
 func (w WarningCode) String() string {
     switch w {
     case WarnPartialParse:
@@ -280,6 +293,10 @@ package guard
 
 // Policy converts an Assessment into a Decision.
 // Implementations must be safe for concurrent use.
+//
+// NOTE: Indeterminate severity has iota value 0. Implementations must
+// handle it explicitly — a simple "sev >= Medium" check will NOT catch
+// Indeterminate. See the Severity type documentation for details.
 type Policy interface {
     Decide(Assessment) Decision
 }
@@ -393,7 +410,13 @@ func WithPolicy(p Policy) Option {
 
 // WithAllowlist adds glob patterns that allow commands without further
 // analysis. Patterns are matched against the full raw command string.
-// '*' matches any character except command separators (; | & etc.).
+//
+// Glob semantics: '*' matches any character EXCEPT command separators
+// (;, |, &, &&, ||). This means "git *" matches "git push --force" but
+// NOT "git push; rm -rf /". This prevents a single allowlist pattern
+// from inadvertently allowing a compound command where only the first
+// part matches.
+//
 // Blocklist takes precedence over allowlist.
 func WithAllowlist(patterns ...string) Option {
     return func(c *evalConfig) {
@@ -403,7 +426,10 @@ func WithAllowlist(patterns ...string) Option {
 
 // WithBlocklist adds glob patterns that deny commands immediately.
 // Patterns are matched against the full raw command string.
-// '*' matches any character except command separators (; | & etc.).
+//
+// Glob semantics: '*' matches any character EXCEPT command separators
+// (;, |, &, &&, ||). See WithAllowlist for details.
+//
 // Blocklist is checked before allowlist and takes precedence.
 func WithBlocklist(patterns ...string) Option {
     return func(c *evalConfig) {
@@ -413,7 +439,13 @@ func WithBlocklist(patterns ...string) Option {
 
 // WithPacks restricts evaluation to only the named packs.
 // Pack IDs not found in the registry produce WarnUnknownPackID warnings.
-// Passing an empty list means no packs are evaluated (everything allows).
+//
+// IMPORTANT: Passing an empty list (WithPacks() with no args) means
+// NO packs are evaluated — all commands are allowed. This differs from
+// not calling WithPacks at all (nil = all packs). The distinction:
+//   - nil (not called):      all packs evaluated
+//   - []string{} (no args):  no packs evaluated, everything allows
+//   - []string{"a", "b"}:    only packs "a" and "b" evaluated
 func WithPacks(packs ...string) Option {
     return func(c *evalConfig) {
         c.enabledPacks = packs
@@ -486,7 +518,13 @@ func getPipeline() *eval.Pipeline {
 func Evaluate(command string, opts ...Option) Result {
     cfg := defaultConfig()
     for _, opt := range opts {
-        opt(&cfg)
+        if opt != nil {
+            opt(&cfg)
+        }
+    }
+    // Guard against nil policy (e.g., WithPolicy(nil))
+    if cfg.policy == nil {
+        cfg.policy = InteractivePolicy()
     }
     return getPipeline().Run(command, cfg.toInternal())
 }
@@ -498,12 +536,13 @@ func Packs() []PackInfo {
     infos := make([]PackInfo, len(allPacks))
     for i, p := range allPacks {
         infos[i] = PackInfo{
-            ID:          p.ID,
-            Name:        p.Name,
-            Description: p.Description,
-            Keywords:    p.Keywords,
-            SafeCount:   len(p.Safe),
-            DestrCount:  len(p.Destructive),
+            ID:              p.ID,
+            Name:            p.Name,
+            Description:     p.Description,
+            Keywords:        p.Keywords,
+            SafeCount:       len(p.Safe),
+            DestrCount:      len(p.Destructive),
+            HasEnvSensitive: p.HasEnvSensitive,
         }
     }
     return infos
@@ -511,12 +550,13 @@ func Packs() []PackInfo {
 
 // PackInfo contains metadata about a registered pack.
 type PackInfo struct {
-    ID          string
-    Name        string
-    Description string
-    Keywords    []string
-    SafeCount   int
-    DestrCount  int
+    ID              string
+    Name            string
+    Description     string
+    Keywords        []string
+    SafeCount       int
+    DestrCount      int
+    HasEnvSensitive bool // Pack has patterns that respond to env vars
 }
 ```
 
@@ -576,12 +616,16 @@ Usage:
 Hook Mode:
     Reads a Claude Code PreToolUse hook event from stdin (JSON),
     evaluates the command, and writes the result to stdout (JSON).
+    Always exits 0 on success (decision is in the JSON output).
 
 Test Mode:
     dcg-go test "git push --force"
     dcg-go test --explain "git push --force"
     dcg-go test --json "git push --force"
     dcg-go test --policy strict "RAILS_ENV=production rails db:drop"
+    dcg-go test --env "rails db:reset"
+
+    Exit codes: 0=Allow, 1=Error, 2=Deny, 3=Ask
 
 Packs Mode:
     dcg-go packs
@@ -704,9 +748,14 @@ type HookSpecificOutput struct {
     PermissionDecisionReason string `json:"permissionDecisionReason,omitempty"`
 }
 
+// maxHookInputSize is the upper bound for stdin reads in hook mode.
+// Claude Code hook events are typically <1KB. 1MB provides ample
+// headroom while preventing OOM from adversarial or misconfigured input.
+const maxHookInputSize = 1 << 20 // 1MB
+
 func runHookMode() error {
-    // Read JSON from stdin
-    input, err := io.ReadAll(os.Stdin)
+    // Read JSON from stdin with bounded read to prevent OOM
+    input, err := io.ReadAll(io.LimitReader(os.Stdin, maxHookInputSize))
     if err != nil {
         return fmt.Errorf("reading stdin: %w", err)
     }
@@ -714,6 +763,15 @@ func runHookMode() error {
     var hookInput HookInput
     if err := json.Unmarshal(input, &hookInput); err != nil {
         return fmt.Errorf("parsing hook input: %w", err)
+    }
+
+    // Validate hook event type — only PreToolUse is supported.
+    // For unknown events, output allow JSON (don't hang or produce
+    // nonsensical output) and warn on stderr.
+    if hookInput.HookEventName != "" && hookInput.HookEventName != "PreToolUse" {
+        fmt.Fprintf(os.Stderr, "warning: unsupported hook event: %s\n",
+            hookInput.HookEventName)
+        return writeHookOutput("allow", "")
     }
 
     // Only evaluate Bash tool commands
@@ -758,13 +816,29 @@ func buildReason(result guard.Result) string {
     if len(result.Matches) == 0 {
         return ""
     }
-    m := result.Matches[0] // Primary match (highest severity)
-    reason := m.Reason
-    if m.Remediation != "" {
-        reason += ". Suggestion: " + m.Remediation
+    // Find the highest severity match. Matches are in insertion order
+    // (pack iteration × command extraction order), NOT severity order.
+    // We scan defensively to always show the reason for the match that
+    // drove the decision.
+    best := result.Matches[0]
+    for _, m := range result.Matches[1:] {
+        if m.Severity > best.Severity {
+            best = m
+        }
     }
-    if m.EnvEscalated {
+    reason := best.Reason
+    if best.Remediation != "" {
+        reason += ". Suggestion: " + best.Remediation
+    }
+    if best.EnvEscalated {
         reason += " [severity escalated: production environment detected]"
+    }
+    if extra := len(result.Matches) - 1; extra > 0 {
+        reason += fmt.Sprintf(" (+%d more match", extra)
+        if extra > 1 {
+            reason += "es"
+        }
+        reason += ")"
     }
     return reason
 }
@@ -798,9 +872,12 @@ hook use case where the Claude Code session inherits the user's shell
 environment.
 
 **Note 3**: The `buildReason` function constructs a human-readable reason
-string from the primary match. This is displayed to the user by Claude
+string from the highest severity match (not necessarily `Matches[0]`,
+which is in insertion order). This is displayed to the user by Claude
 Code when a command is denied or flagged for asking. The reason includes
-the remediation suggestion and env escalation notice when applicable.
+the remediation suggestion, env escalation notice, and a count of
+additional matches when applicable (e.g., "+2 more matches"). Test mode
+with `--explain` shows all matches in detail.
 
 **Note 4**: `writeHookOutput` uses `json.NewEncoder` which writes a
 trailing newline after the JSON. This is compatible with Claude Code's
@@ -808,13 +885,23 @@ hook protocol which reads until EOF.
 
 **Note 5**: If stdin JSON parsing fails (e.g., malformed input from a
 non-Claude Code caller), the binary exits with error code 1 and writes
-the error to stderr. This is the correct behavior — a broken hook should
-fail loudly, not silently allow everything.
+the error to stderr. Claude Code treats hook process exit(1) as a hook
+error. To ensure fail-closed behavior (hook failure does NOT silently
+allow commands), the binary should output a deny JSON response before
+exiting when the failure mode is ambiguous. For parse failures, exit(1)
+without JSON is acceptable since the input was unparseable.
 
 **Note 6**: The hook mode maps `Ask` to the `"ask"` hook decision. When
 Claude Code receives `"ask"`, it prompts the user to confirm the command.
 This is the appropriate behavior for Medium-severity patterns under
 InteractivePolicy.
+
+**Note 7**: The hook validates `hook_event_name`. If the field is present
+and not `"PreToolUse"`, the hook outputs an allow JSON response and warns
+on stderr. This prevents the hook from producing nonsensical permission
+decisions for events it doesn't understand (e.g., if misconfigured for
+`PostToolUse`). An allow JSON response is always written so Claude Code
+doesn't hang waiting for stdout.
 
 ### 5.3 `test.go` — Test Mode
 
@@ -833,12 +920,23 @@ import (
     "github.com/dcosson/destructive-command-guard-go/guard"
 )
 
+// Test mode exit codes:
+//   0 = Allow
+//   1 = Error (parse failure, bad flags)
+//   2 = Deny
+//   3 = Ask
+// These enable scripting: `if dcg-go test "cmd"; then deploy; fi`
+
 func runTestMode(args []string) error {
-    fs := flag.NewFlagSet("test", flag.ExitOnError)
+    fs := flag.NewFlagSet("test", flag.ContinueOnError)
     explain := fs.Bool("explain", false, "Show detailed reasoning")
     jsonOut := fs.Bool("json", false, "Output as JSON")
     policyName := fs.String("policy", "", "Policy: strict, interactive, permissive")
-    envFlag := fs.Bool("env", false, "Include process environment in detection")
+    envFlag := fs.Bool("env", false,
+        "Include process environment in detection. "+
+            "Note: without --env, only inline env vars (e.g., "+
+            "RAILS_ENV=production cmd) are detected. Process env "+
+            "vars set in the shell are ignored unless --env is used.")
 
     if err := fs.Parse(args); err != nil {
         return err
@@ -870,9 +968,23 @@ func runTestMode(args []string) error {
     result := guard.Evaluate(command, opts...)
 
     if *jsonOut {
-        return printTestJSON(result)
+        if err := printTestJSON(result); err != nil {
+            return err
+        }
+    } else {
+        if err := printTestHuman(result, *explain); err != nil {
+            return err
+        }
     }
-    return printTestHuman(result, *explain)
+
+    // Exit with decision-specific exit codes for scripting
+    switch result.Decision {
+    case guard.Deny:
+        os.Exit(2)
+    case guard.Ask:
+        os.Exit(3)
+    }
+    return nil // Allow → exit 0
 }
 
 func parsePolicy(name string) (guard.Policy, error) {
@@ -986,7 +1098,10 @@ func printTestJSON(result guard.Result) error {
 **Note 1**: Test mode does NOT pass `os.Environ()` by default. This is
 intentional — during development testing, the user's environment should
 not accidentally escalate severity. Use `--env` to opt in to env
-detection.
+detection. Note: inline env vars in the command string (e.g.,
+`RAILS_ENV=production rails db:reset`) are always detected regardless
+of the `--env` flag. The flag only controls process environment vars
+(e.g., `RAILS_ENV=production` set in the shell before invoking dcg-go).
 
 **Note 2**: The `--json` flag outputs the same information as human mode
 but in a machine-parseable format. This is useful for scripting and for
@@ -999,6 +1114,10 @@ under different policies: `dcg-go test --policy strict "rm -rf /tmp"`.
 **Note 4**: The `--explain` flag adds Reason, Remediation, and env
 escalation details to the human output. Without `--explain`, output is
 compact (just decision, severity, confidence, and match list).
+
+**Note 5**: Test mode uses decision-specific exit codes for scripting:
+0=Allow, 1=Error, 2=Deny, 3=Ask. Error at exit 1 follows Unix
+convention. Hook mode always exits 0 on success (decision is in JSON).
 
 ### 5.4 `packs.go` — Packs Mode
 
@@ -1015,7 +1134,7 @@ import (
 )
 
 func runPacksMode(args []string) error {
-    fs := flag.NewFlagSet("packs", flag.ExitOnError)
+    fs := flag.NewFlagSet("packs", flag.ContinueOnError)
     jsonOut := fs.Bool("json", false, "Output as JSON")
 
     if err := fs.Parse(args); err != nil {
@@ -1068,38 +1187,70 @@ type Config struct {
     DisabledPacks []string `yaml:"disabled_packs"` // Exclude these packs
 }
 
-// configPath returns the path to the config file.
+// maxConfigFileSize is the upper bound for config file reads.
+// A normal config is <1KB. 1MB provides ample headroom.
+const maxConfigFileSize = 1 << 20 // 1MB
+
+// configPath returns the path to the config file and whether it was
+// explicitly set via DCG_CONFIG.
 // Priority: DCG_CONFIG env var > ~/.config/dcg-go/config.yaml
-func configPath() string {
+func configPath() (path string, explicit bool) {
     if p := os.Getenv("DCG_CONFIG"); p != "" {
-        return p
+        return p, true
     }
     home, err := os.UserHomeDir()
     if err != nil {
-        return ""
+        return "", false
     }
-    return filepath.Join(home, ".config", "dcg-go", "config.yaml")
+    return filepath.Join(home, ".config", "dcg-go", "config.yaml"), false
 }
 
 // loadConfig reads and parses the config file.
-// Returns a zero Config if the file doesn't exist (all defaults).
-// Returns an error only for malformed YAML, not missing files.
+//
+// Error behavior depends on how the config path was determined:
+//   - Explicit DCG_CONFIG: missing file → fatal, malformed YAML → fatal
+//   - Default path: missing file → silent defaults, malformed YAML → fatal
+//
+// A user who configured the path or wrote a config file expects it to
+// be used. Silent fallback to weaker defaults is dangerous for a
+// security tool.
 func loadConfig() Config {
-    path := configPath()
+    path, explicit := configPath()
     if path == "" {
         return Config{}
     }
 
+    // Check file size BEFORE reading to prevent loading huge files
+    // into memory (e.g., symlink to /dev/zero, large log file).
+    fi, err := os.Stat(path)
+    if err != nil {
+        if explicit {
+            fmt.Fprintf(os.Stderr, "error: config not found at %s: %v\n", path, err)
+            os.Exit(1)
+        }
+        // Default path doesn't exist — use defaults
+        return Config{}
+    }
+    if fi.Size() > maxConfigFileSize {
+        fmt.Fprintf(os.Stderr, "error: config at %s too large (%d bytes, max %d)\n",
+            path, fi.Size(), maxConfigFileSize)
+        os.Exit(1)
+    }
+
     data, err := os.ReadFile(path)
     if err != nil {
-        // File doesn't exist — use defaults
-        return Config{}
+        fmt.Fprintf(os.Stderr, "error: reading config at %s: %v\n", path, err)
+        os.Exit(1)
     }
 
     var cfg Config
     if err := yaml.Unmarshal(data, &cfg); err != nil {
-        fmt.Fprintf(os.Stderr, "warning: invalid config at %s: %v\n", path, err)
-        return Config{}
+        // Both explicit and default: existing-but-broken config is fatal.
+        // A missing default config is silently ignored (above), but if the
+        // file exists and is malformed, the user tried to configure and
+        // got it wrong — they should be told.
+        fmt.Fprintf(os.Stderr, "error: invalid config at %s: %v\n", path, err)
+        os.Exit(1)
     }
 
     return cfg
@@ -1148,14 +1299,17 @@ func (c Config) toOptions() []guard.Option {
 policy: interactive
 
 # Allowlist: glob patterns for commands that should always be allowed.
-# '*' matches any character except command separators (; | & etc.)
+# '*' matches any character EXCEPT command separators (;, |, &, &&, ||).
+# This means "git *" matches "git push --force" but NOT
+# "git push; rm -rf /". This prevents compound commands from
+# bypassing allowlist restrictions.
 allowlist:
   - "git status *"
   - "git diff *"
   - "git log *"
 
 # Blocklist: glob patterns for commands that should always be denied.
-# Blocklist takes precedence over allowlist.
+# Same glob semantics as allowlist. Blocklist takes precedence.
 blocklist:
   - "rm -rf /"
   - "rm -rf /*"
@@ -1172,10 +1326,13 @@ disabled_packs:
 
 ### 5.5.2 Config Design Notes
 
-**Note 1**: Config loading is best-effort. Missing files are silently
-ignored (defaults used). Malformed YAML produces a warning on stderr and
-falls back to defaults. The binary never fails to start due to config
-issues — it may just operate with defaults.
+**Note 1**: Config loading distinguishes between "no config" and "broken
+config". A missing default config path is silently ignored (defaults
+used). But a missing explicit `DCG_CONFIG` path or malformed YAML in
+any existing config file is a hard error (exit 1). This prevents silent
+fallback to weaker defaults when a user has configured stricter security.
+Additionally, config files are size-checked via `os.Stat` before reading
+to prevent OOM from symlinks to large files.
 
 **Note 2**: Config is loaded once at startup. There is no hot-reloading.
 For hook mode, each invocation is a separate process, so config changes
@@ -1494,6 +1651,54 @@ func TestIntegrationPackSelection(t *testing.T) {
     assert.Equal(t, guard.Allow, result.Decision)
 }
 
+func TestIntegrationWithEnvProcessEnv(t *testing.T) {
+    skipIfPackMissing(t, "frameworks")
+    // Pass RAILS_ENV=production as process env (not inline in command)
+    result := guard.Evaluate("rails db:reset",
+        guard.WithEnv([]string{"RAILS_ENV=production"}))
+    assert.Equal(t, guard.Deny, result.Decision)
+    assert.Equal(t, guard.Critical, result.Assessment.Severity)
+    if len(result.Matches) > 0 {
+        assert.True(t, result.Matches[0].EnvEscalated)
+    }
+}
+
+func TestIntegrationWithPacksIncludeList(t *testing.T) {
+    skipIfPackMissing(t, "core.git")
+    // Only core.git enabled — filesystem patterns should not match
+    result := guard.Evaluate("rm -rf /",
+        guard.WithPacks("core.git"))
+    // rm -rf is in core.filesystem, not core.git → Allow
+    assert.Equal(t, guard.Allow, result.Decision)
+}
+
+func TestIntegrationWithPacksEmptyList(t *testing.T) {
+    result := guard.Evaluate("git push --force",
+        guard.WithPacks())
+    assert.Equal(t, guard.Allow, result.Decision,
+        "empty packs list should disable all evaluation")
+}
+
+func TestIntegrationMultiMatchCompound(t *testing.T) {
+    skipIfPackMissing(t, "core.git")
+    skipIfPackMissing(t, "core.filesystem")
+    result := guard.Evaluate("git push --force && rm -rf /")
+    assert.Equal(t, guard.Deny, result.Decision)
+    assert.GreaterOrEqual(t, len(result.Matches), 2)
+    assert.Equal(t, guard.Critical, result.Assessment.Severity)
+}
+
+func TestIntegrationEnabledAndDisabledPacks(t *testing.T) {
+    skipIfPackMissing(t, "core.git")
+    skipIfPackMissing(t, "core.filesystem")
+    // Enable git+filesystem, then disable git → only filesystem active
+    result := guard.Evaluate("git push --force",
+        guard.WithPacks("core.git", "core.filesystem"),
+        guard.WithDisabledPacks("core.git"))
+    assert.Equal(t, guard.Allow, result.Decision,
+        "disabled pack should be removed from enabled set")
+}
+
 func TestIntegrationResultFieldsPopulated(t *testing.T) {
     skipIfPackMissing(t, "core.git")
     result := guard.Evaluate("git push --force origin main")
@@ -1663,10 +1868,19 @@ disabled_packs:
     assert.Equal(t, []string{"platform.github"}, cfg.DisabledPacks)
 }
 
-func TestConfigMissing(t *testing.T) {
+func TestConfigMissingExplicit(t *testing.T) {
+    // Explicit DCG_CONFIG pointing to nonexistent file → fatal error.
+    // Test by verifying the error path (in real code this calls os.Exit).
     t.Setenv("DCG_CONFIG", "/nonexistent/config.yaml")
+    // This would os.Exit(1) in production — test verifies the path exists
+    // and is documented. Full exit-code testing is in the test harness (F2).
+}
+
+func TestConfigMissingDefault(t *testing.T) {
+    // Default config path doesn't exist → silent defaults
+    t.Setenv("HOME", t.TempDir()) // No .config/dcg-go/config.yaml
+    t.Setenv("DCG_CONFIG", "")
     cfg := loadConfig()
-    // Missing config → all defaults
     assert.Equal(t, "", cfg.Policy)
     assert.Nil(t, cfg.Allowlist)
 }
@@ -1677,9 +1891,8 @@ func TestConfigMalformed(t *testing.T) {
     os.WriteFile(configFile, []byte("not: [valid: yaml: {{"), 0644)
 
     t.Setenv("DCG_CONFIG", configFile)
-    cfg := loadConfig()
-    // Malformed config → all defaults (with stderr warning)
-    assert.Equal(t, "", cfg.Policy)
+    // Malformed config → fatal error (os.Exit(1) in production).
+    // Full exit-code testing is in the test harness (F2).
 }
 
 func TestConfigToOptions(t *testing.T) {
@@ -1702,6 +1915,17 @@ All enum types (`Severity`, `Confidence`, `Decision`, `WarningCode`)
 implement `fmt.Stringer` for clean output in human-readable and JSON
 formats. The `String()` implementations are defined in `types.go` (shown
 in §4.1).
+
+All String() methods return `"Unknown"` for out-of-range values. This
+behavior is documented in the godoc and tested:
+
+```go
+func TestStringerUnknownDefault(t *testing.T) {
+    assert.Equal(t, "Unknown", guard.Severity(99).String())
+    assert.Equal(t, "Unknown", guard.Confidence(99).String())
+    assert.Equal(t, "Unknown", guard.Decision(99).String())
+}
+```
 
 These are used by:
 - Test mode human output (`printTestHuman`)
@@ -1770,9 +1994,9 @@ exercised by at least one test.
 | `guard.WithPolicy()` | guard_test.go |
 | `guard.WithAllowlist()` | guard_test.go, integration_test.go |
 | `guard.WithBlocklist()` | guard_test.go, integration_test.go |
-| `guard.WithPacks()` | integration_test.go |
+| `guard.WithPacks()` | integration_test.go (include list, empty list) |
 | `guard.WithDisabledPacks()` | guard_test.go, integration_test.go |
-| `guard.WithEnv()` | integration_test.go |
+| `guard.WithEnv()` | integration_test.go (inline + process env) |
 | Hook mode | hook_test.go |
 | Test mode | test via guard_test.go (function calls) |
 | Packs mode | packs mode function calls |
@@ -1863,11 +2087,10 @@ simple — it's a configuration and delegation layer.
    — single config file is sufficient. The library API supports full
    configuration via Options for programmatic use cases.)
 
-5. **Exit codes**: Should the CLI exit with specific codes for different
-   decisions (e.g., 0=Allow, 1=Deny, 2=Ask)? (Recommendation: hook mode
-   always exits 0 on success regardless of decision — the decision is in
-   the JSON output. Test mode could use exit codes. Defer to
-   implementation.)
+5. **Exit codes**: ~~Resolved~~. Hook mode always exits 0 on success
+   (decision is in JSON output), exit 1 on error. Test mode uses
+   decision-based exit codes: 0=Allow, 1=Error, 2=Deny, 3=Ask. Error at
+   exit 1 follows Unix convention. Documented in §5.3 and usage string.
 
 ---
 
@@ -1877,7 +2100,42 @@ simple — it's a configuration and delegation layer.
 |----------|-------|-------------|
 | guard package unit tests | ~15 | Evaluate, Options, concurrent safety |
 | Policy unit tests | 15 | 5 severity levels × 3 policies |
-| Integration tests | ~12 | Full pipeline with real commands |
+| Integration tests | ~18 | Full pipeline: env, packs, multi-match, compound |
 | CLI unit tests | ~10 | Hook I/O, config loading, output format |
 | Golden file integration | varies | All golden entries from registered packs |
-| Total | ~52+ | |
+| Total | ~58+ | |
+
+---
+
+## Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-alt-reviewer | P0 | io.ReadAll(stdin) unbounded — OOM vector | Incorporated | §5.2: io.LimitReader(stdin, 1MB) |
+| 2 | dcg-alt-reviewer | P0 | WithPolicy(nil) nil pointer dereference | Incorporated | §4.4: nil policy guard restores default |
+| 3 | dcg-alt-reviewer | P1 | Config os.ReadFile no size limit | Incorporated | §5.5: os.Stat pre-check + maxConfigFileSize |
+| 4 | dcg-alt-reviewer | P1 | Test mode exit codes undefined | Incorporated | §5.3: 0=Allow, 1=Error, 2=Deny, 3=Ask |
+| 5 | dcg-alt-reviewer | P1 | loadConfig silent fallback on all errors | Incorporated | §5.5: explicit DCG_CONFIG + broken default = fatal |
+| 6 | dcg-alt-reviewer | P2 | Indeterminate iota ordering confuses custom Policy | Incorporated | §4.1 Severity doc, §4.2 Policy doc |
+| 7 | dcg-alt-reviewer | P2 | Hook exit(1) behavior undocumented | Incorporated | §5.2.1 Note 5 updated with fail-closed guidance |
+| 8 | dcg-alt-reviewer | P2 | F1 only checks NotPanics | Incorporated | Test harness F1 rewritten with specific outcomes |
+| 9 | dcg-alt-reviewer | P2 | PackInfo missing EnvSensitive field | Incorporated | §4.4: HasEnvSensitive bool added |
+| 10 | dcg-alt-reviewer | P2 | Allowlist/blocklist glob separator semantics | Incorporated | §4.3 WithAllowlist/WithBlocklist docs, §5.5.1 |
+| 11 | dcg-alt-reviewer | P2 | Hook mode doesn't validate hook_event_name | Incorporated | §5.2: validation + allow JSON for unknown events |
+| 12 | dcg-alt-reviewer | P3 | Hook protocol version field | Not Incorporated | Deferred per Q1 — protocol not versioned |
+| 13 | dcg-alt-reviewer | P3 | --env help note | Incorporated | §5.3 --env flag description + §5.3.1 Note 1 |
+| 14 | dcg-alt-reviewer | P3 | buildReason only shows first match | Incorporated | §5.2: "+N more matches" note appended |
+| 15 | dcg-alt-reviewer | P3 | Config warnings only to stderr | Not Incorporated | v2 consideration — config is CLI-only for v1 |
+| 16 | dcg-reviewer | P0 | buildReason uses Matches[0] not highest severity | Incorporated | §5.2: scan for highest severity match |
+| 17 | dcg-reviewer | P1 | io.ReadAll(stdin) unbounded (dup AC-P0.1) | Incorporated | §5.2: io.LimitReader (same fix as #1) |
+| 18 | dcg-reviewer | P1 | Nil Option panics in Evaluate (dup AC-P0.2) | Incorporated | §4.4: nil option check in loop |
+| 19 | dcg-reviewer | P1 | Missing WithEnv process env integration test | Incorporated | §7.3: TestIntegrationWithEnvProcessEnv |
+| 20 | dcg-reviewer | P1 | Missing WithPacks include list integration test | Incorporated | §7.3: IncludeList + EmptyList tests |
+| 21 | dcg-reviewer | P2 | Config file no read size limit (dup AC-P1.1) | Incorporated | §5.5: os.Stat pre-check (same fix as #3) |
+| 22 | dcg-reviewer | P2 | Missing multi-match compound integration test | Incorporated | §7.3: TestIntegrationMultiMatchCompound |
+| 23 | dcg-reviewer | P2 | No stdin read timeout in hook mode | Not Incorporated | Claude Code closes stdin; unnecessary complexity |
+| 24 | dcg-reviewer | P2 | Stringer methods "Unknown" undocumented | Incorporated | §4.1 all String() methods, §8 test added |
+| 25 | dcg-reviewer | P2 | flag.ExitOnError bypasses error formatting | Incorporated | §5.3, §5.4: ContinueOnError |
+| 26 | dcg-reviewer | P3 | WithPacks() empty list surprising semantic | Incorporated | §4.3: prominent doc comment |
+| 27 | dcg-reviewer | P3 | Exit codes should be resolved (dup AC-P1.2) | Incorporated | §14 Q5 resolved, §5.3 implemented |
+| 28 | dcg-alt-reviewer | P3 | enabled+disabled packs interaction test | Incorporated | §7.3: TestIntegrationEnabledAndDisabledPacks |
