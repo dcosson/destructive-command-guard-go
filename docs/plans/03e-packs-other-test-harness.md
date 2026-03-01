@@ -29,8 +29,9 @@ These packs introduce testing challenges specific to their domains:
 - **Colon/dot-delimited subcommands**: `rails db:reset`, `mix ecto.reset`
   use punctuation within argument tokens. Tests must verify exact matching
   (no partial matches on `db:` or `ecto.`).
-- **Vault safe-pattern known gap**: S2 shadows `vault token revoke` — test
-  harness must document and verify this gap.
+- **Vault S2 Not clause correctness**: S2 has Not clauses for `auth disable`,
+  `token revoke`, `policy delete`, and `audit disable` — test harness must
+  verify these exclusions work correctly.
 
 ---
 
@@ -68,10 +69,13 @@ This is critical for:
 - frameworks S1: includes `rails db:migrate` as safe but must not match
   destructive `db:drop`, `db:reset`, etc. (no Not clause needed — different
   ArgAt values).
+- frameworks S4b: includes `manage.py migrate` as safe — must not shadow
+  D7 `manage.py migrate --run-syncdb` (S4b's `Not(--run-syncdb)` prevents).
 - rsync S1: includes rsync-without-delete as safe — must exclude all
-  `--delete*` flag variants via Not clauses.
-- vault S2: includes `vault token` as safe — known gap for `vault token
-  revoke` (documented in plan §5.3.1 note 5).
+  `--delete*` flag variants and `--remove-source-files` via Not clauses.
+- vault S2: includes `vault token`, `vault auth`, `vault policy`,
+  `vault audit` as safe — S2's Not clauses exclude `auth disable`,
+  `token revoke`, `policy delete`, `audit disable` (D7-D10).
 - vault S3: includes `vault secrets enable` — must not shadow D1
   `vault secrets disable` (different ArgAt(1) values, no conflict).
 
@@ -277,7 +281,7 @@ func TestPropertyFrameworkToolIsolation(t *testing.T) {
         "rake":      {"rake-db-drop-all", "rake-db-destructive"},
         "manage.py": {"managepy-flush", "managepy-migrate-syncdb"},
         "artisan":   {"artisan-migrate-fresh", "artisan-migrate-reset"},
-        "mix":       {"mix-ecto-reset"},
+        "mix":       {"mix-ecto-reset", "mix-ecto-drop"},
     }
 
     // Commands from wrong tools should never match
@@ -469,6 +473,11 @@ func TestDeterministicVaultSeverityOrdering(t *testing.T) {
         {"vault-lease-revoke-prefix", guard.Critical},
         {"vault-delete", guard.High},
         {"vault-kv-delete", guard.High},
+        {"vault-auth-disable", guard.Critical},
+        {"vault-token-revoke", guard.High},
+        {"vault-policy-delete", guard.High},
+        {"vault-audit-disable", guard.Medium},
+        {"vault-kv-metadata-delete", guard.Critical},
     }
 
     for _, tt := range expected {
@@ -502,6 +511,7 @@ func TestDeterministicRsyncFlagCombinations(t *testing.T) {
     deleteFlags := []string{
         "--delete", "--delete-before", "--delete-after",
         "--delete-during", "--delete-excluded", "--delete-delay",
+        "--remove-source-files",
     }
 
     for mask := 0; mask < (1 << len(deleteFlags)); mask++ {
@@ -551,13 +561,13 @@ func TestDeterministicRsyncFlagCombinations(t *testing.T) {
 
 ### O1: Golden File Corpus
 
-Run the full golden file corpus (82 entries across 4 packs) through the
+Run the full golden file corpus (95 entries across 4 packs) through the
 evaluation pipeline and verify decisions match.
 
 ```go
 func TestOracleGoldenFileCorpus(t *testing.T) {
     entries := loadGoldenEntries(t, "03e-packs-other")
-    assert.Equal(t, 82, len(entries), "expected 82 golden entries")
+    assert.Equal(t, 95, len(entries), "expected 95 golden entries")
 
     for _, entry := range entries {
         t.Run(entry.Command, func(t *testing.T) {
@@ -596,6 +606,7 @@ func TestOracleCrossPackSeverityConsistency(t *testing.T) {
         "artisan-migrate-fresh":  guard.High,
         "artisan-migrate-reset":  guard.High,
         "mix-ecto-reset":         guard.High,
+        "mix-ecto-drop":          guard.High,
     }
 
     for name, expected := range frameworkSeverities {
@@ -693,7 +704,7 @@ corpus:
 ```go
 func BenchmarkFullPipelineOtherPacks(b *testing.B) {
     goldenCmds := loadGoldenCommandStrings("03e-packs-other")
-    assert.Equal(b, 82, len(goldenCmds))
+    assert.Equal(b, 95, len(goldenCmds))
 
     b.ResetTimer()
     for i := 0; i < b.N; i++ {
@@ -798,22 +809,51 @@ func TestSecurityNoSecretLeakage(t *testing.T) {
 }
 ```
 
-### SEC2: Vault Known Gap Documentation
+### SEC2: Vault S2 Not Clause Correctness
 
-Verify the documented known gap where S2 shadows `vault token revoke`:
+Verify that S2's Not clauses correctly exclude all formerly-shadowed
+destructive operations, allowing D7-D10 to match:
 
 ```go
-func TestSecurityVaultTokenRevokeKnownGap(t *testing.T) {
-    // vault token revoke should be caught by S2 safe pattern (known gap)
-    tokenRevokeCmd := cmd("vault", []string{"token", "revoke", "s.abc123"}, nil)
+func TestSecurityVaultS2NotClauses(t *testing.T) {
+    s2 := vaultPack.Safe[1].Match // S2 vault-inspect-safe
 
-    // Verify S2 matches
-    assert.True(t, vaultPack.Safe[1].Match.Match(tokenRevokeCmd),
-        "vault token revoke should match S2 safe pattern (known gap)")
+    // Destructive operations that S2 must NOT match (Not clauses)
+    destructiveOps := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+    }{
+        {"vault auth disable", cmd("vault", []string{"auth", "disable", "userpass/"}, nil)},
+        {"vault token revoke", cmd("vault", []string{"token", "revoke", "s.abc123"}, nil)},
+        {"vault policy delete", cmd("vault", []string{"policy", "delete", "my-policy"}, nil)},
+        {"vault audit disable", cmd("vault", []string{"audit", "disable", "file/"}, nil)},
+    }
+    for _, op := range destructiveOps {
+        t.Run("not-safe/"+op.name, func(t *testing.T) {
+            assert.False(t, s2.Match(op.cmd),
+                "%s must NOT match S2 safe pattern", op.name)
+        })
+    }
 
-    // This means no destructive pattern will be evaluated
-    // Document this as expected behavior for v1
-    t.Log("KNOWN GAP: vault token revoke classified as safe due to S2 matching 'vault token'")
+    // Safe operations that S2 must still match
+    safeOps := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+    }{
+        {"vault auth list", cmd("vault", []string{"auth", "list"}, nil)},
+        {"vault auth enable", cmd("vault", []string{"auth", "enable", "userpass"}, nil)},
+        {"vault token lookup", cmd("vault", []string{"token", "lookup"}, nil)},
+        {"vault token create", cmd("vault", []string{"token", "create"}, nil)},
+        {"vault policy read", cmd("vault", []string{"policy", "read", "my-policy"}, nil)},
+        {"vault policy list", cmd("vault", []string{"policy", "list"}, nil)},
+        {"vault audit list", cmd("vault", []string{"audit", "list"}, nil)},
+    }
+    for _, op := range safeOps {
+        t.Run("safe/"+op.name, func(t *testing.T) {
+            assert.True(t, s2.Match(op.cmd),
+                "%s should match S2 safe pattern", op.name)
+        })
+    }
 }
 ```
 
@@ -865,7 +905,9 @@ dcg-go test "APP_ENV=production php artisan migrate:fresh"
 
 # Elixir
 dcg-go test "mix ecto.reset"
+dcg-go test "mix ecto.drop"
 dcg-go test "MIX_ENV=prod mix ecto.reset"
+dcg-go test "MIX_ENV=prod mix ecto.drop"
 ```
 
 Verify: Correct pack, rule, severity, confidence, env_escalated flag.
@@ -877,11 +919,19 @@ dcg-go test "vault secrets disable kv-v2/"
 dcg-go test "vault kv destroy -versions=1,2,3 secret/myapp"
 dcg-go test "vault lease revoke -prefix aws/creds/my-role/"
 dcg-go test "vault delete secret/myapp"
+dcg-go test "vault auth disable userpass/"
+dcg-go test "vault token revoke s.abc123"
+dcg-go test "vault policy delete my-policy"
+dcg-go test "vault audit disable file/"
+dcg-go test "vault kv metadata delete secret/myapp"
 
 # Safe commands
 dcg-go test "vault read secret/myapp"
 dcg-go test "vault kv put secret/myapp key=value"
 dcg-go test "vault status"
+dcg-go test "vault auth list"
+dcg-go test "vault token lookup"
+dcg-go test "vault policy read my-policy"
 ```
 
 ### MQ3: GitHub Scenario Walkthrough
@@ -903,6 +953,7 @@ dcg-go test "gh issue list"
 dcg-go test "rsync --delete -avz /src/ user@host:/dest/"
 dcg-go test "rsync --delete-excluded -avz /src/ /dest/"
 dcg-go test "rsync --delete-before -avz /src/ /dest/"
+dcg-go test "rsync --remove-source-files -avz /src/ /dest/"
 
 # Safe commands
 dcg-go test "rsync -avz /src/ /dest/"
@@ -926,17 +977,17 @@ dcg-go test "rsync file.txt /backup/"
 
 Implementation of the 03e packs is complete when:
 
-1. **All 22 destructive patterns** pass their reachability tests (P1)
+1. **All 29 destructive patterns** pass their reachability tests (P1)
 2. **All 12 safe patterns** do not shadow any destructive pattern (P2)
 3. **Environment sensitivity split** verified: frameworks + vault = true,
    rsync + github = false (P3)
 4. **Dual invocation parity** verified for manage.py and artisan (P5)
-5. **82 golden file entries** pass through the evaluation pipeline (O1)
-6. **Per-pattern unit tests** pass (~60 match/near-miss tests from §9)
+5. **95 golden file entries** pass through the evaluation pipeline (O1)
+6. **Per-pattern unit tests** pass (~80 match/near-miss tests from §9)
 7. **Benchmarks** show <50μs per-command matching for all 4 packs (B1)
 8. **No panics** on malformed input (F1, F2)
-9. **rsync flag exhaustion** — all 64 flag combinations tested (D4)
-10. **Vault known gap** documented and verified (SEC2)
+9. **rsync flag exhaustion** — all 128 flag combinations tested (D4)
+10. **Vault S2 Not clauses** verified for all 4 excluded operations (SEC2)
 11. **Framework env escalation** canonical scenario passes (SEC3)
 12. **Zero secret leakage** in match results (SEC1)
 
@@ -944,12 +995,28 @@ Implementation of the 03e packs is complete when:
 
 ## Metrics Dashboard
 
-- Pattern count: 12 safe + 22 destructive = 34 patterns across 4 packs
+- Pattern count: 12 safe + 29 destructive = 41 patterns across 4 packs
 - Test count by category (unit, reachability, golden, property, security)
-- Golden file entry count — target: 82 entries across 4 packs
+- Golden file entry count — target: 95 entries across 4 packs (44+12+23+16)
 - ArgAt matching latency per pattern (from B1)
 - Environment sensitivity coverage: frameworks + vault = env-sensitive,
   rsync + github = not env-sensitive
 - Dual invocation parity: manage.py (2 forms), artisan (2 forms)
 - Framework tool isolation: 5 tools, zero cross-tool matches
-- Vault known gap tracking: vault token revoke (v2 fix planned)
+- Vault S2 Not clause coverage: 4 exclusions (auth/disable, token/revoke,
+  policy/delete, audit/disable)
+
+---
+
+## Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | systems-engineer | P1 | Missing golden entry for rsync --delete-delay | Incorporated | Golden entry added in plan doc §6.2 |
+| 2 | systems-engineer | P2 | mix ecto.drop needs negative golden test | Incorporated | Resolved by D11 pattern; golden entry shows match |
+| 3 | systems-engineer | P1 | Missing env-escalated golden entries for D3/D5/D7/D9 | Incorporated | 4 env-escalated golden entries added in plan doc §6.1 |
+| 4 | security-correctness | P2 | SEC2 tests need S2 bypass verification | Incorporated | SEC2 rewritten to verify S2 Not clauses |
+| 5 | security-correctness | P0 | Vault S2 shadows vault auth disable | Incorporated | P2 description updated; SEC2 rewritten |
+| 6 | security-correctness | P1 | rsync --remove-source-files undetected | Incorporated | D4 flag combos updated to 7 flags / 128 combos |
+| 7 | systems-engineer | P0 | Vault S2 shadows vault auth disable | Incorporated | All test harness counts and references updated |
+| 8 | N/A | N/A | Pattern/golden/test counts | Incorporated | Updated throughout: 29 destructive, 95 golden, ~80 unit tests, 128 rsync combos |

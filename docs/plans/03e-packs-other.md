@@ -56,8 +56,8 @@ database, infrastructure/cloud, or containers/kubernetes categories:
 
 **Scope**:
 - 4 packs, each with safe + destructive patterns
-- 12 safe + 22 destructive patterns
-- 82 golden file entries across all 4 packs
+- 12 safe + 29 destructive patterns
+- 95 golden file entries across all 4 packs
 - Per-pattern unit tests with match and near-miss cases
 - Reachability tests for every destructive pattern
 - Environment escalation tests for frameworks and vault packs
@@ -277,7 +277,10 @@ var frameworksPack = packs.Pack{
             ),
         },
 
-        // S4: manage.py runserver, test, shell, etc. (non-DB — safe)
+        // S4: manage.py runserver, test, shell, migrate, etc. (non-DB — safe)
+        //     migrate is included with Not(--run-syncdb) to mirror S1's
+        //     approach for Rails. This provides explicit safe coverage
+        //     and protects against future catch-all destructive patterns.
         {
             Name: "managepy-non-db-safe",
             Match: packs.And(
@@ -315,6 +318,26 @@ var frameworksPack = packs.Pack{
                             packs.ArgAt(1, "check"),
                         ),
                     ),
+                ),
+            ),
+        },
+
+        // S4b: manage.py migrate (without --run-syncdb — safe)
+        //     migrate is the most commonly run Django command after runserver.
+        //     Not(--run-syncdb) prevents shadowing D7.
+        {
+            Name: "managepy-migrate-safe",
+            Match: packs.Or(
+                packs.And(
+                    packs.Name("manage.py"),
+                    packs.ArgAt(0, "migrate"),
+                    packs.Not(packs.Flags("--run-syncdb")),
+                ),
+                packs.And(
+                    packs.Name("python"),
+                    packs.ArgAt(0, "manage.py"),
+                    packs.ArgAt(1, "migrate"),
+                    packs.Not(packs.Flags("--run-syncdb")),
                 ),
             ),
         },
@@ -568,6 +591,20 @@ var frameworksPack = packs.Pack{
             Remediation:  "Use mix ecto.migrate to run pending migrations without data loss",
             EnvSensitive: true,
         },
+
+        // D11: mix ecto.drop (drops the database)
+        {
+            Name: "mix-ecto-drop",
+            Match: packs.And(
+                packs.Name("mix"),
+                packs.ArgAt(0, "ecto.drop"),
+            ),
+            Severity:     guard.High,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "mix ecto.drop destroys the database; all tables and data are permanently deleted",
+            Remediation:  "Use mix ecto.migrate to apply pending migrations without data loss",
+            EnvSensitive: true,
+        },
     },
 }
 ```
@@ -589,14 +626,11 @@ var frameworksPack = packs.Pack{
 3. **artisan dual invocation**: Similar to manage.py — `artisan` can be
    invoked directly or as `php artisan`. We match both forms.
 
-4. **mix ecto.drop not separate**: `mix ecto.drop` is a subset of
-   `mix ecto.reset` (reset = drop + create + migrate). We could add a
-   separate pattern for `mix ecto.drop` at High severity. Including it
-   here for completeness:
-
-   **v2 consideration**: Add `mix ecto.drop` and `mix ecto.rollback --all`
-   as separate patterns. For v1, `mix ecto.reset` covers the primary use
-   case.
+4. **mix ecto.drop included**: `mix ecto.drop` (D11) is a separate pattern
+   at High severity. While `mix ecto.reset` covers the combined operation,
+   `ecto.drop` is commonly used directly and should be detected independently.
+   **v2 consideration**: Add `mix ecto.rollback --all` which rolls back all
+   migrations, equivalent to dropping the schema.
 
 5. **Safe pattern S1 (rails db:migrate)**: Excludes `--run-syncdb` to avoid
    shadowing D7. Note: `--run-syncdb` is a Django flag, not a Rails flag.
@@ -614,7 +648,16 @@ var frameworksPack = packs.Pack{
    pattern has `EnvSensitive: true` because all framework DB operations are
    significantly more dangerous in production. The env detector checks
    `RAILS_ENV`, `RACK_ENV`, `NODE_ENV`, `FLASK_ENV`, `APP_ENV`, `MIX_ENV`
-   for production values.
+   for production values. `DJANGO_SETTINGS_MODULE` may also be detected
+   if the env detector's general "production" keyword scanner checks all
+   inline env var values — this depends on plan 02's implementation.
+
+8. **D4 EnvSensitive at Critical**: D4 (`rake db:drop:all`) has
+   `EnvSensitive: true` and `Severity: Critical`. Since Critical cannot
+   be escalated further, the `EnvSensitive` flag is functionally a no-op
+   for D4. It's kept for consistency — all framework DB operations are
+   marked env-sensitive. The env detector will detect production but
+   severity remains at Critical (capped).
 
 ---
 
@@ -623,7 +666,7 @@ var frameworksPack = packs.Pack{
 **Pack ID**: `remote.rsync`
 **Keywords**: `["rsync"]`
 **Safe Patterns**: 1
-**Destructive Patterns**: 3
+**Destructive Patterns**: 4
 **EnvSensitive**: No
 
 rsync is a file synchronization tool. Without `--delete*` flags, it only
@@ -639,8 +682,9 @@ var rsyncPack = packs.Pack{
     Keywords:    []string{"rsync"},
 
     Safe: []packs.SafePattern{
-        // S1: rsync without --delete* flags (additive-only — safe)
-        //     Must NOT match any --delete variant to avoid shadowing D1-D3.
+        // S1: rsync without --delete* or --remove-source-files flags (additive-only — safe)
+        //     Must NOT match any --delete variant or --remove-source-files
+        //     to avoid shadowing D1-D4.
         {
             Name: "rsync-no-delete-safe",
             Match: packs.And(
@@ -651,6 +695,7 @@ var rsyncPack = packs.Pack{
                 packs.Not(packs.Flags("--delete-during")),
                 packs.Not(packs.Flags("--delete-excluded")),
                 packs.Not(packs.Flags("--delete-delay")),
+                packs.Not(packs.Flags("--remove-source-files")),
             ),
         },
     },
@@ -708,6 +753,24 @@ var rsyncPack = packs.Pack{
             Remediation:  "Use --dry-run (-n) first to see what would be deleted, then run without --dry-run if the result looks correct",
             EnvSensitive: false,
         },
+
+        // D4: rsync --remove-source-files (deletes source files after transfer)
+        //     Unlike --delete* which affects the destination, this flag
+        //     deletes files at the SOURCE after successful transfer.
+        //     When both --delete* and --remove-source-files are present,
+        //     the --delete* pattern's severity dominates via aggregateAssessments.
+        {
+            Name: "rsync-remove-source",
+            Match: packs.And(
+                packs.Name("rsync"),
+                packs.Flags("--remove-source-files"),
+            ),
+            Severity:     guard.Medium,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "rsync --remove-source-files deletes source files after successful transfer; the source directory will be emptied",
+            Remediation:  "Use --dry-run (-n) first to verify which files will be transferred and removed from the source",
+            EnvSensitive: false,
+        },
     },
 }
 ```
@@ -733,8 +796,13 @@ var rsyncPack = packs.Pack{
    `--dry-run` awareness to reduce noise.
 
 4. **Multiple --delete flags**: A command like `rsync --delete --delete-excluded`
-   will match D1 (highest severity) because D1 is evaluated first. This is
-   correct — the most severe flag dominates.
+   will match both D1 and D3. `aggregateAssessments` selects the highest
+   severity match (D1 at High), so the most severe flag dominates.
+
+5. **`--remove-source-files` coexistence**: When `--remove-source-files`
+   and `--delete*` flags are both present, the command matches both D4
+   and D1/D2/D3. `aggregateAssessments` selects the highest severity,
+   so the `--delete*` severity dominates (D1 at High ≥ D4 at Medium).
 
 ---
 
@@ -743,7 +811,7 @@ var rsyncPack = packs.Pack{
 **Pack ID**: `secrets.vault`
 **Keywords**: `["vault"]`
 **Safe Patterns**: 3
-**Destructive Patterns**: 6
+**Destructive Patterns**: 11
 **EnvSensitive**: Yes
 
 HashiCorp Vault manages secrets, tokens, and leases. Destructive operations
@@ -777,6 +845,9 @@ var vaultPack = packs.Pack{
         },
 
         // S2: vault list, vault status, vault audit (inspection — safe)
+        //     Not clauses exclude destructive subcommands within safe
+        //     top-level namespaces: auth/disable, token/revoke,
+        //     policy/delete, audit/disable.
         {
             Name: "vault-inspect-safe",
             Match: packs.And(
@@ -792,12 +863,20 @@ var vaultPack = packs.Pack{
                     packs.ArgAt(0, "login"),
                     packs.ArgAt(0, "policy"),
                 ),
+                // Exclude destructive subcommands
+                packs.Not(packs.And(packs.ArgAt(0, "auth"), packs.ArgAt(1, "disable"))),
+                packs.Not(packs.And(packs.ArgAt(0, "token"), packs.ArgAt(1, "revoke"))),
+                packs.Not(packs.And(packs.ArgAt(0, "policy"), packs.ArgAt(1, "delete"))),
+                packs.Not(packs.And(packs.ArgAt(0, "audit"), packs.ArgAt(1, "disable"))),
             ),
         },
 
         // S3: vault write, vault kv put (write/update secrets — safe)
         //     Writing secrets is not destructive — it creates or updates.
-        //     The Not clauses prevent shadowing vault kv destroy paths.
+        //     Note: secrets move is classified as safe because it preserves
+        //     data under a new mount path. Services using the old path will
+        //     lose access until reconfigured, but no data is destroyed.
+        //     v2 consideration: add secrets move as Medium destructive.
         {
             Name: "vault-write-safe",
             Match: packs.And(
@@ -908,6 +987,84 @@ var vaultPack = packs.Pack{
             Remediation:  "Verify the secret path before deleting; for permanent removal, use vault kv destroy instead",
             EnvSensitive: true,
         },
+
+        // D7: vault auth disable (disables an auth method — all tokens revoked)
+        {
+            Name: "vault-auth-disable",
+            Match: packs.And(
+                packs.Name("vault"),
+                packs.ArgAt(0, "auth"),
+                packs.ArgAt(1, "disable"),
+            ),
+            Severity:     guard.Critical,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "vault auth disable removes an auth method and immediately revokes ALL tokens issued by that method; services authenticated through this method lose access",
+            Remediation:  "Verify no services depend on this auth method before disabling; check active tokens with vault token list",
+            EnvSensitive: true,
+        },
+
+        // D8: vault token revoke (revokes a specific token)
+        {
+            Name: "vault-token-revoke",
+            Match: packs.And(
+                packs.Name("vault"),
+                packs.ArgAt(0, "token"),
+                packs.ArgAt(1, "revoke"),
+            ),
+            Severity:     guard.High,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "vault token revoke immediately invalidates a token; services using this token lose Vault access",
+            Remediation:  "Check which services use this token before revoking; consider letting the token expire naturally via TTL",
+            EnvSensitive: true,
+        },
+
+        // D9: vault policy delete (removes an ACL policy)
+        {
+            Name: "vault-policy-delete",
+            Match: packs.And(
+                packs.Name("vault"),
+                packs.ArgAt(0, "policy"),
+                packs.ArgAt(1, "delete"),
+            ),
+            Severity:     guard.High,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "vault policy delete removes an ACL policy; tokens referencing this policy immediately lose the permissions it granted",
+            Remediation:  "Verify no active tokens depend on this policy before deleting; check with vault token lookup",
+            EnvSensitive: true,
+        },
+
+        // D10: vault audit disable (disables an audit device)
+        {
+            Name: "vault-audit-disable",
+            Match: packs.And(
+                packs.Name("vault"),
+                packs.ArgAt(0, "audit"),
+                packs.ArgAt(1, "disable"),
+            ),
+            Severity:     guard.Medium,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "vault audit disable removes an audit device; security audit trail is lost and subsequent operations are unlogged",
+            Remediation:  "Ensure at least one audit device remains enabled; disabling all audit devices violates compliance requirements",
+            EnvSensitive: true,
+        },
+
+        // D11: vault kv metadata delete (permanent all-version deletion)
+        //     More destructive than kv destroy (which targets specific versions)
+        //     — metadata delete removes ALL versions AND metadata for a secret.
+        {
+            Name: "vault-kv-metadata-delete",
+            Match: packs.And(
+                packs.Name("vault"),
+                packs.ArgAt(0, "kv"),
+                packs.ArgAt(1, "metadata"),
+                packs.ArgAt(2, "delete"),
+            ),
+            Severity:     guard.Critical,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "vault kv metadata delete permanently removes ALL versions and metadata for a secret; the secret is irrecoverably destroyed",
+            Remediation:  "Use vault kv delete for soft-delete of individual versions instead of permanently destroying all versions",
+            EnvSensitive: true,
+        },
     },
 }
 ```
@@ -935,14 +1092,14 @@ var vaultPack = packs.Pack{
    is the legacy path, D6 (`vault kv delete`) is the modern path. They're
    separate because the subcommand structure differs.
 
-5. **Safe pattern S2 token/auth/login**: We mark `vault token`, `vault auth`,
-   and `vault login` as safe. While `vault token revoke` is destructive,
-   the S2 safe pattern short-circuits before destructive evaluation. This
-   is a **known gap** — `vault token revoke` will be classified as safe.
-   For v1, this is acceptable because token revocation is a common
-   operational action and less destructive than secret deletion. **v2
-   consideration**: Add `vault token revoke` as a separate destructive
-   pattern and refine S2 with Not clauses.
+5. **Safe pattern S2 Not clauses**: S2 includes broad top-level subcommands
+   (`vault token`, `vault auth`, `vault policy`, `vault audit`) but adds
+   Not clauses for destructive second-level subcommands: `auth disable`,
+   `token revoke`, `policy delete`, `audit disable`. This ensures these
+   operations bypass S2 and reach the new destructive patterns D7-D10.
+   Safe subcommands like `vault auth list`, `vault auth enable`,
+   `vault token lookup`, `vault policy read`, `vault audit list` still
+   match S2 correctly.
 
 6. **Environment sensitivity**: All destructive patterns are env-sensitive.
    `VAULT_ADDR` is the primary indicator — production Vault servers
@@ -1174,6 +1331,15 @@ pack: frameworks
 rule: rails-db-schema-load
 env_escalated: false
 ---
+# D3: rails db:schema:load (env-escalated)
+command: RAILS_ENV=production rails db:schema:load
+decision: Deny
+severity: Critical
+confidence: High
+pack: frameworks
+rule: rails-db-schema-load
+env_escalated: true
+---
 # D4: rake db:drop:all (Critical — all environments)
 command: rake db:drop:all
 decision: Deny
@@ -1208,6 +1374,15 @@ pack: frameworks
 rule: rake-db-destructive
 env_escalated: false
 ---
+# D5: rake db:drop (env-escalated)
+command: RAILS_ENV=production rake db:drop
+decision: Deny
+severity: Critical
+confidence: High
+pack: frameworks
+rule: rake-db-destructive
+env_escalated: true
+---
 # D6: manage.py flush (direct invocation)
 command: manage.py flush
 decision: Deny
@@ -1227,7 +1402,7 @@ rule: managepy-flush
 env_escalated: false
 ---
 # D6: manage.py flush (env-escalated)
-command: DJANGO_SETTINGS_MODULE=myapp.settings.production python manage.py flush
+command: APP_ENV=production python manage.py flush
 decision: Deny
 severity: Critical
 confidence: High
@@ -1251,6 +1426,15 @@ confidence: Medium
 pack: frameworks
 rule: managepy-migrate-syncdb
 env_escalated: false
+---
+# D7: manage.py migrate --run-syncdb (env-escalated)
+command: APP_ENV=production manage.py migrate --run-syncdb
+decision: Deny
+severity: High
+confidence: Medium
+pack: frameworks
+rule: managepy-migrate-syncdb
+env_escalated: true
 ---
 # D8: artisan migrate:fresh (direct)
 command: artisan migrate:fresh
@@ -1296,6 +1480,15 @@ pack: frameworks
 rule: artisan-migrate-reset
 env_escalated: false
 ---
+# D9: artisan migrate:reset (env-escalated)
+command: APP_ENV=production php artisan migrate:reset
+decision: Deny
+severity: Critical
+confidence: High
+pack: frameworks
+rule: artisan-migrate-reset
+env_escalated: true
+---
 # D10: mix ecto.reset
 command: mix ecto.reset
 decision: Deny
@@ -1311,6 +1504,23 @@ severity: Critical
 confidence: High
 pack: frameworks
 rule: mix-ecto-reset
+env_escalated: true
+---
+# D11: mix ecto.drop
+command: mix ecto.drop
+decision: Deny
+severity: High
+confidence: High
+pack: frameworks
+rule: mix-ecto-drop
+env_escalated: false
+---
+command: MIX_ENV=prod mix ecto.drop
+decision: Deny
+severity: Critical
+confidence: High
+pack: frameworks
+rule: mix-ecto-drop
 env_escalated: true
 ---
 # === Safe variants ===
@@ -1342,7 +1552,7 @@ decision: Allow
 command: python manage.py makemigrations
 decision: Allow
 ---
-# manage.py migrate WITHOUT --run-syncdb (safe)
+# S4b: manage.py migrate without --run-syncdb (safe — explicit safe pattern match)
 command: manage.py migrate
 decision: Allow
 ---
@@ -1417,6 +1627,24 @@ severity: Medium
 confidence: High
 pack: remote.rsync
 rule: rsync-delete
+env_escalated: false
+---
+# D3: rsync --delete-delay
+command: rsync --delete-delay -avz /src/ /dest/
+decision: Ask
+severity: Medium
+confidence: High
+pack: remote.rsync
+rule: rsync-delete
+env_escalated: false
+---
+# D4: rsync --remove-source-files (deletes source files after transfer)
+command: rsync --remove-source-files -avz /src/ /dest/
+decision: Ask
+severity: Medium
+confidence: High
+pack: remote.rsync
+rule: rsync-remove-source
 env_escalated: false
 ---
 # === Safe variants ===
@@ -1519,6 +1747,51 @@ severity: High
 confidence: High
 pack: secrets.vault
 rule: vault-kv-delete
+env_escalated: false
+---
+# D7: vault auth disable (Critical)
+command: vault auth disable userpass/
+decision: Deny
+severity: Critical
+confidence: High
+pack: secrets.vault
+rule: vault-auth-disable
+env_escalated: false
+---
+# D8: vault token revoke (High)
+command: vault token revoke s.abc123
+decision: Deny
+severity: High
+confidence: High
+pack: secrets.vault
+rule: vault-token-revoke
+env_escalated: false
+---
+# D9: vault policy delete (High)
+command: vault policy delete my-policy
+decision: Deny
+severity: High
+confidence: High
+pack: secrets.vault
+rule: vault-policy-delete
+env_escalated: false
+---
+# D10: vault audit disable (Medium)
+command: vault audit disable file/
+decision: Ask
+severity: Medium
+confidence: High
+pack: secrets.vault
+rule: vault-audit-disable
+env_escalated: false
+---
+# D11: vault kv metadata delete (Critical — permanent all-version deletion)
+command: vault kv metadata delete secret/myapp/config
+decision: Deny
+severity: Critical
+confidence: High
+pack: secrets.vault
+rule: vault-kv-metadata-delete
 env_escalated: false
 ---
 # === Safe variants ===
@@ -1652,11 +1925,11 @@ decision: Allow
 
 | Pack | Entries |
 |------|---------|
-| `frameworks` | 38 |
-| `remote.rsync` | 10 |
-| `secrets.vault` | 18 |
+| `frameworks` | 44 |
+| `remote.rsync` | 12 |
+| `secrets.vault` | 23 |
 | `platform.github` | 16 |
-| **Total** | **82** |
+| **Total** | **95** |
 
 ---
 
@@ -1682,6 +1955,7 @@ This is verified by the reachability test (03a §7.1 pattern).
 | D8: artisan-migrate-fresh | `artisan migrate:fresh` |
 | D9: artisan-migrate-reset | `artisan migrate:reset` |
 | D10: mix-ecto-reset | `mix ecto.reset` |
+| D11: mix-ecto-drop | `mix ecto.drop` |
 
 ### 7.2 rsync Reachability
 
@@ -1690,6 +1964,7 @@ This is verified by the reachability test (03a §7.1 pattern).
 | D1: rsync-delete-excluded | `rsync --delete-excluded -avz /src/ /dest/` |
 | D2: rsync-delete-before | `rsync --delete-before -avz /src/ /dest/` |
 | D3: rsync-delete | `rsync --delete -avz /src/ /dest/` |
+| D4: rsync-remove-source | `rsync --remove-source-files -avz /src/ /dest/` |
 
 ### 7.3 Vault Reachability
 
@@ -1701,6 +1976,11 @@ This is verified by the reachability test (03a §7.1 pattern).
 | D4: vault-lease-revoke-prefix | `vault lease revoke -prefix aws/creds/` |
 | D5: vault-delete | `vault delete secret/myapp` |
 | D6: vault-kv-delete | `vault kv delete secret/myapp` |
+| D7: vault-auth-disable | `vault auth disable userpass/` |
+| D8: vault-token-revoke | `vault token revoke s.abcdef123456` |
+| D9: vault-policy-delete | `vault policy delete my-policy` |
+| D10: vault-audit-disable | `vault audit disable file/` |
+| D11: vault-kv-metadata-delete | `vault kv metadata delete secret/myapp` |
 
 ### 7.4 GitHub Reachability
 
@@ -1718,44 +1998,48 @@ Shows how safe patterns interact with destructive patterns within each pack.
 
 ### 8.1 Frameworks Interaction Matrix
 
-| Safe↓ / Destructive→ | D1 db:drop | D2 db:reset | D3 schema:load | D4 rake:drop:all | D5 rake:destr | D6 flush | D7 syncdb | D8 fresh | D9 reset | D10 ecto |
-|---|---|---|---|---|---|---|---|---|---|---|
-| S1 rails-db-migrate | — | — | — | — | — | — | blocked | — | — | — |
-| S2 rails-db-seed | — | — | — | — | — | — | — | — | — | — |
-| S3 rails-non-db | — | — | — | — | — | — | — | — | — | — |
-| S4 managepy-non-db | — | — | — | — | — | — | — | — | — | — |
-| S5 mix-non-db | — | — | — | — | — | — | — | — | — | — |
-| S6 artisan-non-db | — | — | — | — | — | — | — | — | — | — |
+| Safe↓ / Destructive→ | D1 db:drop | D2 db:reset | D3 schema:load | D4 rake:drop:all | D5 rake:destr | D6 flush | D7 syncdb | D8 fresh | D9 reset | D10 ecto.reset | D11 ecto.drop |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| S1 rails-db-migrate | — | — | — | — | — | — | blocked | — | — | — | — |
+| S2 rails-db-seed | — | — | — | — | — | — | — | — | — | — | — |
+| S3 rails-non-db | — | — | — | — | — | — | — | — | — | — | — |
+| S4a managepy-non-db | — | — | — | — | — | — | — | — | — | — | — |
+| S4b managepy-migrate | — | — | — | — | — | — | blocked | — | — | — | — |
+| S5 mix-non-db | — | — | — | — | — | — | — | — | — | — | — |
+| S6 artisan-non-db | — | — | — | — | — | — | — | — | — | — | — |
 
 "blocked" = safe pattern could shadow destructive if Not clause removed.
 "—" = no interaction (different command names or different subcommands).
 
 **Note**: Interaction is minimal because each safe pattern is scoped to
 specific non-destructive subcommands of a specific tool, and destructive
-patterns target different subcommands. The main risk is S1 shadowing D7
-(both match `manage.py migrate`) — S1's Not clause prevents this.
+patterns target different subcommands. S1 could shadow D7 (both match
+`rails db:migrate`) — S1's `Not(--run-syncdb)` prevents this. S4b could
+shadow D7 (both match `manage.py migrate`) — S4b's `Not(--run-syncdb)`
+prevents this.
 
 ### 8.2 rsync Interaction Matrix
 
-| Safe↓ / Destructive→ | D1 delete-excluded | D2 delete-before | D3 delete |
-|---|---|---|---|
-| S1 rsync-no-delete | blocked | blocked | blocked |
+| Safe↓ / Destructive→ | D1 delete-excluded | D2 delete-before | D3 delete | D4 remove-source |
+|---|---|---|---|---|
+| S1 rsync-no-delete | blocked | blocked | blocked | blocked |
 
-S1 has Not clauses for all `--delete*` variants, preventing shadowing.
+S1 has Not clauses for all `--delete*` variants and `--remove-source-files`,
+preventing shadowing.
 
 ### 8.3 Vault Interaction Matrix
 
-| Safe↓ / Destructive→ | D1 secrets-disable | D2 kv-destroy | D3 lease-revoke | D4 lease-prefix | D5 delete | D6 kv-delete |
-|---|---|---|---|---|---|---|
-| S1 vault-read | — | — | — | — | — | — |
-| S2 vault-inspect | — | — | — | — | — | — |
-| S3 vault-write | — | — | — | — | — | — |
+| Safe↓ / Destructive→ | D1 secrets-disable | D2 kv-destroy | D3 lease-revoke | D4 lease-prefix | D5 delete | D6 kv-delete | D7 auth-disable | D8 token-revoke | D9 policy-delete | D10 audit-disable | D11 kv-metadata-delete |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| S1 vault-read | — | — | — | — | — | — | — | — | — | — | — |
+| S2 vault-inspect | — | — | — | — | — | — | blocked | blocked | blocked | blocked | — |
+| S3 vault-write | — | — | — | — | — | — | — | — | — | — | — |
 
-No interactions — safe patterns match read/inspect/write subcommands,
-destructive patterns match disable/destroy/revoke/delete subcommands.
-
-**Known gap**: S2 includes `vault token` which would shadow a hypothetical
-`vault token revoke` destructive pattern. See §5.3.1 note 5.
+S2 has Not clauses for `auth disable`, `token revoke`, `policy delete`,
+and `audit disable`, preventing shadowing of D7-D10. "blocked" indicates
+S2 would shadow the destructive pattern if the corresponding Not clause
+were removed. D11 (`kv metadata delete`) is not affected by S2 because
+`kv` is not in S2's ArgAt(0) list.
 
 ### 8.4 GitHub Interaction Matrix
 
@@ -1940,6 +2224,26 @@ func TestMixEctoReset(t *testing.T) {
         })
     }
 }
+
+func TestMixEctoDrop(t *testing.T) {
+    pattern := frameworksPack.Destructive[10].Match // D11
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"mix ecto.drop", cmd("mix", []string{"ecto.drop"}, nil), true},
+        // Near-miss
+        {"mix ecto.reset", cmd("mix", []string{"ecto.reset"}, nil), false},
+        {"mix ecto.create", cmd("mix", []string{"ecto.create"}, nil), false},
+        {"mix ecto.migrate", cmd("mix", []string{"ecto.migrate"}, nil), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
 ```
 
 ### 9.2 rsync Test Cases
@@ -2000,6 +2304,26 @@ func TestRsyncDelete(t *testing.T) {
         // Near-miss
         {"rsync (no delete)", cmd("rsync", []string{"/src/", "/dest/"}, nil), false},
         {"rsync -avz", cmd("rsync", []string{"/src/", "/dest/"}, m("-a", "", "-v", "", "-z", "")), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+func TestRsyncRemoveSource(t *testing.T) {
+    pattern := rsyncPack.Destructive[3].Match // D4
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"rsync --remove-source-files", cmd("rsync", []string{"/src/", "/dest/"}, m("--remove-source-files", "")), true},
+        {"rsync --remove-source-files -avz", cmd("rsync", []string{"/src/", "/dest/"}, m("--remove-source-files", "", "-a", "", "-v", "", "-z", "")), true},
+        // Near-miss
+        {"rsync (no flags)", cmd("rsync", []string{"/src/", "/dest/"}, nil), false},
+        {"rsync --delete", cmd("rsync", []string{"/src/", "/dest/"}, m("--delete", "")), false},
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
@@ -2087,6 +2411,137 @@ func TestVaultDelete(t *testing.T) {
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
             assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+func TestVaultAuthDisable(t *testing.T) {
+    pattern := vaultPack.Destructive[6].Match // D7
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"vault auth disable", cmd("vault", []string{"auth", "disable", "userpass/"}, nil), true},
+        {"vault auth disable ldap", cmd("vault", []string{"auth", "disable", "ldap/"}, nil), true},
+        // Near-miss
+        {"vault auth enable", cmd("vault", []string{"auth", "enable", "userpass"}, nil), false},
+        {"vault auth list", cmd("vault", []string{"auth", "list"}, nil), false},
+        {"vault auth tune", cmd("vault", []string{"auth", "tune", "userpass/"}, nil), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+func TestVaultTokenRevoke(t *testing.T) {
+    pattern := vaultPack.Destructive[7].Match // D8
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"vault token revoke", cmd("vault", []string{"token", "revoke", "s.abcdef123456"}, nil), true},
+        {"vault token revoke -self", cmd("vault", []string{"token", "revoke"}, m("-self", "")), true},
+        // Near-miss
+        {"vault token create", cmd("vault", []string{"token", "create"}, nil), false},
+        {"vault token lookup", cmd("vault", []string{"token", "lookup"}, nil), false},
+        {"vault token renew", cmd("vault", []string{"token", "renew", "s.abcdef123456"}, nil), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+func TestVaultPolicyDelete(t *testing.T) {
+    pattern := vaultPack.Destructive[8].Match // D9
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"vault policy delete", cmd("vault", []string{"policy", "delete", "my-policy"}, nil), true},
+        // Near-miss
+        {"vault policy read", cmd("vault", []string{"policy", "read", "my-policy"}, nil), false},
+        {"vault policy write", cmd("vault", []string{"policy", "write", "my-policy", "policy.hcl"}, nil), false},
+        {"vault policy list", cmd("vault", []string{"policy", "list"}, nil), false},
+        {"vault policy fmt", cmd("vault", []string{"policy", "fmt", "policy.hcl"}, nil), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+func TestVaultAuditDisable(t *testing.T) {
+    pattern := vaultPack.Destructive[9].Match // D10
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"vault audit disable", cmd("vault", []string{"audit", "disable", "file/"}, nil), true},
+        // Near-miss
+        {"vault audit enable", cmd("vault", []string{"audit", "enable", "file", "file_path=/var/log/vault.log"}, nil), false},
+        {"vault audit list", cmd("vault", []string{"audit", "list"}, nil), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+func TestVaultKvMetadataDelete(t *testing.T) {
+    pattern := vaultPack.Destructive[10].Match // D11
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        {"vault kv metadata delete", cmd("vault", []string{"kv", "metadata", "delete", "secret/myapp"}, nil), true},
+        // Near-miss
+        {"vault kv metadata get", cmd("vault", []string{"kv", "metadata", "get", "secret/myapp"}, nil), false},
+        {"vault kv metadata put", cmd("vault", []string{"kv", "metadata", "put", "secret/myapp"}, nil), false},
+        {"vault kv delete", cmd("vault", []string{"kv", "delete", "secret/myapp"}, nil), false},
+        {"vault kv destroy", cmd("vault", []string{"kv", "destroy", "secret/myapp"}, nil), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, pattern.Match(tt.cmd))
+        })
+    }
+}
+
+// TestVaultS2NotClauses verifies that S2's Not clauses correctly exclude
+// destructive operations from the safe pattern, per review P0-1 fix.
+func TestVaultS2NotClauses(t *testing.T) {
+    safePattern := vaultPack.Safe[1].Match // S2 vault-inspect-safe
+    tests := []struct {
+        name string
+        cmd  parse.ExtractedCommand
+        want bool
+    }{
+        // Should still match safe operations
+        {"vault auth list", cmd("vault", []string{"auth", "list"}, nil), true},
+        {"vault auth enable", cmd("vault", []string{"auth", "enable", "userpass"}, nil), true},
+        {"vault token lookup", cmd("vault", []string{"token", "lookup"}, nil), true},
+        {"vault policy read", cmd("vault", []string{"policy", "read", "my-policy"}, nil), true},
+        {"vault audit list", cmd("vault", []string{"audit", "list"}, nil), true},
+        // Must NOT match destructive operations (Not clauses)
+        {"vault auth disable", cmd("vault", []string{"auth", "disable", "userpass/"}, nil), false},
+        {"vault token revoke", cmd("vault", []string{"token", "revoke", "s.abc"}, nil), false},
+        {"vault policy delete", cmd("vault", []string{"policy", "delete", "my-policy"}, nil), false},
+        {"vault audit disable", cmd("vault", []string{"audit", "disable", "file/"}, nil), false},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            assert.Equal(t, tt.want, safePattern.Match(tt.cmd))
         })
     }
 }
@@ -2204,9 +2659,11 @@ The matcher should not be confused by paths that look like subcommands.
 
 ### 11.3 rsync Flag Combination Exhaustion
 
-Enumerate all combinations of `--delete*` flags and verify correct
-severity assignment. With N=6 delete flags and each being present/absent,
-that's 64 combinations — small enough to test exhaustively.
+Enumerate all combinations of `--delete*` flags plus `--remove-source-files`
+and verify correct severity assignment. With N=7 flags and each being
+present/absent, that's 128 combinations — small enough to test exhaustively.
+When both `--delete*` and `--remove-source-files` are present, the higher
+severity `--delete*` pattern should dominate via `aggregateAssessments`.
 
 ### 11.4 Cross-Pack Keyword Collision Audit
 
@@ -2232,9 +2689,10 @@ so the automaton has minimal branching.
 All patterns in these 4 packs use ArgAt-based matching (no regex, no
 content matching). ArgAt is the fastest matcher type — it's a direct
 array index + string comparison. The frameworks pack has the most
-patterns (10 destructive) but each pattern requires at most 2 ArgAt
-checks plus a Name check. Worst-case evaluation for the frameworks
-pack: ~30 string comparisons per command.
+patterns (11 destructive) but each pattern requires at most 2 ArgAt
+checks plus a Name check. The vault pack has 11 destructive patterns
+with up to 3 ArgAt checks (D11 `kv metadata delete`). Worst-case
+evaluation for the vault pack: ~40 string comparisons per command.
 
 ---
 
@@ -2255,13 +2713,17 @@ deterministic and auditable.
    and `django-admin migrate --run-syncdb`? (Recommendation: v2 — less
    commonly used than `manage.py`.)
 
-2. **`mix ecto.drop`**: Should `mix ecto.drop` be a separate pattern or
-   is coverage via `mix ecto.reset` sufficient? (Recommendation: add in
-   v2 — `ecto.reset` is the more commonly run command.)
+2. ~~**`mix ecto.drop`**: Should `mix ecto.drop` be a separate pattern or
+   is coverage via `mix ecto.reset` sufficient?~~ **Resolved**: Added as D11
+   `mix-ecto-drop` at High severity. Cross-pollination from reviewer identified
+   this as an independent destructive operation distinct from `ecto.reset`.
 
-3. **`vault token revoke`**: Should we add a destructive pattern for
-   `vault token revoke`? Currently shadowed by S2 safe pattern. See
-   §5.3.1 note 5. (Recommendation: v2 — requires S2 refinement.)
+3. ~~**`vault token revoke`**: Should we add a destructive pattern for
+   `vault token revoke`? Currently shadowed by S2 safe pattern.~~
+   **Resolved**: Added as D8 `vault-token-revoke` at High severity. S2 now
+   has `Not(And(ArgAt(0, "token"), ArgAt(1, "revoke")))` clause. Also added
+   D7 `vault-auth-disable`, D9 `vault-policy-delete`, D10 `vault-audit-disable`,
+   and D11 `vault-kv-metadata-delete` as part of the same S2 refinement.
 
 4. **`gh repo delete` confirmation**: `gh repo delete` requires typing
    the repo name to confirm. Should we factor in interactive confirmation
@@ -2276,16 +2738,65 @@ deterministic and auditable.
    triggers the pre-filter but the matcher won't match because the Name
    is `bundle`.)
 
+6. **rsync `--dry-run` / `-n` severity reduction**: Should rsync commands
+   with `--dry-run` or `-n` have reduced severity since they don't actually
+   modify files? (Recommendation: v2 — this is a general flag-based
+   severity modifier pattern that could apply to many commands, not just
+   rsync. Best addressed as a framework-level feature.)
+
+7. **`mix ecto.rollback --all`**: `mix ecto.rollback --all` rolls back ALL
+   migrations, equivalent to dropping the schema. Without `--all` it rolls
+   back one migration (safer). (Recommendation: v2 — add as destructive
+   with `Flags("--all")` qualifier.)
+
 ---
 
 ## 15. Testing Summary
 
 | Category | Count | Description |
 |----------|-------|-------------|
-| Unit tests (match/near-miss) | ~60 | Per-pattern tests for all 22 destructive + 12 safe patterns |
-| Reachability tests | 22 | One per destructive pattern |
-| Golden file entries | 82 | Across 4 packs |
-| Env escalation tests | ~12 | For frameworks (all D1-D10) and vault (D1-D6) patterns |
+| Unit tests (match/near-miss) | ~80 | Per-pattern tests for all 29 destructive + 12 safe patterns, plus S2 Not clause tests |
+| Reachability tests | 29 | One per destructive pattern |
+| Golden file entries | 95 | Across 4 packs (44+12+23+16) |
+| Env escalation tests | ~16 | For frameworks (all D1-D11) and vault (D1-D11) patterns |
 | Keyword coverage tests | 4 | One per pack |
 | Safe-pattern shadowing tests | 4 | One per pack interaction matrix |
-| Total | ~184 | |
+| Total | ~228 | |
+
+---
+
+## Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | security-correctness | P0 | Vault S2 shadows vault auth disable | Incorporated | S2 updated with 4 Not clauses; D7 vault-auth-disable added at Critical |
+| 2 | security-correctness | P1 | vault token revoke should be fixed in v1 | Incorporated | D8 vault-token-revoke added at High; S2 Not clause added |
+| 3 | security-correctness | P1 | vault policy delete shadowed by S2 | Incorporated | D9 vault-policy-delete added at High; S2 Not clause added |
+| 4 | security-correctness | P1 | vault kv metadata delete undetected | Incorporated | D11 vault-kv-metadata-delete added at Critical with ArgAt(0-2) |
+| 5 | security-correctness | P1 | rsync --remove-source-files undetected | Incorporated | D4 rsync-remove-source added at Medium; S1 Not clause added |
+| 6 | security-correctness | P1 | DJANGO_SETTINGS_MODULE not in env detector | Incorporated | Golden entry changed to APP_ENV=production; §5.1.1 note 7 updated |
+| 7 | security-correctness | P2 | vault audit disable not detected | Incorporated | D10 vault-audit-disable added at Medium; S2 Not clause added |
+| 8 | security-correctness | P2 | vault secrets move undetected | Not Incorporated | Moves data (preserves), doesn't delete; v2 if needed |
+| 9 | security-correctness | P2 | mix ecto.drop should be pattern | Incorporated | D11 mix-ecto-drop added at High with EnvSensitive |
+| 10 | security-correctness | P2 | SEC2 tests need S2 bypass verification | Incorporated | TestVaultS2NotClauses added to §9.3 |
+| 11 | security-correctness | P2 | rsync --dry-run severity reduction | Not Incorporated | v2 feature; added as open question Q6 |
+| 12 | security-correctness | P3 | S1 --run-syncdb is Django flag not Rails | Not Incorporated | Already documented in §5.1.1 note 5 as defensive |
+| 13 | security-correctness | P3 | manage.py dbshell unsafe | Not Incorporated | v2; dbshell is interactive, not a batch command |
+| 14 | security-correctness | P3 | python3 normalization for manage.py | Not Incorporated | v2; python3 dual invocation is the same pattern, deferred |
+| 15 | security-correctness | P3 | vault S2 ArgAt(0) list could use enum | Not Incorporated | Current Or() of ArgAt values is clear and matches DSL style |
+| 16 | security-correctness | P3 | bundle exec tracking already in Q5 | Not Incorporated | Already documented as Q5 |
+| 17 | systems-engineer | P0 | Vault S2 shadows vault auth disable | Incorporated | Same as #1; S2 Not clauses + D7-D11 added |
+| 18 | systems-engineer | P1 | vault policy delete shadowed by S2 | Incorporated | Same as #3 |
+| 19 | systems-engineer | P1 | rsync --remove-source-files undetected | Incorporated | Same as #5 |
+| 20 | systems-engineer | P1 | Missing env-escalated golden entries for D3/D5/D7/D9 | Incorporated | 4 env-escalated golden entries added |
+| 21 | systems-engineer | P1 | manage.py migrate has no explicit safe pattern | Incorporated | S4b managepy-migrate-safe added with Not(--run-syncdb) |
+| 22 | systems-engineer | P1 | Missing golden entry for rsync --delete-delay | Incorporated | Golden entry added to §6.2 |
+| 23 | systems-engineer | P2 | manage.py migrate golden comment misleading | Incorporated | Comment updated to reflect S4b safe match |
+| 24 | systems-engineer | P2 | rsync D1 precedence reasoning incorrect | Incorporated | §5.2.1 note 4 fixed to cite aggregateAssessments |
+| 25 | systems-engineer | P2 | mix ecto.drop needs negative golden test | Incorporated | Resolved by adding D11 pattern; golden entry shows match |
+| 26 | systems-engineer | P2 | D4 rake EnvSensitive on Critical is no-op | Incorporated | §5.1.1 note 8 added documenting escalation is no-op at Critical |
+| 27 | systems-engineer | P2 | §5.1.1 note 7 env var list incomplete | Incorporated | Note 7 updated with DJANGO_SETTINGS_MODULE and fallback explanation |
+| 28 | systems-engineer | P3 | S1 --run-syncdb unnecessary Not clause | Not Incorporated | Already documented in §5.1.1 note 5 as defensive |
+| 29 | systems-engineer | P3 | Vault interaction matrix inconsistency | Incorporated | §8.3 rewritten with S2 Not clause interactions |
+| 30 | systems-engineer | P3 | bundle exec rake pre-filter waste | Not Incorporated | Already documented as Q5 |
+| 31 | systems-engineer | P3 | Vault S2 breadth scope not fully documented | Incorporated | §5.3.1 note 5 rewritten to document all S2 Not clauses |
