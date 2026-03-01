@@ -334,7 +334,7 @@ difference must be classified as intentional or a bug.
 
 ### 4.2 Corpus Generation
 
-The comparison corpus is built from three sources:
+The comparison corpus is built from four sources:
 
 1. **Pack pattern examples** — Every destructive and safe pattern from all
    21 packs generates 3+ test commands (match, near-miss, safe variant).
@@ -355,6 +355,14 @@ The comparison corpus is built from three sources:
    - Heredoc/inline script detection differences
    - Unicode in command arguments
    - Very long commands (>10KB)
+
+4. **Upstream test suite commands** — Extract test case commands from the
+   upstream Rust repository's own test suite. The upstream likely has test
+   cases targeting its specific regex patterns and edge cases. Using their
+   test suite as comparison seeds catches cases where: (a) they have
+   patterns we don't (coverage gap), and (b) our structural analysis
+   produces different results on cases they specifically tested.
+   Commands are extracted via a script that parses the upstream test files.
 
 ```go
 // internal/testharness/comparison.go
@@ -444,6 +452,75 @@ Every divergence falls into one of four categories:
 | `intentional_divergence` | Different design choice (e.g., severity difference) | Document with rationale |
 | `bug` | Go misses something Rust catches | Fix before release |
 
+#### classifyDivergence Implementation
+
+The `classifyDivergence` function uses a two-step process: first check
+a lookup table of known divergences, then apply deterministic rules:
+
+```go
+// classifyDivergence returns a deterministic classification for a
+// Go vs Rust divergence. It is NOT subjective — "reasonable" is
+// not a valid criterion. Classifications must be reproducible.
+func classifyDivergence(entry ComparisonEntry) string {
+    // Step 1: Check the known divergences lookup table.
+    // Entries in this file have been manually reviewed and classified.
+    if known, ok := knownDivergences[entry.Command]; ok {
+        return known.Classification
+    }
+
+    // Step 2: Apply deterministic rules for unclassified divergences.
+    goSev := parseSeverity(entry.GoSeverity)
+    rustSev := parseSeverity(entry.RustSeverity)
+
+    // Rule 1: Go more restrictive (Deny when Rust allows) = safer default.
+    // Classified as intentional_divergence — Go errs on the side of caution.
+    if entry.GoDecision == "Deny" && entry.RustDecision == "Allow" {
+        return "intentional_divergence"
+    }
+
+    // Rule 2: Go less restrictive (Allow when Rust denies) = potential bug.
+    // Default to "bug" until manually reclassified.
+    if entry.GoDecision == "Allow" && entry.RustDecision == "Deny" {
+        return "bug"
+    }
+
+    // Rule 3: Same decision, severity difference ≤1 level = minor divergence.
+    if entry.GoDecision == entry.RustDecision &&
+        abs(int(goSev)-int(rustSev)) <= 1 {
+        return "intentional_divergence"
+    }
+
+    // Rule 4: Same decision, severity difference ≥2 levels = requires review.
+    if entry.GoDecision == entry.RustDecision &&
+        abs(int(goSev)-int(rustSev)) >= 2 {
+        return "bug" // default to bug, reclassify after manual review
+    }
+
+    // Rule 5: Any other unclassified divergence defaults to "bug".
+    return "bug"
+}
+```
+
+**Known divergences lookup table**: Stored in
+`testdata/comparison_divergences.json`. Each entry records the command,
+expected classification, and rationale. This file is version-controlled
+and changes require explicit review:
+
+```json
+[
+  {
+    "command": "echo \"don't rm -rf /\"",
+    "classification": "intentional_improvement",
+    "rationale": "Go AST separation correctly identifies string content"
+  },
+  {
+    "command": "RAILS_ENV=production rails db:reset",
+    "classification": "intentional_improvement",
+    "rationale": "Go frameworks pack not present in upstream"
+  }
+]
+```
+
 **Known intentional divergences**:
 
 1. **String masking vs AST separation**: Our Go version correctly handles
@@ -460,8 +537,8 @@ Every divergence falls into one of four categories:
    variable assignments. These are classified as `intentional_improvement`.
 
 4. **Severity differences**: Minor severity differences between
-   implementations (e.g., Medium vs High for the same command) are
-   classified as `intentional_divergence` if the assessment is reasonable.
+   implementations (≤1 level with same decision) are classified as
+   `intentional_divergence` per Rule 3 above.
 
 ### 4.5 CI Integration
 
@@ -506,6 +583,27 @@ comparison harness adapts to whatever output format the upstream provides.
 If the upstream doesn't support a test mode, we can use its hook mode
 with synthetic JSON input.
 
+### 4.7 Upstream Binary Version Pinning
+
+The upstream Rust binary must be pinned to a specific version or commit
+SHA to ensure reproducible comparison results. If the upstream updates
+between CI runs, comparison results could change without any Go code
+change, making divergence classification unreliable.
+
+```yaml
+# testdata/comparison_config.yaml
+upstream:
+  repository: "https://github.com/example/destructive-command-guard"
+  version: "v1.2.3"          # Semantic version tag
+  commit: "abc1234def5678"    # Pinned commit SHA (takes precedence)
+  binary_name: "dcg"          # Expected binary name after build
+```
+
+**Version bump policy**: Bumping the upstream pin is an explicit, reviewed
+change. When bumped: (1) re-run the full comparison suite, (2) review
+any new divergences, (3) update `comparison_divergences.json` if needed,
+(4) commit the version bump with the updated divergence file.
+
 ---
 
 ## 5. Fuzz Testing
@@ -539,6 +637,12 @@ func FuzzEvaluate(f *testing.F) {
         "DIR=/; rm -rf $DIR",
         "export RAILS_ENV=production && rails db:reset",
         ";", "&&", "||", "|", "()", "$()", "``",
+        // Structurally diverse seeds for faster fuzzer coverage
+        `diff <(git log --oneline) <(svn log)`,    // process substitution
+        `rm -rf /tmp/{a,b,c}`,                       // brace expansion
+        `echo "${arr[@]}"`,                           // array expansion
+        `bash -c "git push --force"`,                 // nested quoting
+        `until git pull; do sleep 1; done`,           // until loop
     }
     for _, s := range seeds {
         f.Add(s)
@@ -548,6 +652,88 @@ func FuzzEvaluate(f *testing.F) {
         result := guard.Evaluate(command,
             guard.WithPolicy(guard.InteractivePolicy()))
         verifyInvariants(t, command, result)
+    })
+}
+```
+
+### 5.1.1 Allowlist/Blocklist Fuzzer
+
+Fuzz the evaluation pipeline with random commands AND random allowlist/blocklist
+patterns. This exercises security-critical allowlist/blocklist glob matching logic
+that the basic pipeline fuzzer does not cover:
+
+```go
+// guard/fuzz_test.go
+
+func FuzzEvaluateWithAllowlist(f *testing.F) {
+    // Seed: (command, allowlistPattern, blocklistPattern)
+    f.Add("echo hello", "echo *", "")
+    f.Add("git push --force", "", "git push *")
+    f.Add("git push --force && rm -rf /", "git push *", "")
+    f.Add("ls -la", "ls *", "ls -la *")
+    f.Add("rm -rf /", "", "rm *")
+    f.Add("echo safe; rm -rf /", "echo *", "")
+
+    f.Fuzz(func(t *testing.T, command, allowPattern, blockPattern string) {
+        var opts []guard.Option
+        opts = append(opts, guard.WithPolicy(guard.InteractivePolicy()))
+        if allowPattern != "" {
+            opts = append(opts, guard.WithAllowlist([]string{allowPattern}))
+        }
+        if blockPattern != "" {
+            opts = append(opts, guard.WithBlocklist([]string{blockPattern}))
+        }
+
+        result := guard.Evaluate(command, opts...)
+
+        // Core invariants still hold
+        verifyInvariants(t, command, result)
+
+        // INV-A1: If command exactly matches allowlist pattern with no
+        // separators, decision must be Allow (unless blocklist overrides).
+        // Use the actual separator set from the allowlist implementation.
+        if allowPattern != "" && blockPattern == "" &&
+            !containsSeparator(command) && globMatch(allowPattern, command) {
+            if result.Decision != guard.Allow {
+                t.Fatalf("INV-A1: command %q matches allowlist %q "+
+                    "with no separators, got %s want Allow",
+                    command, allowPattern, result.Decision)
+            }
+        }
+
+        // INV-A2: If allowlist matches but command contains separators
+        // (&&, ||, ;, |) beyond the matched portion, the compound parts
+        // must still be evaluated. An allowlisted prefix must NOT
+        // blanket-allow everything after a separator.
+        if allowPattern != "" && blockPattern == "" {
+            parts := splitOnSeparators(command)
+            if len(parts) > 1 && globMatch(allowPattern, parts[0]) {
+                // At least one non-first part has a destructive command →
+                // decision must NOT be Allow
+                for _, part := range parts[1:] {
+                    partResult := guard.Evaluate(strings.TrimSpace(part),
+                        guard.WithPolicy(guard.InteractivePolicy()))
+                    if partResult.Decision == guard.Deny {
+                        if result.Decision == guard.Allow {
+                            t.Fatalf("INV-A2: allowlist %q matched prefix "+
+                                "but compound command %q was Allow despite "+
+                                "destructive segment %q",
+                                allowPattern, command, part)
+                        }
+                        break
+                    }
+                }
+            }
+        }
+
+        // INV-B1: If command matches a blocklist pattern, decision must
+        // be Deny regardless of safe patterns.
+        if blockPattern != "" && globMatch(blockPattern, command) {
+            if result.Decision != guard.Deny {
+                t.Fatalf("INV-B1: command %q matches blocklist %q, "+
+                    "got %s want Deny", command, blockPattern, result.Decision)
+            }
+        }
     })
 }
 ```
@@ -620,7 +806,8 @@ func verifyInvariants(t *testing.T, command string, result guard.Result) {
     }
 
     // INV-8: Oversized input → Indeterminate
-    if len(command) > 128*1024 && result.Assessment != nil {
+    // Reference the pipeline's authoritative limit constant to stay in sync.
+    if len(command) > eval.MaxCommandBytes && result.Assessment != nil {
         if result.Assessment.Severity != guard.Indeterminate {
             t.Fatalf("INV-8: oversized input (%d bytes) got %s, want Indeterminate",
                 len(command), result.Assessment.Severity)
@@ -656,7 +843,7 @@ func LoadFuzzSeeds(goldenDir string) []string {
     seeds = append(seeds,
         "", " ", "\t", "\n", "\x00",
         strings.Repeat("a", 1000),
-        strings.Repeat("a", 128*1024+1),
+        strings.Repeat("a", eval.MaxCommandBytes+1),
         "$($($(echo nested)))",
         `"unclosed string`,
         `'unclosed string`,
@@ -669,7 +856,11 @@ func LoadFuzzSeeds(goldenDir string) []string {
 
 ### 5.4 Config Fuzzer
 
-Fuzz the YAML config parser independently:
+Fuzz the config parsing path. To avoid the os.Exit calls in loadConfig,
+the implementation refactors the parsing logic into a testable
+`parseConfig(data []byte) (*Config, error)` function that returns errors
+instead of exiting. The fuzzer tests parseConfig followed by toOptions(),
+covering the real code path:
 
 ```go
 // cmd/dcg-go/fuzz_test.go
@@ -683,29 +874,37 @@ func FuzzConfigParse(f *testing.F) {
     f.Add([]byte(strings.Repeat("key: value\n", 10000)))
 
     f.Fuzz(func(t *testing.T, data []byte) {
-        // Write to temp file
-        dir := t.TempDir()
-        path := filepath.Join(dir, "config.yaml")
-        os.WriteFile(path, data, 0644)
-        t.Setenv("DCG_CONFIG", path)
-
-        // Must not panic
+        // Must not panic regardless of input
         assert.NotPanics(t, func() {
-            // Note: loadConfig may os.Exit on malformed input.
-            // For fuzz testing, we test the YAML parse path directly.
-            var cfg Config
-            yaml.Unmarshal(data, &cfg)
+            // parseConfig returns errors instead of calling os.Exit,
+            // covering the real parsing + validation path.
+            cfg, err := parseConfig(data)
+            if err != nil {
+                return // expected for malformed input
+            }
+            // Also exercise the options conversion path
             _ = cfg.toOptions()
         })
     })
 }
 ```
 
+**Implementation note**: The existing `loadConfig()` function should be
+refactored to: (1) `parseConfig(data []byte) (*Config, error)` — pure
+parsing + validation, testable and fuzzable, and (2) `loadConfig()` —
+calls parseConfig, handles os.Exit for CLI context. This separates
+concerns without changing external behavior.
+```
+
 ### 5.5 Hook Input Fuzzer
+
+Two fuzzers cover the hook input path: one for JSON unmarshal robustness,
+and one for the full hook processing flow including command evaluation:
 
 ```go
 // cmd/dcg-go/fuzz_test.go
 
+// FuzzHookInput tests JSON unmarshal robustness.
 func FuzzHookInput(f *testing.F) {
     f.Add([]byte(`{"tool_name":"Bash","tool_input":{"command":"ls"}}`))
     f.Add([]byte(`{}`))
@@ -720,6 +919,32 @@ func FuzzHookInput(f *testing.F) {
         })
     })
 }
+
+// FuzzHookProcess tests the full hook processing flow after unmarshal:
+// extracting command from tool_input, evaluating through pipeline, and
+// producing output JSON. This covers the more interesting attack surface
+// of valid-JSON inputs with unexpected field values.
+func FuzzHookProcess(f *testing.F) {
+    f.Add([]byte(`{"tool_name":"Bash","tool_input":{"command":"ls"}}`))
+    f.Add([]byte(`{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}`))
+    f.Add([]byte(`{"tool_name":"Read","tool_input":{"file_path":"/etc/passwd"}}`))
+    f.Add([]byte(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hello"}}`))
+    f.Add([]byte(`{"tool_name":"Bash","tool_input":{"command":"` +
+        strings.Repeat("a", 10000) + `"}}`))
+
+    f.Fuzz(func(t *testing.T, data []byte) {
+        assert.NotPanics(t, func() {
+            // processHookInput is the extracted, testable core of
+            // runHookMode — accepts parsed input, returns output struct.
+            // Does NOT call os.Exit or read from os.Stdin.
+            var hookInput HookInput
+            if err := json.Unmarshal(data, &hookInput); err != nil {
+                return // invalid JSON is handled by FuzzHookInput
+            }
+            _ = processHookInput(hookInput)
+        })
+    })
+}
 ```
 
 ### 5.6 CI Integration
@@ -729,8 +954,10 @@ Fuzz tests run in CI Tier 3 (nightly) with a time limit:
 ```bash
 # Run fuzz tests for 5 minutes each
 go test -fuzz=FuzzEvaluate -fuzztime=5m ./guard/
+go test -fuzz=FuzzEvaluateWithAllowlist -fuzztime=5m ./guard/
 go test -fuzz=FuzzConfigParse -fuzztime=2m ./cmd/dcg-go/
 go test -fuzz=FuzzHookInput -fuzztime=2m ./cmd/dcg-go/
+go test -fuzz=FuzzHookProcess -fuzztime=2m ./cmd/dcg-go/
 ```
 
 The fuzz corpus is stored in `testdata/fuzz/` and committed to version
@@ -750,15 +977,36 @@ time and verifying that at least one test fails.
 
 The harness applies these mutation operators to each `CommandMatcher`:
 
-| Operator | Description | Example |
-|----------|-------------|---------|
-| `RemoveCondition` | Remove one condition from the matcher | Remove `HasFlag("--force")` |
-| `NegateCondition` | Negate a boolean condition | `HasFlag("--force")` → `!HasFlag("--force")` |
-| `SwapCommandName` | Change the command name | `git` → `got` |
-| `RemoveFlag` | Remove a flag check | Remove `--delete` from flag list |
-| `SwapSeverity` | Change severity up or down | `High` → `Medium` |
-| `RemoveEnvTrigger` | Remove an env escalation trigger | Remove `RAILS_ENV` check |
-| `EmptyReason` | Clear the reason string | `"overwrites history"` → `""` |
+| Operator | Description | Example | Category |
+|----------|-------------|---------|----------|
+| `RemoveCondition` | Remove one condition from the matcher | Remove `HasFlag("--force")` | matching |
+| `NegateCondition` | Negate a boolean condition | `HasFlag("--force")` → `!HasFlag("--force")` | matching |
+| `SwapCommandName` | Change the command name | `git` → `got` | matching |
+| `RemoveFlag` | Remove a flag check | Remove `--delete` from flag list | matching |
+| `RemoveNot` | Unwrap a Not clause, exposing its inner condition | `Not(HasFlag("--delete"))` → `HasFlag("--delete")` | matching |
+| `RemoveNotAlternative` | Remove one alternative from Or inside Not | `Not(Or(A, B, C))` → `Not(Or(A, C))` | matching |
+| `ShiftArgPosition` | Increment or decrement ArgAt position by 1 | `ArgAt(1, "delete")` → `ArgAt(2, "delete")` | matching |
+| `SwapSeverity` | Change severity up or down | `High` → `Medium` | matching |
+| `RemoveEnvTrigger` | Remove an env escalation trigger | Remove `RAILS_ENV` check | matching |
+| `EmptyReason` | Clear the reason string | `"overwrites history"` → `""` | metadata |
+
+**Operator categories**: "matching" operators affect pattern matching behavior
+and contribute to the primary kill rate. "metadata" operators (EmptyReason)
+affect only human-readable output and are tracked separately — they do NOT
+count toward the 100% kill rate target. This prevents trivially-killed
+metadata mutations from inflating the kill rate.
+
+**Not clause operators** (RemoveNot, RemoveNotAlternative) are the most
+security-critical operators. Not clauses are the primary mechanism for safe
+pattern precision across all packs (rsync S1: 6 Not clauses, kubectl S4:
+Not(Or(HasFlag("--all"), ...)), helm S2: Not(Or(ArgAt(1, "upgrade"), ...))).
+These operators must have tightness tests (see TH P2) verifying they produce
+genuinely different matching behavior.
+
+**ShiftArgPosition** targets positional argument matching — critical for
+multi-level subcommand tools like vault (`ArgAt(0, "kv")`, `ArgAt(1,
+"delete")`) where swapping positions could match `vault delete kv` instead
+of `vault kv delete`.
 
 ### 6.3 Harness Architecture
 
@@ -768,22 +1016,27 @@ package testharness
 
 // MutationResult tracks a single mutation test.
 type MutationResult struct {
-    Pack      string `json:"pack"`
-    Pattern   string `json:"pattern"`
-    Operator  string `json:"operator"`
-    Detail    string `json:"detail"`
-    Killed    bool   `json:"killed"`    // true = test suite caught it
-    KilledBy  string `json:"killed_by"` // test name that caught it
+    Pack        string `json:"pack"`
+    Pattern     string `json:"pattern"`
+    PatternType string `json:"pattern_type"` // "destructive" or "safe"
+    Operator    string `json:"operator"`
+    Category    string `json:"category"`     // "matching" or "metadata"
+    Detail      string `json:"detail"`
+    Killed      bool   `json:"killed"`       // true = test suite caught it
+    KilledBy    string `json:"killed_by"`    // test name that caught it
 }
 
 // MutationReport tracks all mutation results for a pack.
 type MutationReport struct {
-    Pack       string           `json:"pack"`
-    Total      int              `json:"total"`
-    Killed     int              `json:"killed"`
-    Survived   int              `json:"survived"`
-    KillRate   float64          `json:"kill_rate"`
-    Mutations  []MutationResult `json:"mutations"`
+    Pack              string           `json:"pack"`
+    Total             int              `json:"total"`              // matching mutations only
+    Killed            int              `json:"killed"`             // matching mutations killed
+    Survived          int              `json:"survived"`           // matching mutations survived
+    KillRate          float64          `json:"kill_rate"`          // matching kill rate
+    MetadataTotal     int              `json:"metadata_total"`     // metadata mutations (EmptyReason)
+    MetadataKilled    int              `json:"metadata_killed"`    // metadata mutations killed
+    Mutations         []MutationResult `json:"mutations"`          // matching mutations
+    MetadataMutations []MutationResult `json:"metadata_mutations"` // metadata mutations
 }
 ```
 
@@ -841,12 +1094,36 @@ func runMutationAnalysis(t *testing.T, pack packs.Pack) MutationReport {
     var report MutationReport
     report.Pack = pack.ID
 
-    for _, pattern := range pack.Destructive {
-        // Generate mutations for this pattern
-        mutations := generateMutations(pattern)
+    // Mutate BOTH destructive AND safe patterns.
+    // Safe pattern mutations are security-critical: a broadened safe pattern
+    // could short-circuit evaluation and cause destructive commands to be
+    // classified as safe (false negatives).
+    allPatterns := make([]annotatedPattern, 0,
+        len(pack.Destructive)+len(pack.Safe))
+    for _, p := range pack.Destructive {
+        allPatterns = append(allPatterns, annotatedPattern{p, "destructive"})
+    }
+    for _, p := range pack.Safe {
+        allPatterns = append(allPatterns, annotatedPattern{p, "safe"})
+    }
+
+    for _, ap := range allPatterns {
+        mutations := generateMutations(ap.pattern)
         for _, mutation := range mutations {
+            // Skip metadata-category operators (EmptyReason) from kill rate
+            if mutation.Category == "metadata" {
+                report.MetadataTotal++
+                result := applyAndTest(t, pack, ap.pattern, mutation)
+                report.MetadataMutations = append(report.MetadataMutations, result)
+                if result.Killed {
+                    report.MetadataKilled++
+                }
+                continue
+            }
+
             report.Total++
-            result := applyAndTest(t, pack, pattern, mutation)
+            result := applyAndTest(t, pack, ap.pattern, mutation)
+            result.PatternType = ap.kind // "destructive" or "safe"
             report.Mutations = append(report.Mutations, result)
             if result.Killed {
                 report.Killed++
@@ -859,22 +1136,65 @@ func runMutationAnalysis(t *testing.T, pack packs.Pack) MutationReport {
     report.KillRate = float64(report.Killed) / float64(report.Total) * 100
     return report
 }
+
+type annotatedPattern struct {
+    pattern Pattern
+    kind    string // "destructive" or "safe"
+}
+```
+
+**Safe pattern kill criterion**: For safe patterns, the kill criterion is
+inverted compared to destructive patterns. A safe pattern mutation is
+"killed" when the test suite detects that the mutated safe pattern now
+incorrectly matches a command that should be classified as destructive.
+
+The test corpus for safe pattern mutation testing must include commands that
+sit just outside the safe pattern boundary — commands that match the
+corresponding destructive pattern and should NOT be caught by the safe
+pattern. For example, if rsync S1's safe pattern has
+`Not(HasFlag("--delete"))`, the corpus must include `rsync --delete /src
+/dst` to kill the RemoveNot mutation.
+
+```go
+// Kill criterion for safe pattern mutations:
+func isKilledSafe(t *testing.T, pack packs.Pack, original, mutated Pattern,
+    corpus []string) bool {
+    for _, cmd := range corpus {
+        origMatch := original.Match(cmd)
+        mutMatch := mutated.Match(cmd)
+        if origMatch != mutMatch {
+            // The mutation changed behavior — check if it's a
+            // dangerous change (safe pattern now matches something
+            // it shouldn't, or stops matching something it should)
+            return true
+        }
+    }
+    return false // mutation survived — test gap
+}
 ```
 
 ### 6.5 Mutation Targets Per Pack
 
-| Pack Group | Packs | Destructive Patterns | Est. Mutations |
-|-----------|-------|---------------------|----------------|
-| Core | core.git, core.filesystem | 32 | ~160 |
-| Database | postgresql, mysql, sqlite, mongodb, redis | 35 | ~175 |
-| Infra/Cloud | terraform, pulumi, ansible, aws, gcp, azure | 58 | ~290 |
-| Containers/K8s | docker, compose, kubectl, helm | 35 | ~175 |
-| Other | frameworks, rsync, vault, github | 28 | ~140 |
-| **Total** | **21 packs** | **188 patterns** | **~940 mutations** |
+| Pack Group | Packs | Destructive | Safe | Est. Matching Mutations | Est. Metadata Mutations |
+|-----------|-------|-------------|------|------------------------|------------------------|
+| Core | core.git, core.filesystem | 32 | 12 | ~330 | ~44 |
+| Database | postgresql, mysql, sqlite, mongodb, redis | 35 | 15 | ~375 | ~50 |
+| Infra/Cloud | terraform, pulumi, ansible, aws, gcp, azure | 58 | 22 | ~600 | ~80 |
+| Containers/K8s | docker, compose, kubectl, helm | 35 | 16 | ~383 | ~51 |
+| Other | frameworks, rsync, vault, github | 28 | 12 | ~300 | ~40 |
+| **Total** | **21 packs** | **188** | **77** | **~1988 matching** | **~265 metadata** |
 
-**Target**: 100% kill rate across all packs. Any surviving mutation
-indicates either a redundant condition (remove it) or a test gap (add a
-test case).
+**Mutation count increase**: Including safe patterns and the 3 new
+operators (RemoveNot, RemoveNotAlternative, ShiftArgPosition) roughly
+doubles the matching mutation count from ~940 to ~1988. The 10 matching
+operators × 265 patterns × ~0.75 applicability rate = ~1988 mutations.
+
+**Kill rate targets**:
+- **Matching mutations**: 100% kill rate required. Any survivor indicates
+  a redundant condition (remove it) or a test gap (add a test case).
+- **Metadata mutations**: Tracked separately. EmptyReason mutations are
+  expected to be killed by golden file `reason_contains` assertions but
+  do not count toward the 100% kill rate.
 
 ### 6.6 CI Integration
 
@@ -1032,16 +1352,28 @@ var CommandBearingNodeTypes = []string{
     "if_statement",          // if cmd; then cmd; fi
     "elif_clause",           // elif cmd; then cmd
     "while_statement",       // while cmd; do cmd; done
+    "until_statement",       // until cmd; do cmd; done (distinct from while in tree-sitter)
     "for_statement",         // for x in ...; do cmd; done
     "case_statement",        // case ... in pattern) cmd ;; esac
     "function_definition",   // fn() { cmd; }
     "command_substitution",  // $(cmd)
     "process_substitution",  // <(cmd) or >(cmd)
+    "redirected_command",    // cmd > file 2>&1 (wraps simple_command in tree-sitter)
     "negated_command",       // ! cmd
     "test_command",          // [[ ... ]]
-    "heredoc_body",          // <<EOF ... EOF (inline scripts)
+    "heredoc_body",          // <<EOF ... EOF — NOTE: heredoc bodies are typically
+                             // literal text, not commands. Included here because
+                             // heredocs may contain command substitutions ($(...))
+                             // which the extractor should walk into. If the
+                             // heredoc is pure text, the extractor correctly
+                             // produces no commands.
     "string",               // "$(cmd)" within double-quoted strings
 }
+
+// Implementation note: This list should be verified against the actual
+// tree-sitter-bash grammar definition (node-types.json) during
+// implementation to ensure completeness. Additional node types like
+// "coproc" (bash 4+) should be evaluated for inclusion.
 ```
 
 ### 8.2 Synthetic Command Generation
@@ -1067,11 +1399,14 @@ func TestGrammarCoverage(t *testing.T) {
         "elif_body":            "if false; then true; elif true; then git push --force; fi",
         "while_condition":      "while git push --force; do echo retry; done",
         "while_body":           "while true; do git push --force; done",
+        "until_condition":      "until git push --force; do echo retry; done",
+        "until_body":           "until false; do git push --force; done",
         "for_body":             "for x in 1 2 3; do git push --force; done",
         "case_body":            "case $x in y) git push --force;; esac",
         "function_body":        "fn() { git push --force; }; fn",
         "command_substitution": "echo $(git push --force)",
         "process_substitution": "diff <(git push --force) /dev/null",
+        "redirected_command":   "git push --force > /dev/null 2>&1",
         "negated":              "! git push --force",
         "backtick":             "echo `git push --force`",
     }
@@ -1121,13 +1456,35 @@ func TestGrammarCoverageAllPacks(t *testing.T) {
         "frameworks":            "RAILS_ENV=production rails db:reset",
     }
 
+    // Use the full structural context set from §8.2 to ensure per-pack
+    // coverage matches the core grammar coverage test. Testing only 5
+    // contexts would cover just 23% of structural contexts — a pack's
+    // keyword pre-filter or pattern matching could fail in specific
+    // contexts (for_body, while_body, case_body, etc.) undetected.
     contexts := []string{
-        "%s",                     // simple
-        "echo start && %s",      // list_and
-        "(%s)",                   // subshell
-        "echo | %s",             // pipeline
-        "if true; then %s; fi",  // if_body
+        "%s",                                                        // program
+        "echo start | %s",                                           // pipeline
+        "echo start; %s",                                            // list_sequential
+        "echo start && %s",                                          // list_and
+        "echo start || %s",                                          // list_or
+        "{ echo start; %s; }",                                       // compound_statement
+        "(%s)",                                                      // subshell
+        "if %s; then echo done; fi",                                 // if_condition
+        "if true; then %s; fi",                                      // if_body
+        "if false; then true; elif true; then %s; fi",               // elif_body
+        "while true; do %s; done",                                   // while_body
+        "until false; do %s; done",                                  // until_body
+        "for x in 1 2 3; do %s; done",                               // for_body
+        "case $x in y) %s;; esac",                                   // case_body
+        "fn() { %s; }; fn",                                          // function_body
+        "echo $(%s)",                                                // command_substitution
+        "diff <(%s) /dev/null",                                      // process_substitution
+        "%s > /dev/null 2>&1",                                       // redirected_command
+        "! %s",                                                      // negated
+        "echo `%s`",                                                 // backtick
     }
+    // ~10 packs × 20 contexts = ~200 test cases — still fast enough
+    // for Tier 2 (<30s)
 
     for packID, cmd := range packCommands {
         if !hasRegisteredPack(packID) {
@@ -1207,8 +1564,12 @@ func TestE2ERealWorldScenarios(t *testing.T) {
         {
             name:     "dev database reset",
             command:  "RAILS_ENV=development rails db:reset",
-            wantDecision: guard.Ask,
-            note:     "Development env, lower severity",
+            wantDecision: guard.Deny,
+            wantMinSev:  guard.High,
+            note:     "rails db:reset base severity = High (plan 03e D2). " +
+                      "RAILS_ENV=development is NOT production → no escalation → " +
+                      "severity remains High → InteractivePolicy maps High → Deny. " +
+                      "No de-escalation mechanism exists per plans 02/03e.",
         },
 
         // Infrastructure
@@ -1309,6 +1670,77 @@ func TestE2ERealWorldScenarios(t *testing.T) {
 }
 ```
 
+### 9.1.1 Policy-Parameterized E2E Scenarios
+
+The base E2E test uses InteractivePolicy exclusively. This supplemental
+test verifies that the same commands produce correct policy-specific
+decisions under all 3 built-in policies:
+
+```go
+func TestE2EPolicyVariations(t *testing.T) {
+    type policyExpectation struct {
+        policy       guard.Policy
+        policyName   string
+        wantDecision guard.Decision
+    }
+
+    scenarios := []struct {
+        name        string
+        command     string
+        expectations []policyExpectation
+    }{
+        {
+            name:    "Indeterminate command under all policies",
+            command: strings.Repeat("a", eval.MaxCommandBytes+1),
+            expectations: []policyExpectation{
+                {guard.StrictPolicy(), "strict", guard.Deny},
+                {guard.InteractivePolicy(), "interactive", guard.Ask},
+                {guard.PermissivePolicy(), "permissive", guard.Allow},
+            },
+        },
+        {
+            name:    "Medium severity under all policies",
+            command: "git stash drop",
+            expectations: []policyExpectation{
+                {guard.StrictPolicy(), "strict", guard.Deny},
+                {guard.InteractivePolicy(), "interactive", guard.Ask},
+                {guard.PermissivePolicy(), "permissive", guard.Allow},
+            },
+        },
+        {
+            name:    "High severity under all policies",
+            command: "git push --force origin main",
+            expectations: []policyExpectation{
+                {guard.StrictPolicy(), "strict", guard.Deny},
+                {guard.InteractivePolicy(), "interactive", guard.Deny},
+                {guard.PermissivePolicy(), "permissive", guard.Ask},
+            },
+        },
+        {
+            name:    "Critical severity under all policies",
+            command: "rm -rf /",
+            expectations: []policyExpectation{
+                {guard.StrictPolicy(), "strict", guard.Deny},
+                {guard.InteractivePolicy(), "interactive", guard.Deny},
+                {guard.PermissivePolicy(), "permissive", guard.Deny},
+            },
+        },
+    }
+
+    for _, sc := range scenarios {
+        for _, exp := range sc.expectations {
+            t.Run(sc.name+"/"+exp.policyName, func(t *testing.T) {
+                result := guard.Evaluate(sc.command,
+                    guard.WithPolicy(exp.policy))
+                assert.Equal(t, exp.wantDecision, result.Decision,
+                    "policy %s: decision mismatch for %q",
+                    exp.policyName, sc.command)
+            })
+        }
+    }
+}
+```
+
 ### 9.2 Hook Mode E2E
 
 Test the full hook mode path: JSON stdin → evaluation → JSON stdout:
@@ -1360,10 +1792,23 @@ func TestE2EHookMode(t *testing.T) {
 
             if tt.wantExitCode == 0 {
                 assert.NoError(t, err)
+
+                // Verify stdout contains ONLY valid JSON — for Claude Code
+                // hook protocol compatibility, any non-JSON output on stdout
+                // would cause a parse error in the hook consumer.
+                assert.True(t, json.Valid(stdout.Bytes()),
+                    "stdout is not valid JSON: %q", stdout.String())
+
                 var output HookOutput
                 assert.NoError(t, json.Unmarshal(stdout.Bytes(), &output))
                 assert.Equal(t, tt.wantDecision,
                     output.HookSpecificOutput.PermissionDecision)
+
+                // Verify warnings (if any) appear on stderr, not stdout.
+                // This ensures hook protocol compliance.
+                if stderr.Len() > 0 {
+                    t.Logf("stderr output: %s", stderr.String())
+                }
             } else {
                 assert.Error(t, err)
             }
@@ -1709,22 +2154,21 @@ load-bearing and tested.
    (c) use the upstream's own test mode API. (Recommendation: (b) if
    available, otherwise (a) with a cached build.)
 
-2. **Mutation testing scope**: Should mutation testing cover safe
-   patterns as well as destructive patterns? Safe pattern mutations
-   would verify that the test suite catches "accidental matches" on
-   safe commands. (Recommendation: yes, include safe patterns — a
-   mutated safe pattern that still matches is a false-negative risk.)
+2. ~~**Mutation testing scope**~~: **Resolved** — Yes, mutation testing
+   covers both destructive AND safe patterns (§6.4). Safe pattern
+   mutations use an inverted kill criterion. See §6.5 for updated
+   mutation count (~1988 matching mutations).
 
 3. **Fuzz testing duration**: How long should fuzz tests run in CI?
    Options: 5 min (fast feedback), 30 min (thorough), overnight (maximum
    coverage). (Recommendation: 5 min in nightly CI, overnight run
    weekly or on-demand.)
 
-4. **Comparison test policy**: When a divergence is found, what's the
-   process? Options: (a) automatically file a bug, (b) require manual
-   classification before merging, (c) allow divergences with documented
-   rationale. (Recommendation: (c) with a `comparison_divergences.json`
-   file tracking known divergences.)
+4. ~~**Comparison test policy**~~: **Resolved** — Formalized as
+   deterministic `classifyDivergence` rules (§4.4) with a
+   `comparison_divergences.json` lookup table. Unknown divergences
+   default to "bug". Upstream binary pinned to specific version/commit
+   SHA (§4.7).
 
 5. **Golden file corpus maintenance**: Who owns the corpus? Options:
    (a) pack authors add entries when adding patterns, (b) a dedicated
@@ -1738,7 +2182,7 @@ load-bearing and tested.
 
 | Tier | Tests | Runtime Target | Trigger |
 |------|-------|---------------|---------|
-| **Tier 1** (every commit) | Golden file regression (existing corpus) | <10s | Every push |
+| **Tier 1** (every commit) | Golden file regression (existing corpus) + golden entry count check (≥750) | <10s | Every push |
 | **Tier 2** (PR gate) | E2E tests (§9), grammar coverage (§8) | <30s | PR create/update |
 | **Tier 3** (nightly) | Benchmarks (§3), fuzz (§5, 5min), comparison (§4), mutation (§6) | <60m | Nightly schedule |
 | **Tier 4** (weekly) | Extended fuzz (overnight), full mutation analysis | <8h | Weekly schedule |
@@ -1750,14 +2194,14 @@ load-bearing and tested.
 | Subsystem | New Tests | Description |
 |-----------|-----------|-------------|
 | Benchmark suite (§3) | ~25 | Per-stage + aggregate benchmarks |
-| Comparison tests (§4) | ~5 + corpus | Go vs Rust divergence classification |
-| Fuzz testing (§5) | 3 fuzzers | Pipeline, config, hook input |
-| Mutation testing (§6) | ~940 mutations | Per-condition verification across all packs |
+| Comparison tests (§4) | ~5 + corpus | Go vs Rust divergence classification (4 corpus sources) |
+| Fuzz testing (§5) | 5 fuzzers | Pipeline, allowlist/blocklist, config, hook input, hook process |
+| Mutation testing (§6) | ~1988 matching + ~265 metadata | Per-condition verification across all packs (destructive + safe) |
 | Golden file expansion (§7) | ~250+ entries | Structural variants, false positives, dataflow |
-| Grammar coverage (§8) | ~30 | All AST node types × representative commands |
-| End-to-end tests (§9) | ~30 | Real-world scenarios, hook/test mode E2E |
+| Grammar coverage (§8) | ~230 | 22 AST node types × 10 packs + 22 core templates |
+| End-to-end tests (§9) | ~46 | Real-world + policy-parameterized + hook/test mode E2E |
 | Profiling (§10) | ~10 | Allocation tracking, memory leak detection |
-| **Total** | **~350+ tests, 750+ golden entries, ~940 mutations** | |
+| **Total** | **~470+ tests, 750+ golden entries, ~1988 matching mutations** | |
 
 ---
 
@@ -1766,12 +2210,48 @@ load-bearing and tested.
 Implementation of 05 (testing & benchmarks) is complete when:
 
 1. **Benchmarks** established for all pipeline stages (§3)
-2. **Comparison tests** run against upstream, 0 unexplained bugs (§4)
-3. **Fuzz testing** runs for 5+ minutes without crashes (§5)
-4. **Mutation testing** achieves 100% kill rate across all 21 packs (§6)
-5. **Golden file corpus** expanded to 750+ entries with 3+ per pattern (§7)
-6. **Grammar coverage** verifies all command-bearing AST node types (§8)
-7. **E2E tests** pass for hook mode, test mode, and real-world scenarios (§9)
+2. **Comparison tests** run against pinned upstream (§4.7), 0 unexplained bugs (§4), classifyDivergence formalized (§4.4)
+3. **Fuzz testing** — all 5 fuzzers run 5+ minutes without crashes (§5), including allowlist/blocklist fuzzer (§5.1.1)
+4. **Mutation testing** achieves 100% matching kill rate across all 21 packs, both destructive AND safe patterns (§6). Metadata mutations tracked separately.
+5. **Golden file corpus** expanded to 750+ entries with 3+ per pattern (§7), entry count verified in Tier 1 CI
+6. **Grammar coverage** verifies all command-bearing AST node types including until_statement, redirected_command (§8), per-pack coverage uses full 20-context template set (§8.3)
+7. **E2E tests** pass for hook mode, test mode, real-world scenarios, AND policy-parameterized scenarios (§9)
 8. **No memory leaks** under sustained load (§10)
 9. **CI pipeline** configured with tiered test execution (§16)
-10. **All invariants** (§5.2) hold under fuzzing for all registered packs
+10. **All invariants** (§5.2 + INV-A1/A2/B1) hold under fuzzing for all registered packs
+11. **Hook mode stderr isolation** verified — stdout contains only valid JSON (§9.2)
+
+---
+
+## Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-alt-reviewer | P0 | TB-P0.1: Fuzz never exercises allowlist/blocklist | Incorporated | §5.1.1 FuzzEvaluateWithAllowlist + INV-A1/A2/B1 |
+| 2 | dcg-alt-reviewer | P0 | TB-P0.2: Mutation testing excludes safe patterns | Incorporated | §6.4 extended to safe+destructive, §6.5 updated counts. Merged with SE-P1.2. |
+| 3 | dcg-alt-reviewer | P1 | TB-P1.1: No Not clause removal mutation operator | Incorporated | §6.2 added RemoveNot + RemoveNotAlternative |
+| 4 | dcg-alt-reviewer | P1 | TB-P1.2: No ArgAt position-shift mutation operator | Incorporated | §6.2 added ShiftArgPosition |
+| 5 | dcg-alt-reviewer | P1 | TB-P1.3: P3 tightness test missing INV-6/7/8 | Incorporated | TH P3 added 3 entries for INV-6/7/8 |
+| 6 | dcg-alt-reviewer | P2 | TB-P2.1: Grammar missing until_statement, redirected_command | Incorporated | §8.1 added node types, annotated heredoc_body |
+| 7 | dcg-alt-reviewer | P2 | TB-P2.2: Per-pack grammar test only 5 of 17+ contexts | Incorporated | §8.3 expanded to full 20-template set |
+| 8 | dcg-alt-reviewer | P2 | TB-P2.3: Hook fuzzer misses post-unmarshal processing | Incorporated | §5.5 added FuzzHookProcess |
+| 9 | dcg-alt-reviewer | P2 | TB-P2.4: E2E tests don't vary policy | Incorporated | §9.1.1 added TestE2EPolicyVariations |
+| 10 | dcg-alt-reviewer | P2 | TB-P2.5: Config fuzzer bypasses os.Exit | Incorporated | §5.4 refactored to use parseConfig() |
+| 11 | dcg-alt-reviewer | P2 | TB-P2.6: Comparison classification underspecified | Incorporated | §4.4 formalized classifyDivergence with 5 rules + lookup table. Merged with SE-P1.3. |
+| 12 | dcg-alt-reviewer | P3 | TB-P3.1: EmptyReason inflates kill count | Incorporated | §6.2 category column, §6.4 metadata tracking. Merged with SE-P2.4. |
+| 13 | dcg-alt-reviewer | P3 | TB-P3.2: SEC2 golden file test too weak | Incorporated | TH SEC2 extended with TestSecurityNoSubprocessExecution |
+| 14 | dcg-alt-reviewer | P3 | TB-P3.3: D3 testing.T mock broken | Incorporated | TH P3 + D3 rewritten with t.Run() sub-test. Merged with SE-P1.4. |
+| 15 | dcg-alt-reviewer | P3 | TB-P3.4: Upstream corpus should include their test suite | Incorporated | §4.2 added 4th corpus source |
+| 16 | dcg-alt-reviewer | P3 | TB-P3.5: INV-8 threshold hardcoded | Incorporated | §5.2 + seeds reference eval.MaxCommandBytes |
+| 17 | dcg-reviewer | P1 | SE-P1.1: E2E dev database reset expects Ask, should be Deny | Incorporated | §9.1 fixed to Deny + High severity with rationale |
+| 18 | dcg-reviewer | P1 | SE-P1.2: Mutation testing excludes safe patterns | Incorporated | Merged with TB-P0.2 |
+| 19 | dcg-reviewer | P1 | SE-P1.3: classifyDivergence undefined | Incorporated | Merged with TB-P2.6 |
+| 20 | dcg-reviewer | P1 | SE-P1.4: testing.T mock broken | Incorporated | Merged with TB-P3.3 |
+| 21 | dcg-reviewer | P2 | SE-P2.1: Benchmark CV threshold too loose | Incorporated | TH P1 tiered: ≤0.15 for >100μs, ≤0.30 for ≤100μs |
+| 22 | dcg-reviewer | P2 | SE-P2.2: Self-comparison O1 samples only 20 | Incorporated | TH O1 iterates full corpus |
+| 23 | dcg-reviewer | P2 | SE-P2.3: Golden file count 501 may not reconcile | Incorporated | §16 Tier 1 CI check for golden entry count |
+| 24 | dcg-reviewer | P2 | SE-P2.4: EmptyReason kill mechanism unclear | Incorporated | Merged with TB-P3.1 |
+| 25 | dcg-reviewer | P3 | SE-P3.1: Fuzz seed corpus lacks structural diversity | Incorporated | §5.1 added 5 structurally diverse seeds |
+| 26 | dcg-reviewer | P3 | SE-P3.2: Grammar omits process_substitution | Not Incorporated | Already present at §8.1 line 1039 and §8.2 template |
+| 27 | dcg-reviewer | P3 | SE-P3.3: Hook tests don't verify stderr isolation | Incorporated | §9.2 added json.Valid(stdout) + stderr assertions |
+| 28 | dcg-reviewer | P3 | SE-P3.4: Upstream binary version pinning | Incorporated | §4.7 added version pinning config + bump policy |

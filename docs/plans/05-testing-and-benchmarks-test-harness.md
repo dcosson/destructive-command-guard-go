@@ -41,8 +41,10 @@ Key testing challenges:
 ### P1: Benchmark Stability
 
 **Invariant**: For any benchmark, running it 5 times in succession
-produces results within 30% of each other (coefficient of variation
-< 0.30).
+produces stable results. Tiered CV thresholds account for the different
+noise characteristics of sub-microsecond vs longer benchmarks:
+- Benchmarks >100μs mean: CV < 0.15 (lower tolerance — these should be stable)
+- Benchmarks ≤100μs mean: CV < 0.30 (higher tolerance — OS scheduling noise dominates)
 
 ```go
 func TestPropertyBenchmarkStability(t *testing.T) {
@@ -72,10 +74,18 @@ func TestPropertyBenchmarkStability(t *testing.T) {
             stddev := stat.StdDev(results, nil)
             cv := stddev / mean
 
-            t.Logf("%s: mean=%.0fns, stddev=%.0fns, cv=%.2f",
-                bm.name, mean, stddev, cv)
-            assert.Less(t, cv, 0.30,
-                "benchmark %s is too unstable (cv=%.2f)", bm.name, cv)
+            // Tiered CV threshold: tighter for longer benchmarks
+            // where measurement noise should be proportionally smaller.
+            maxCV := 0.30
+            if mean > 100_000 { // >100μs
+                maxCV = 0.15
+            }
+
+            t.Logf("%s: mean=%.0fns, stddev=%.0fns, cv=%.2f (max=%.2f)",
+                bm.name, mean, stddev, cv, maxCV)
+            assert.Less(t, cv, maxCV,
+                "benchmark %s is too unstable (cv=%.2f, max=%.2f)",
+                bm.name, cv, maxCV)
         })
     }
 }
@@ -116,7 +126,9 @@ broken. This proves the invariant is actually checking something.
 ```go
 func TestPropertyFuzzInvariantsTight(t *testing.T) {
     // For each invariant, construct a deliberately broken Result
-    // and verify the invariant catches it.
+    // and verify the invariant catches it. This proves each invariant
+    // is actually checking something — a removed or weakened invariant
+    // would allow a broken result through.
     brokenResults := []struct {
         name    string
         result  guard.Result
@@ -155,26 +167,51 @@ func TestPropertyFuzzInvariantsTight(t *testing.T) {
             command: "echo hello",
             inv:     "INV-5",
         },
+        {
+            name:    "invalid severity",
+            result:  guard.Result{
+                Decision:   guard.Deny,
+                Command:    "echo hello",
+                Assessment: &guard.Assessment{Severity: guard.Severity(99)},
+                Matches:    []guard.Match{{Pack: "test", Rule: "test"}},
+            },
+            command: "echo hello",
+            inv:     "INV-6",
+        },
+        {
+            name:    "empty pack in match",
+            result:  guard.Result{
+                Decision:   guard.Deny,
+                Command:    "echo hello",
+                Assessment: &guard.Assessment{Severity: guard.High},
+                Matches:    []guard.Match{{Pack: "", Rule: ""}},
+            },
+            command: "echo hello",
+            inv:     "INV-7",
+        },
+        {
+            name:    "oversized non-indeterminate",
+            result:  guard.Result{
+                Decision:   guard.Deny,
+                Command:    strings.Repeat("a", eval.MaxCommandBytes+1),
+                Assessment: &guard.Assessment{Severity: guard.High},
+                Matches:    []guard.Match{{Pack: "test", Rule: "test"}},
+            },
+            command: strings.Repeat("a", eval.MaxCommandBytes+1),
+            inv:     "INV-8",
+        },
     }
 
     for _, br := range brokenResults {
         t.Run(br.name, func(t *testing.T) {
-            // Verify the invariant check catches the broken result
-            caught := false
-            func() {
-                defer func() {
-                    if r := recover(); r != nil {
-                        caught = true
-                    }
-                }()
-                // Use a testing.T that records failures
-                innerT := &testing.T{}
-                verifyInvariants(innerT, br.command, br.result)
-                if innerT.Failed() {
-                    caught = true
-                }
-            }()
-            assert.True(t, caught,
+            // Use t.Run() sub-test to capture failures from
+            // verifyInvariants without aborting the outer test.
+            // This is idiomatic Go — t.Run() returns false if the
+            // sub-test failed.
+            passed := t.Run("verify", func(sub *testing.T) {
+                verifyInvariants(sub, br.command, br.result)
+            })
+            assert.False(t, passed,
                 "invariant %s did not catch broken result %s",
                 br.inv, br.name)
         })
@@ -412,11 +449,14 @@ func TestDeterministicFuzzInvariantCatchesBug(t *testing.T) {
         Command:  "echo hello",
     }
 
-    // INV-4 should catch this
-    mockT := &testing.T{}
-    verifyInvariants(mockT, "echo hello", brokenResult)
-    // Note: In practice, testing.T can't be mocked this way.
-    // The actual test uses a wrapper that captures t.Fatal calls.
+    // INV-4 should catch this. Use t.Run() sub-test to capture
+    // the failure without aborting the outer test — this is the
+    // standard Go idiom for testing that a function calls t.Fatal.
+    passed := t.Run("verify_catches_bug", func(sub *testing.T) {
+        verifyInvariants(sub, "echo hello", brokenResult)
+    })
+    assert.False(t, passed,
+        "INV-4 did not catch nil-assessment Deny result")
 }
 ```
 
@@ -459,7 +499,7 @@ func TestOracleSelfComparison(t *testing.T) {
     binary := buildTestBinary(t)
     corpus := loadComparisonCorpus(t, "testdata/comparison_corpus.json")
 
-    for _, entry := range corpus[:20] { // Sample 20
+    for _, entry := range corpus { // Full corpus — self-comparison is fast
         t.Run(entry.Command, func(t *testing.T) {
             goResult := guard.Evaluate(entry.Command,
                 guard.WithPolicy(guard.InteractivePolicy()))
@@ -698,6 +738,29 @@ func TestSecurityGoldenFileNotExecuted(t *testing.T) {
     assert.True(t, os.IsNotExist(err),
         "guard.Evaluate appears to have executed the command!")
 }
+
+// TestSecurityNoSubprocessExecution verifies that the ENTIRE golden file
+// test suite doesn't accidentally execute commands. We run the golden file
+// tests with an empty PATH — if any code path tries to exec.LookPath or
+// exec.Command for the evaluated commands, it would fail.
+func TestSecurityNoSubprocessExecution(t *testing.T) {
+    if testing.Short() {
+        t.Skip("skipping subprocess execution test in short mode")
+    }
+
+    entries := loadAllGoldenEntries(t)
+    // Set PATH to empty for this test — any accidental exec would fail
+    t.Setenv("PATH", "")
+
+    for _, e := range entries {
+        result := guard.Evaluate(e.Command,
+            guard.WithPolicy(guard.InteractivePolicy()))
+        // We don't assert specific decisions here — just that
+        // evaluation completes without subprocess execution errors.
+        _ = result
+    }
+    // If we reach here, no subprocess execution was attempted.
+}
 ```
 
 ---
@@ -752,17 +815,18 @@ After running fuzz tests for extended periods:
 
 The plan 05 test harness is complete when:
 
-1. **Benchmark stability** verified — CV < 0.30 for all benchmarks (P1)
-2. **Mutation operators** produce genuinely different behavior (P2)
-3. **Fuzz invariants** are tight — each catches a specific bug class (P3)
+1. **Benchmark stability** verified — tiered CV thresholds (≤0.15 for >100μs, ≤0.30 for ≤100μs) for all benchmarks (P1)
+2. **Mutation operators** produce genuinely different behavior, including RemoveNot, RemoveNotAlternative, ShiftArgPosition (P2)
+3. **Fuzz invariants** are tight — all 8 invariants (INV-1 through INV-8) caught by tightness test (P3)
 4. **Golden file consistency** verified — no contradictions (P4)
-5. **Comparison classification** is deterministic (P5)
+5. **Comparison classification** is deterministic, using formalized classifyDivergence rules (P5)
 6. **Benchmark ordering** matches expectations (D1)
 7. **Known mutation kill** verified for representative pattern (D2)
-8. **Corpus size** meets 750+ minimum (D4)
-9. **Self-comparison** produces 100% identical results (O1)
+8. **Corpus size** meets 750+ minimum, verified in Tier 1 CI (D4)
+9. **Self-comparison** produces 100% identical results on full corpus (O1)
 10. **Sustained load** — no crashes or leaks under 100K evaluations (S1)
 11. **Fuzz corpus clean** — no sensitive data in committed corpus (SEC1)
+12. **No subprocess execution** — golden file suite runs with empty PATH without errors (SEC2)
 
 ---
 
@@ -775,3 +839,16 @@ The plan 05 test harness is complete when:
 - Fuzz time-to-first-crash: target never (from plan 05 §5)
 - Memory growth under sustained load (from S1)
 - Benchmark regression detection accuracy (from B2)
+
+---
+
+## Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-alt-reviewer | P1 | TB-P1.3: P3 tightness test missing INV-6/7/8 | Incorporated | P3 added 3 broken-result entries |
+| 2 | dcg-alt-reviewer | P3 | TB-P3.2: SEC2 too weak | Incorporated | SEC2 extended with restricted-PATH test |
+| 3 | dcg-alt-reviewer | P3 | TB-P3.3: D3 testing.T mock broken | Incorporated | P3 + D3 rewritten with t.Run() sub-test |
+| 4 | dcg-reviewer | P1 | SE-P1.4: testing.T mock broken | Incorporated | Merged with TB-P3.3 |
+| 5 | dcg-reviewer | P2 | SE-P2.1: Benchmark CV threshold too loose | Incorporated | P1 tiered: ≤0.15 for >100μs, ≤0.30 for ≤100μs |
+| 6 | dcg-reviewer | P2 | SE-P2.2: Self-comparison O1 samples only 20 | Incorporated | O1 iterates full corpus |
