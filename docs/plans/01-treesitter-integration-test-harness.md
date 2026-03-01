@@ -57,7 +57,8 @@ result satisfies:
 - `cmd.RawText` is a substring of the original input
 - `cmd.StartByte < cmd.EndByte`
 - `cmd.StartByte` and `cmd.EndByte` are within input bounds
-- `cmd.Name != ""` (every extracted command has a name)
+- `cmd.Name != ""` (every extracted command has a name — the extractor
+  filters out commands with no identifiable name)
 - If `cmd.Flags` is non-nil, every key starts with `-`
 
 ```go
@@ -226,6 +227,23 @@ var dataflowTests = []struct {
         expect: map[string][]string{"DIR": {"/"}},
     },
     {
+        name:   "and chain may-alias",
+        input:  "DIR=/ && DIR=/tmp && rm -rf $DIR",
+        expect: map[string][]string{"DIR": {"/", "/tmp"}}, // Both values tracked
+    },
+    {
+        name:   "and chain false negative prevention",
+        input:  "DIR=/ && something && DIR=/tmp && rm -rf $DIR",
+        expect: map[string][]string{"DIR": {"/", "/tmp"}}, // May-alias preserves dangerous value
+    },
+    {
+        name:   "mixed and-or chain",
+        input:  "A=foo && B=bar || C=baz; echo $A $B $C",
+        expect: map[string][]string{
+            "A": {"foo"}, "B": {"bar"}, "C": {"baz"},
+        }, // All branches may-execute
+    },
+    {
         name:   "url-shaped env var",
         input:  "DB_HOST=prod-db.internal; psql -h $DB_HOST -c 'DROP TABLE users'",
         expect: map[string][]string{"DB_HOST": {"prod-db.internal"}},
@@ -233,12 +251,27 @@ var dataflowTests = []struct {
     {
         name:   "subshell flattening",
         input:  "(export FOO=bar); echo $FOO",
-        expect: map[string][]string{"FOO": {"bar"}}, // Over-approximation
+        expect: map[string][]string{"FOO": {"bar"}}, // Over-approximation (real bash: FOO unset)
+    },
+    {
+        name:   "pipeline flattening",
+        input:  "DANGER=true | bash -c 'rm -rf $DANGER'",
+        expect: map[string][]string{"DANGER": {"true"}}, // Over-approximation (real bash: separate subshells)
+    },
+    {
+        name:   "command substitution indeterminate",
+        input:  "FILE=$(mktemp); rm -rf $FILE",
+        expect: map[string][]string{}, // FILE is indeterminate, $FILE left unsubstituted
     },
     {
         name:   "unresolved variable",
         input:  "rm -rf $UNKNOWN",
         expect: map[string][]string{}, // UNKNOWN not tracked
+    },
+    {
+        name:   "common pipeline no false positives",
+        input:  "cat /var/log/syslog | grep error | sort | uniq -c",
+        expect: map[string][]string{}, // No variable assignments, no dataflow issues
     },
 }
 ```
@@ -288,6 +321,16 @@ var inlineTests = []struct {
         expectWarnings: []WarningCode{WarnInlineDepthExceeded},
     },
     {
+        name:           "eval simple",
+        input:          `eval "rm -rf /"`,
+        expectCommands: []string{"eval", "rm"},
+    },
+    {
+        name:           "eval unquoted args",
+        input:          `eval rm -rf /`,
+        expectCommands: []string{"eval", "rm"},
+    },
+    {
         name:           "no inline script",
         input:          "python script.py",
         expectCommands: []string{"python"},
@@ -296,6 +339,37 @@ var inlineTests = []struct {
         name:           "perl -e",
         input:          `perl -e 'system("rm -rf /")'`,
         expectCommands: []string{"perl", "rm"},
+    },
+    // Negative cases — commands with -c/-e flags that are NOT inline triggers
+    {
+        name:           "gcc -c is not inline",
+        input:          "gcc -c file.c",
+        expectCommands: []string{"gcc"}, // No nested extraction
+    },
+    {
+        name:           "tar -czf is not inline",
+        input:          "tar -czf archive.tar.gz /data",
+        expectCommands: []string{"tar"}, // No nested extraction
+    },
+    {
+        name:           "python -c with no arg",
+        input:          "python -c",
+        expectCommands: []string{"python"}, // No script body to extract
+    },
+    {
+        name:           "ruby -e empty string",
+        input:          `ruby -e ''`,
+        expectCommands: []string{"ruby"}, // Empty script body, nothing to extract
+    },
+    {
+        name:           "node --eval long flag",
+        input:          `node --eval "require('child_process').execSync('rm -rf /')"`,
+        expectCommands: []string{"node", "rm"},
+    },
+    {
+        name:           "bash -c with variable ref",
+        input:          `bash -c "$CMD"`,
+        expectCommands: []string{"bash"}, // $CMD unresolved, opaque
     },
 }
 ```
@@ -439,9 +513,13 @@ actually does propagate variables.
 - `A=1 B=$A echo $B` (does inline env see other inline env?)
 - `export A=1; bash -c 'echo $A'` (export to subshell)
 - `(A=1); echo $A` (subshell does NOT propagate — our over-approximation differs)
+- `A=1 | echo $A` (pipeline: A not visible in echo — our over-approximation differs)
+- `DIR=/ && DIR=/tmp; echo $DIR` (&&: real bash → /tmp; our may-alias → both values)
+- `cat /var/log/syslog | grep error | sort` (common pipeline — no false positives expected)
 
 For cases where our over-approximation produces false positives (like
-subshell propagation), document the intentional difference.
+subshell/pipeline propagation and `&&` may-alias), document the intentional
+difference and verify the false positives don't trigger on common patterns.
 
 ### O3: Upstream Rust Version Comparison
 
@@ -471,11 +549,14 @@ Benchmark `BashParser.Parse()` for representative command lengths:
 
 | Category | Example | Target |
 |----------|---------|--------|
-| Short (< 50 bytes) | `git push --force` | < 100μs |
-| Medium (50-200 bytes) | `RAILS_ENV=production rails db:reset` | < 200μs |
-| Long (200-1000 bytes) | Complex pipeline with 5 stages | < 500μs |
-| Very long (1-10KB) | Script-like multi-line command | < 5ms |
-| Max (128KB) | Boundary input | Report, no target |
+| Short (< 50 bytes) | `git push --force` | Baseline (record) |
+| Medium (50-200 bytes) | `RAILS_ENV=production rails db:reset` | Baseline (record) |
+| Long (200-1000 bytes) | Complex pipeline with 5 stages | Baseline (record) |
+| Very long (1-10KB) | Script-like multi-line command | Baseline (record) |
+| Max (128KB) | Boundary input | Baseline (record) |
+
+**Note**: No specific latency targets for v1. Record baselines during initial
+implementation. Targets will be established after baselines exist.
 
 ### B2: Extract Latency
 
@@ -490,11 +571,11 @@ Benchmark `DataflowAnalyzer.ResolveString()`:
 
 | Case | Description | Target |
 |------|-------------|--------|
-| No variables | Plain string | < 100ns |
-| 1 variable, 1 value | `$DIR` → `/tmp` | < 500ns |
-| 3 variables, 1 value each | `$A $B $C` | < 1μs |
-| 1 variable, 5 values (or-branch) | `$DIR` → 5 possibilities | < 2μs |
-| Expansion limit hit | 3 vars × 5 values = capped at 16 | < 5μs |
+| No variables | Plain string | Baseline (record) |
+| 1 variable, 1 value | `$DIR` → `/tmp` | Baseline (record) |
+| 3 variables, 1 value each | `$A $B $C` | Baseline (record) |
+| 1 variable, 5 values (or-branch) | `$DIR` → 5 possibilities | Baseline (record) |
+| Expansion limit hit | 3 vars × 5 values = capped at 16 | Baseline (record) |
 
 ### B4: Full Pipeline
 
@@ -574,8 +655,9 @@ func TestMemorySoak(t *testing.T) {
     parser := NewBashParser()
 
     var m runtime.MemStats
+    runtime.GC()
     runtime.ReadMemStats(&m)
-    startAlloc := m.TotalAlloc
+    startHeapInuse := m.HeapInuse
 
     for i := 0; i < 1_000_000; i++ {
         input := generateCommand(i)
@@ -586,17 +668,20 @@ func TestMemorySoak(t *testing.T) {
         if i%100_000 == 0 {
             runtime.GC()
             runtime.ReadMemStats(&m)
-            t.Logf("After %d iterations: HeapAlloc=%dMB, HeapInuse=%dMB",
-                i, m.HeapAlloc/1024/1024, m.HeapInuse/1024/1024)
+            t.Logf("After %d iterations: HeapInuse=%dMB",
+                i, m.HeapInuse/1024/1024)
         }
     }
 
     runtime.GC()
     runtime.ReadMemStats(&m)
-    // Heap should not have grown more than 100MB above baseline
-    growth := m.HeapAlloc - startAlloc
-    if growth > 100*1024*1024 {
-        t.Errorf("memory grew by %dMB, possible leak", growth/1024/1024)
+    // HeapInuse should stabilize. Allow 50MB growth for parser pool + GC overhead.
+    // Rationale: sync.Pool holds ~GOMAXPROCS parsers, each ~1-2MB. With GC
+    // overhead, 50MB is generous. Monotonic growth beyond this indicates a leak.
+    growth := m.HeapInuse - startHeapInuse
+    if growth > 50*1024*1024 {
+        t.Errorf("HeapInuse grew by %dMB (from %dMB to %dMB), possible leak",
+            growth/1024/1024, startHeapInuse/1024/1024, m.HeapInuse/1024/1024)
     }
 }
 ```
@@ -869,4 +954,14 @@ requires explicit update (`go test -update-golden`).
 
 ## Review Disposition
 
-(To be filled after reviews)
+Incorporated feedback from: `01-treesitter-integration-review-security-correctness.md`,
+`01-treesitter-integration-review-systems-engineer.md`.
+
+| Finding | Reviewer | Severity | Summary | Disposition | Notes |
+|---------|----------|----------|---------|-------------|-------|
+| SC-P2.3 | security-correctness | P2 | Subshell/pipeline flattening lacks test coverage | Incorporated | Added pipeline scoping tests to E2 and O2 |
+| SC-P2.6 | security-correctness | P2 | Property P2 may be violated by ERROR recovery | Incorporated | P2 invariant note updated; extractor filters empty names |
+| SC-P3.3 | security-correctness | P3 | Insufficient negative tests for inline detection | Incorporated | Added 6 negative/edge-case tests to E3 |
+| SE-01-P3.3 | systems-engineer | P3 | Test harness P2 invariant too strict | Incorporated | Merged with SC-P2.6 |
+| SE-01-P3.4 | systems-engineer | P3 | Benchmark targets aspirational without baseline | Incorporated | B1 and B3 targets changed to "Baseline (record)" |
+| SE-01-P3.5 | systems-engineer | P3 | Soak test memory assertion brittle | Incorporated | S2 uses HeapInuse consistently, threshold reduced to 50MB with rationale |

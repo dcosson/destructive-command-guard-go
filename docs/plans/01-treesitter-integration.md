@@ -33,21 +33,30 @@ that downstream matching (Batch 2) operates on.
 **Key output types** consumed by Batch 2:
 
 ```go
-// ExtractedCommand is the primary output — one per simple_command in the AST
+// ExtractedCommand is the primary output — one per simple_command in the AST.
+// When dataflow analysis produces multiple possible values for a variable,
+// multiple ExtractedCommand variants are emitted (one per expansion), each
+// with DataflowResolved=true. See §6.5 for expansion semantics.
 type ExtractedCommand struct {
-    Name       string            // Normalized command name
-    Args       []string          // Positional arguments
-    Flags      map[string]string // Flag name → value (or "" for boolean flags)
-    InlineEnv  map[string]string // Inline env var assignments
-    RawText    string            // Original text span from source
-    InPipeline bool              // Is this part of a pipeline?
-    Negated    bool              // Preceded by ! (does not affect severity)
+    Name             string            // Normalized command name
+    RawName          string            // Original command name before normalization
+    Args             []string          // Positional arguments (non-flag)
+    RawArgs          []string          // All arguments in original order (flags + positional)
+    Flags            map[string]string // Flag name → value ("" for boolean flags)
+    InlineEnv        map[string]string // Inline env var assignments (KEY=val prefix)
+    RawText          string            // Original text span from source
+    InPipeline       bool              // Is this part of a pipeline?
+    Negated          bool              // Preceded by ! (does not affect severity)
+    DataflowResolved bool              // True if this command's args were resolved via dataflow
+    // Source location for diagnostics (byte offsets into original input)
+    StartByte        uint32
+    EndByte          uint32
 }
 
-// ParseResult is the complete output of parsing + extraction
+// ParseResult is the complete output of parsing + extraction.
 type ParseResult struct {
-    Commands []ExtractedCommand // All extracted commands
-    Warnings []Warning          // Parse warnings (ERROR nodes, etc.)
+    Commands []ExtractedCommand // All extracted commands (may include dataflow variants)
+    Warnings []Warning          // Parse + extraction warnings
     HasError bool               // True if AST contained ERROR nodes
 }
 ```
@@ -266,28 +275,33 @@ package parse
 
 // ExtractedCommand is a single command invocation extracted from the bash AST.
 // Each simple_command node in the AST produces one ExtractedCommand.
+// When dataflow analysis produces multiple possible values for a variable,
+// multiple ExtractedCommand variants are emitted (one per expansion), each
+// with DataflowResolved=true. See §6.5 for expansion semantics.
 type ExtractedCommand struct {
-    Name       string            // Normalized command name (path-stripped)
-    RawName    string            // Original command name before normalization
-    Args       []string          // Positional arguments (non-flag)
-    Flags      map[string]string // Flag name → value ("" for boolean flags)
-    InlineEnv  map[string]string // Inline env var assignments (KEY=val prefix)
-    RawText    string            // Original text span from source
-    InPipeline bool              // Part of a pipeline (cmd | cmd)
-    Negated    bool              // Preceded by ! operator
+    Name             string            // Normalized command name (path-stripped)
+    RawName          string            // Original command name before normalization
+    Args             []string          // Positional arguments (non-flag)
+    RawArgs          []string          // All arguments in original order (flags + positional interleaved)
+    Flags            map[string]string // Flag name → value ("" for boolean flags)
+    InlineEnv        map[string]string // Inline env var assignments (KEY=val prefix)
+    RawText          string            // Original text span from source
+    InPipeline       bool              // Part of a pipeline (cmd | cmd)
+    Negated          bool              // Preceded by ! operator
+    DataflowResolved bool              // True if args were resolved via dataflow analysis
     // Source location for diagnostics (byte offsets into original input)
-    StartByte  uint32
-    EndByte    uint32
+    StartByte        uint32
+    EndByte          uint32
 }
 
 // ParseResult is the complete output of the parse+extract pipeline.
 type ParseResult struct {
-    Commands []ExtractedCommand
-    Warnings []Warning
-    HasError bool // True if AST contained ERROR nodes
+    Commands []ExtractedCommand // May include dataflow variants (multiple per source command)
+    Warnings []Warning          // Parse + extraction warnings (merged)
+    HasError bool               // True if AST contained ERROR nodes
 }
 
-// Warning indicates a non-fatal condition during parsing.
+// Warning indicates a non-fatal condition during parsing or extraction.
 type Warning struct {
     Code    WarningCode
     Message string
@@ -299,11 +313,14 @@ const (
     WarnPartialParse        WarningCode = iota // AST contained ERROR nodes
     WarnInlineDepthExceeded                    // Inline script recursion hit max
     WarnInputTruncated                         // Input exceeded max length
+    WarnExpansionCapped                        // Dataflow expansion hit limit; result is Indeterminate
+    WarnExtractorPanic                         // Extractor or inline detector panicked (recovered)
+    WarnCommandSubstitution                    // Variable assigned via command substitution; value unknown
 )
 
 // InlineScript represents an embedded script detected inside a command.
 type InlineScript struct {
-    Language string // "bash", "python", "ruby", "javascript", "perl"
+    Language string // "bash", "python", "ruby", "javascript", "perl", "lua"
     Body     string // The script text to parse
     Source   string // How it was detected: "flag" (-c), "heredoc", "eval"
 }
@@ -319,6 +336,7 @@ package parse
 
 import (
     "context"
+    "fmt"
     "sync"
 
     tsparser "github.com/treesitter-go/treesitter/parser"
@@ -336,7 +354,8 @@ type BashParser struct {
     pool sync.Pool
 }
 
-// NewBashParser creates a BashParser with a pre-warmed pool.
+// NewBashParser creates a BashParser. The parser pool is lazily populated
+// on first use (sync.Pool allocates on first Get).
 func NewBashParser() *BashParser {
     bp := &BashParser{}
     bp.pool = sync.Pool{
@@ -355,12 +374,17 @@ func (bp *BashParser) newParser() *tsparser.Parser {
     return p
 }
 
-// Parse parses a shell command string and returns the AST root node.
+// Parse parses a shell command string and returns the AST.
 // Returns (nil, warnings) if parsing completely fails (extremely rare with
-// tree-sitter's error recovery).
+// tree-sitter's error recovery) or if input exceeds MaxInputSize.
 //
-// The caller must not retain references to tree-sitter nodes beyond the
-// lifetime of the returned Tree — use Extract() to convert to ParseResult.
+// **Tree independence invariant**: tree-sitter-go's ParseString() returns a
+// Tree that owns its own data (SubtreeArena, Stack). The Tree is fully
+// independent of the Parser after ParseString() returns. This has been
+// verified in the tree-sitter-go source — Parse() allocates a fresh arena
+// per call. Therefore it is safe to return the parser to the pool immediately.
+// If this invariant changes in tree-sitter-go, the concurrent stress test S1
+// will catch it.
 func (bp *BashParser) Parse(ctx context.Context, command string) (*Tree, []Warning) {
     if len(command) > MaxInputSize {
         return nil, []Warning{{
@@ -370,12 +394,34 @@ func (bp *BashParser) Parse(ctx context.Context, command string) (*Tree, []Warni
     }
 
     p := bp.pool.Get().(*tsparser.Parser)
+    var panicked bool
     defer func() {
+        if panicked {
+            // Do NOT return a potentially corrupted parser to the pool.
+            // Let it be garbage collected; the pool will allocate a fresh one.
+            return
+        }
         p.Reset() // Clear parser state before returning to pool
         bp.pool.Put(p)
     }()
 
-    tree := p.ParseString(ctx, []byte(command))
+    var tree *tsTree
+    func() {
+        defer func() {
+            if r := recover(); r != nil {
+                panicked = true
+            }
+        }()
+        tree = p.ParseString(ctx, []byte(command))
+    }()
+
+    if panicked {
+        return nil, []Warning{{
+            Code:    WarnExtractorPanic,
+            Message: "tree-sitter parser panicked; parser discarded from pool",
+        }}
+    }
+
     if tree == nil {
         return nil, []Warning{{
             Code:    WarnPartialParse,
@@ -383,22 +429,42 @@ func (bp *BashParser) Parse(ctx context.Context, command string) (*Tree, []Warni
         }}
     }
 
-    var warnings []Warning
+    // Check for ERROR nodes during parse (stored on Tree so extraction
+    // doesn't need to re-walk). See SC-P1.4 / SE-01-P1.3.
     root := tree.RootNode()
-    if hasErrorNodes(root) {
+    hasErr := hasErrorNodes(root)
+
+    var warnings []Warning
+    if hasErr {
         warnings = append(warnings, Warning{
             Code:    WarnPartialParse,
             Message: "AST contains ERROR nodes; extraction is best-effort",
         })
     }
 
-    return &Tree{inner: tree, source: command}, warnings
+    return &Tree{inner: tree, source: command, hasError: hasErr}, warnings
+}
+
+// ParseAndExtract is the primary entry point. It parses a command string
+// and extracts structured commands in one call, merging all warnings.
+// The depth parameter controls inline recursion (pass 0 for top-level calls).
+func (bp *BashParser) ParseAndExtract(ctx context.Context, command string, depth int) ParseResult {
+    tree, parseWarnings := bp.Parse(ctx, command)
+    if tree == nil {
+        return ParseResult{Warnings: parseWarnings, HasError: true}
+    }
+    extractor := NewCommandExtractor(bp)
+    extractor.depth = depth
+    result := extractor.Extract(tree)
+    result.Warnings = append(parseWarnings, result.Warnings...)
+    return result
 }
 
 // Tree wraps a tree-sitter tree with the original source for text extraction.
 type Tree struct {
-    inner  *tsTree   // tree-sitter Tree
-    source string    // original command string
+    inner    *tsTree   // tree-sitter Tree
+    source   string    // original command string
+    hasError bool      // true if AST contained ERROR nodes (checked once during Parse)
 }
 
 // hasErrorNodes does a quick DFS to check for ERROR or MISSING nodes.
@@ -415,6 +481,11 @@ implicitly reset during the first lex operation of each `Parse()` call via
 `Scanner.Deserialize(nil)`. We call `parser.Reset()` defensively before
 returning to pool for additional safety.
 
+**Panic recovery**: If `ParseString()` panics (e.g., due to a tree-sitter
+bug), the parser is NOT returned to the pool — it may be in a corrupted state.
+The pool will allocate a fresh parser for the next call. This ensures a
+single parser corruption doesn't poison the pool.
+
 ### 6.3 Command Extraction (`extract.go`)
 
 The extractor walks the AST in execution order and produces `ExtractedCommand`
@@ -423,14 +494,17 @@ structs. It integrates with the dataflow analyzer and inline detector.
 ```go
 // CommandExtractor walks a bash AST and extracts structured commands.
 type CommandExtractor struct {
-    source   string            // Original command text
-    dataflow *DataflowAnalyzer // Variable tracking
-    inline   *InlineDetector   // Inline script detection
-    depth    int               // Current inline recursion depth
-    maxDepth int               // Max inline recursion (default: 3)
+    source     string            // Original command text
+    dataflow   *DataflowAnalyzer // Variable tracking
+    inline     *InlineDetector   // Inline script detection
+    bashParser *BashParser       // For recursive inline parsing
+    depth      int               // Current inline recursion depth
+    maxDepth   int               // Max inline recursion (default: 3)
 }
 
 // Extract walks the AST and returns all extracted commands.
+// Uses the HasError flag from the Tree (set during Parse) to avoid
+// redundant ERROR node scanning.
 func (ce *CommandExtractor) Extract(tree *Tree) ParseResult {
     root := tree.inner.RootNode()
     ce.source = tree.source
@@ -439,11 +513,23 @@ func (ce *CommandExtractor) Extract(tree *Tree) ParseResult {
     var commands []ExtractedCommand
     var warnings []Warning
 
-    ce.walkNode(root, &commands, &warnings, extractContext{})
+    // Wrap extraction in recover() to catch panics from any component
+    func() {
+        defer func() {
+            if r := recover(); r != nil {
+                warnings = append(warnings, Warning{
+                    Code:    WarnExtractorPanic,
+                    Message: fmt.Sprintf("extractor panicked: %v", r),
+                })
+            }
+        }()
+        ce.walkNode(root, &commands, &warnings, extractContext{})
+    }()
+
     return ParseResult{
         Commands: commands,
         Warnings: warnings,
-        HasError: hasErrorNodes(root),
+        HasError: tree.hasError, // From Parse(), no re-walk needed
     }
 }
 ```
@@ -456,19 +542,38 @@ trigger different extraction behaviors:
 | Node Type | Action |
 |-----------|--------|
 | `program` | Walk all children |
-| `list` | Walk children — these are `;`, `&&`, `||` chains |
-| `pipeline` | Walk children with `InPipeline=true` |
-| `simple_command` (aliased as `command` in tree-sitter bash) | **Extract**: build `ExtractedCommand` |
+| `list` | Walk children. The `list` node contains commands separated by `;`, `&&`, `||`. The operator between siblings determines dataflow semantics — see §6.5 for how the dataflow analyzer handles each operator. For safety, ALL branches of mixed `&&`/`||` chains are analyzed (may-execute union of definitions). |
+| `pipeline` | Walk children with `InPipeline=true`. Dataflow: flattened (assignments visible across stages — over-approximation). |
+| `command` (tree-sitter bash's name for simple_command, symbol ID 208) | **Extract**: build `ExtractedCommand`. Skip if no `command_name` child (bare assignments like `FOO=bar` without a command). |
 | `variable_assignment` | Feed to dataflow analyzer |
 | `declaration_command` (`export`, `declare`, `local`, etc.) | Feed to dataflow analyzer |
 | `compound_statement` (`{ ... }`) | Walk children |
-| `subshell` (`( ... )`) | Walk children (flattened scoping per §8) |
+| `subshell` (`( ... )`) | Walk children (flattened scoping per §8 — over-approximation) |
 | `command_substitution` (`$(...)`) | Walk children |
-| `if_statement`, `while_statement`, `for_statement` | Walk body children |
+| `if_statement`, `while_statement`, `for_statement` | Walk body children. Dataflow: assignments visible after the construct (over-approximation). |
 | `function_definition` | Walk body (but don't resolve function calls) |
-| `redirected_statement` | Walk inner command, note redirections |
+| `redirected_statement` | Walk inner command. Also check for `heredoc_redirect` children and extract `heredoc_body` — see §6.6 Heredoc Detection. |
 | `negated_command` | Walk inner command with `Negated=true` |
 | `ERROR` | Skip — best-effort, already warned |
+
+**Post-extraction filtering**: After extraction, commands with empty `Name`
+(from normalization producing empty string, or from `command_name` nodes that
+are ERROR/MISSING) are filtered out. They cannot match any pattern, and
+keeping them would violate the property P2 invariant. If `Normalize()` returns
+an empty string (e.g., input was just `/`), the original `RawName` is kept
+instead.
+
+**Transparent prefix commands**: The extractor recognizes `env` as a
+transparent prefix command. When the command name is `env`, the extractor
+strips leading `KEY=VALUE` pairs into `InlineEnv` and the remaining arguments
+become the actual command. Example: `env RAILS_ENV=production rails db:reset`
+→ extracted as `{Name: "rails", Args: ["db:reset"], InlineEnv: {"RAILS_ENV": "production"}}`.
+
+Other prefix commands (`sudo`, `nice`, `nohup`, `time`) are documented as
+**known limitations** — they are not unwrapped. `sudo rm -rf /` extracts as
+`{Name: "sudo", Args: ["rm", "-rf", "/"]}`. Matchers in Batch 2 can handle
+these by checking the first positional arg. This is P3 priority; if demand
+arises, prefix unwrapping can be extended.
 
 **Extracting a `simple_command` / `command` node**:
 
@@ -481,7 +586,7 @@ The bash grammar's `command` node (symbol ID 208, type `"command"`) contains:
    `expansion`, `simple_expansion` children
 
 ```go
-func (ce *CommandExtractor) extractSimpleCommand(node Node, ctx extractContext) ExtractedCommand {
+func (ce *CommandExtractor) extractSimpleCommand(node Node, ctx extractContext) *ExtractedCommand {
     cmd := ExtractedCommand{
         InPipeline: ctx.inPipeline,
         Negated:    ctx.negated,
@@ -501,14 +606,24 @@ func (ce *CommandExtractor) extractSimpleCommand(node Node, ctx extractContext) 
         case "command_name":
             cmd.RawName = ce.nodeText(child)
             cmd.Name = Normalize(cmd.RawName)
+            // If normalization produced empty (e.g., input "/"), keep raw name
+            if cmd.Name == "" {
+                cmd.Name = cmd.RawName
+            }
         default:
             // Argument or flag
             text := ce.resolveNodeText(child) // Applies dataflow substitution
+            cmd.RawArgs = append(cmd.RawArgs, text) // Preserve original order
             ce.classifyArg(text, &cmd)
         }
     }
 
-    return cmd
+    // Skip commands with no identifiable name (bare assignments, ERROR nodes)
+    if cmd.Name == "" {
+        return nil
+    }
+
+    return &cmd
 }
 ```
 
@@ -526,12 +641,27 @@ func (ce *CommandExtractor) classifyArg(text string, cmd *ExtractedCommand) {
     } else if strings.HasPrefix(text, "-") && len(text) > 1 && text[1] != '-' {
         // Short flag(s): -f, -rf (decompose combined short flags)
         // -rf → {"-r": "", "-f": ""}
-        for _, c := range text[1:] {
-            cmd.Flags["-"+string(c)] = ""
+        // Guard: if any byte is non-ASCII, treat as a single flag (not decomposable).
+        // Real shell flags are always single ASCII characters.
+        if !isASCII(text[1:]) {
+            cmd.Flags[text] = ""
+        } else {
+            for _, c := range text[1:] {
+                cmd.Flags["-"+string(c)] = ""
+            }
         }
     } else {
         cmd.Args = append(cmd.Args, text)
     }
+}
+
+func isASCII(s string) bool {
+    for i := 0; i < len(s); i++ {
+        if s[i] > 127 {
+            return false
+        }
+    }
+    return true
 }
 ```
 
@@ -544,17 +674,45 @@ the value of `-o` or a positional arg?). We do NOT attempt to resolve this
 ambiguity — each command's flag-value association depends on that specific
 command's argument grammar, which we don't have. Instead, short flags are always
 treated as boolean, and the next token is a separate positional arg. Long flags
-with `=` are parsed as key=value. This is sufficient for destructive pattern
-matching, which checks flag presence, not values.
+with `=` are parsed as key=value.
+
+**`RawArgs` for flag-value association**: The `Flags` map and `Args` slice
+lose positional relationships between flags and their values. For consumers
+that need to correlate a flag with the argument that follows it (critically:
+inline script detection, which needs to find the script body after `-c`),
+the `RawArgs []string` field preserves the original argument order including
+flags. The inline detector uses `RawArgs` to find the argument following
+the trigger flag:
+
+```go
+// Find script body: scan RawArgs for the trigger flag, take the next element
+for i, arg := range cmd.RawArgs {
+    if arg == "-c" && i+1 < len(cmd.RawArgs) {
+        scriptBody = cmd.RawArgs[i+1]
+        break
+    }
+}
+```
+
+This is sufficient for destructive pattern matching, which checks flag
+presence, not values. The `RawArgs` field addresses the flag-value ordering
+concern without changing the `Flags` map semantics.
+
+**Known limitation**: Short flag decomposition produces semantically incorrect
+results for flags that take values (e.g., `tar -czf archive.tar.gz` decomposes
+`-czf` into `{-c, -z, -f}` all boolean, losing the filename). This is
+acceptable because destructive pattern matching checks flag presence, and
+inline detection uses `RawArgs` for the flag-value cases it cares about.
 
 ### 6.4 Command Normalization (`normalize.go`)
 
 ```go
 // Normalize strips path prefixes from command names.
-//   /usr/bin/git     → git
+//   /usr/bin/git      → git
 //   /usr/local/bin/rm → rm
-//   ./script.sh      → script.sh
-//   git              → git (no change)
+//   ./script.sh       → script.sh
+//   git               → git (no change)
+//   /                 → "" (caller should use RawName as fallback)
 func Normalize(name string) string {
     if idx := strings.LastIndexByte(name, '/'); idx >= 0 {
         return name[idx+1:]
@@ -565,6 +723,10 @@ func Normalize(name string) string {
 
 Normalization is intentionally minimal — just path stripping. We do not
 resolve aliases, functions, or symlinks (out of scope per architecture).
+
+**Empty result**: `Normalize("/")` returns `""`. The caller
+(`extractSimpleCommand`) falls back to `RawName` when `Normalize` returns
+empty. This prevents empty command names from entering the pipeline.
 
 Additional normalization for specific commands can be added later if needed
 (e.g., `python3` → `python` normalization for inline script detection), but
@@ -580,7 +742,9 @@ architecture §8 for the full theoretical background.
 // Implements lightweight intraprocedural reaching-definitions analysis.
 type DataflowAnalyzer struct {
     // defs maps variable name → set of possible values.
-    // Multiple values arise from || branches (may-alias).
+    // Multiple values arise from && and || branches (may-alias).
+    // A nil value slice means the variable is known to be defined but its
+    // value is indeterminate (e.g., assigned via command substitution).
     defs map[string][]string
     // exports tracks which variables were exported.
     exports map[string]bool
@@ -594,18 +758,42 @@ func NewDataflowAnalyzer() *DataflowAnalyzer {
 }
 
 // Define records a variable assignment.
+// For sequential (`;`) execution, this replaces previous definitions (strong
+// update). For `&&` and `||` chains, use MergeBranch to accumulate may-alias
+// values from different branches.
 func (da *DataflowAnalyzer) Define(name, value string, exported bool) {
-    da.defs[name] = []string{value} // Strong update: replaces previous defs
+    da.defs[name] = []string{value} // Strong update
     if exported {
         da.exports[name] = true
     }
 }
 
-// MergeBranch merges definitions from an alternative branch (|| chains).
+// DefineIndeterminate records a variable assignment whose value is unknown
+// (e.g., assigned via command substitution `$(...)` or backticks).
+// The variable is tracked as defined but unresolvable. ResolveString will
+// leave $VAR references to this variable unsubstituted.
+func (da *DataflowAnalyzer) DefineIndeterminate(name string, exported bool) {
+    da.defs[name] = nil // nil means "defined but value unknown"
+    if exported {
+        da.exports[name] = true
+    }
+}
+
+// MergeBranch merges definitions from an alternative branch.
+// Used for both `||` chains AND `&&` chains (may-alias for safety).
 // After merge, the variable has all possible values from both branches.
 func (da *DataflowAnalyzer) MergeBranch(other *DataflowAnalyzer) {
     for name, values := range other.defs {
         existing := da.defs[name]
+        if existing == nil && da.defs[name] != nil {
+            // Current is indeterminate, keep indeterminate
+            continue
+        }
+        if values == nil {
+            // Other branch is indeterminate — mark as indeterminate
+            da.defs[name] = nil
+            continue
+        }
         // Union of possible values (may-alias)
         seen := make(map[string]bool)
         for _, v := range existing {
@@ -620,20 +808,28 @@ func (da *DataflowAnalyzer) MergeBranch(other *DataflowAnalyzer) {
 }
 
 // Resolve returns all possible values for a variable reference.
-// Returns nil if the variable is unknown (not tracked).
+// Returns nil if the variable is unknown (not tracked) or indeterminate
+// (assigned via command substitution).
 func (da *DataflowAnalyzer) Resolve(name string) []string {
     return da.defs[name]
 }
 
 // ResolveString substitutes all $VAR and ${VAR} references in a string
-// with their tracked values. Returns all possible expansions.
-// If a variable has multiple possible values (from || branches),
+// with their tracked values. Returns all possible expansions plus a bool
+// indicating whether the expansion cap was hit.
+// If a variable has multiple possible values (from branches),
 // returns one expansion per combination.
-func (da *DataflowAnalyzer) ResolveString(s string) []string {
+// Bounded: max 16 expansions to prevent combinatorial explosion.
+// When the cap is hit, the caller should emit WarnExpansionCapped and
+// treat the result as Indeterminate (the capped expansions are still
+// returned, but the caller knows the analysis is incomplete).
+// Variables with indeterminate values (nil slice) are left unsubstituted.
+func (da *DataflowAnalyzer) ResolveString(s string) (expansions []string, capped bool) {
     // Find all variable references ($VAR, ${VAR})
     // For each reference, look up possible values
+    // Variables with nil values (indeterminate) → leave $VAR literal
     // Return cartesian product of all possible substitutions
-    // Bounded: max 16 expansions to prevent combinatorial explosion
+    // If product exceeds 16: set capped=true, return first 16
     ...
 }
 
@@ -654,12 +850,14 @@ func (da *DataflowAnalyzer) ExportedVars() map[string][]string {
 
 | Construct | Behavior |
 |-----------|----------|
-| Sequential (`;`) | Definitions carry forward |
-| `&&` chains | Left-side defs carry to right (conservative for failure path) |
-| `\|\|` chains | **May-alias**: both branches tracked, union of values |
-| Subshells `(cmd)` | **Flattened**: assignments visible to parent (over-approximation) |
-| Pipelines `cmd1 \| cmd2` | **Flattened**: assignments from any stage visible (over-approximation) |
-| `if/while/for` | Body assignments visible after the construct (over-approximation) |
+| Sequential (`;`) | **Strong update**: definitions carry forward, overwriting previous values. This is the only construct that uses strong update — it is safe because `;` guarantees sequential execution. |
+| `&&` chains | **May-alias**: both sides analyzed, union of values. A `&&` chain may short-circuit at any point, so earlier values remain live. `DIR=/ && DIR=/tmp && rm -rf $DIR` resolves `$DIR` to `["/", "/tmp"]`. This biases toward false positives (safe direction). |
+| `\|\|` chains | **May-alias**: both branches tracked, union of values. |
+| Mixed `&&`/`\|\|` | **May-alias across all branches**: tree-sitter bash produces a `list` node with operator children. The walker treats ALL commands in the list as may-execute, regardless of operator. All definitions from all branches are unioned. This is the simplest correct over-approximation. |
+| Subshells `(cmd)` | **Flattened**: assignments visible to parent (over-approximation). In real bash, subshells don't propagate. Documented intentional difference. |
+| Pipelines `cmd1 \| cmd2` | **Flattened**: assignments from any stage visible (over-approximation). In real bash, each stage is a subshell. |
+| `if/while/for` | Body assignments visible after the construct (over-approximation). |
+| Command substitution `$(cmd)` | Variable assignments whose value is `$(...)` or `` `...` `` are tracked as **indeterminate** — the variable is known to be defined but its value is unknown. `ResolveString` leaves references to indeterminate variables unsubstituted. A `WarnCommandSubstitution` warning is emitted. |
 
 **Integration with extractor**: The extractor calls `Define()` when it
 encounters `variable_assignment` and `declaration_command` nodes, and calls
@@ -669,16 +867,58 @@ encounters `variable_assignment` and `declaration_command` nodes, and calls
 // In extract.go walkNode:
 case "variable_assignment":
     name, value := ce.extractAssignment(node)
-    ce.dataflow.Define(name, value, false)
+    if containsCommandSubstitution(value) {
+        ce.dataflow.DefineIndeterminate(name, false)
+        warnings = append(warnings, Warning{
+            Code:    WarnCommandSubstitution,
+            Message: fmt.Sprintf("variable %s assigned via command substitution", name),
+        })
+    } else {
+        ce.dataflow.Define(name, value, false)
+    }
 case "declaration_command":
     // export FOO=bar, declare -x FOO=bar, local FOO=bar
-    ce.extractDeclaration(node) // Calls dataflow.Define with exported=true/false
+    ce.extractDeclaration(node) // Calls dataflow.Define or DefineIndeterminate
 ```
 
-**Expansion limit**: `ResolveString` caps at 16 total expansions from
-cartesian product of multi-valued variables. Beyond that, the unresolved
-`$VAR` reference is left as-is. This prevents pathological cases like
-`a=$X || a=$Y; b=$X || b=$Y; cmd $a $b` from producing 2^n expansions.
+**For `&&` chains**: The extractor uses `MergeBranch` rather than `Define`
+for each assignment in a `&&` chain. Concretely: for each `&&`-separated
+segment in a `list` node, the extractor creates a branch analyzer, walks
+the segment, then merges the branch back into the main analyzer. This
+ensures all possible variable values across all execution paths are tracked.
+
+**Multi-value expansion → multiple ExtractedCommands**: When
+`ResolveString()` returns N > 1 expansions for an argument, the extractor
+produces N `ExtractedCommand` variants — one per expansion. Each variant
+has `DataflowResolved = true`. This ensures downstream matchers evaluate
+every possible concrete command. Example:
+
+```bash
+DIR=/ && DIR=/tmp && rm -rf $DIR
+```
+
+Produces two `ExtractedCommand` variants:
+1. `{Name: "rm", Flags: {"-r":"","-f":""}, Args: ["/"], DataflowResolved: true}`
+2. `{Name: "rm", Flags: {"-r":"","-f":""}, Args: ["/tmp"], DataflowResolved: true}`
+
+Both are passed to matchers. If either matches a destructive pattern, the
+command is flagged.
+
+**Expansion limit and Indeterminate**: `ResolveString` caps at 16 total
+expansions from cartesian product of multi-valued variables. When the cap
+is hit, the returned `capped` flag is `true`. The extractor emits
+`WarnExpansionCapped` and the eval pipeline (Batch 2) treats the result as
+Indeterminate, letting the policy decide. This prevents silent false negatives
+from pathological cases like `a=$X || a=$Y; b=$X || b=$Y; cmd $a $b`.
+
+**Known limitations**:
+
+- `source`/`.` built-in: Cannot analyze the contents of sourced files.
+  Variables set by sourced scripts are not tracked. This is inherent to
+  static analysis of a command string — we don't have filesystem access.
+- Command substitution values (`FILE=$(mktemp)`): Tracked as indeterminate.
+  The variable is known to be defined but its value is unknown. References
+  to it are left unsubstituted.
 
 ### 6.6 Inline Script Detection (`inline.go`)
 
@@ -687,15 +927,36 @@ language grammar.
 
 ```go
 // InlineDetector detects and extracts inline scripts from commands.
+// Language parsers are lazily initialized — if no `python -c` commands are
+// ever seen, the Python grammar is never loaded.
 type InlineDetector struct {
-    parsers    map[string]*langParser // language → parser (pooled)
-    bashParser *BashParser            // For recursive bash -c detection
+    parsers    map[string]*langParser // language → parser (lazily initialized)
+    mu         sync.Mutex             // Protects parsers map during lazy init
+    bashParser *BashParser            // For recursive bash -c / eval detection
 }
 
 // langParser wraps a tree-sitter parser for a specific language.
 type langParser struct {
     pool sync.Pool
     lang string
+}
+
+// getParser returns the parser for a language, lazily initializing it.
+func (id *InlineDetector) getParser(lang string) *langParser {
+    id.mu.Lock()
+    defer id.mu.Unlock()
+    if p, ok := id.parsers[lang]; ok {
+        return p
+    }
+    // Find grammar in SupportedLanguages
+    for _, g := range SupportedLanguages {
+        if g.Name == lang {
+            p := NewLangParser(g)
+            id.parsers[lang] = p
+            return p
+        }
+    }
+    return nil // Unsupported language
 }
 
 // inlineRule defines how to detect an inline script in a command.
@@ -711,6 +972,9 @@ var inlineRules = []inlineRule{
     {Command: "bash", Flags: []string{"-c"}, Language: "bash"},
     {Command: "sh", Flags: []string{"-c"}, Language: "bash"},
     {Command: "zsh", Flags: []string{"-c"}, Language: "bash"},
+
+    // eval built-in: all positional args concatenated form the script body
+    {Command: "eval", Flags: nil, Language: "bash"},
 
     // Python
     {Command: "python", Flags: []string{"-c"}, Language: "python"},
@@ -728,34 +992,115 @@ var inlineRules = []inlineRule{
     // Lua
     {Command: "lua", Flags: []string{"-e"}, Language: "lua"},
 }
+
+// evalRule is a special case: when Flags is nil, all positional args
+// are concatenated (space-joined) to form the script body. This handles
+// `eval "rm -rf /"` and `eval rm -rf /` (unquoted args are joined).
+```
+
+**`eval` handling**: The `eval` built-in executes its arguments as a shell
+command. When `inlineRule.Flags` is nil, the detector treats all positional
+arguments (concatenated with spaces) as the script body. This catches:
+
+```bash
+eval "rm -rf /"           # Quoted: single arg is the script
+eval rm -rf /             # Unquoted: args joined → "rm -rf /"
+eval "$(generate_cmd)"    # Command substitution: opaque, left unresolved
+```
+
+**Known limitations for command wrappers**:
+
+- `xargs`: `echo / | xargs rm -rf` — the actual arguments come from stdin,
+  which we can't analyze statically. `xargs` IS detected as a command, and
+  `rm -rf` appears in its args, but we don't know the final arguments. This
+  is a known gap; matchers in Batch 2 can handle `xargs` as a special case
+  by checking its argument list for dangerous commands.
+- `find -exec`: `find . -exec rm -rf {} \;` — similar to xargs, the `rm -rf`
+  command IS in the argument list. Matchers can detect this pattern.
+- `sudo`, `nice`, `nohup`, `time`: See §6.3 "Transparent prefix commands"
+  for `env` handling; others are documented as limitations.
 ```
 
 **Detection flow**:
 
 1. After a `simple_command` is extracted, check if the command name matches
    any `inlineRule.Command`
-2. If matched, look for the trigger flag(s) in the arguments
-3. The argument immediately following the trigger flag is the script body
+2. If matched and `inlineRule.Flags` is non-nil:
+   - Scan `cmd.RawArgs` (which preserves original argument order) for the
+     trigger flag. The argument immediately following the trigger flag in
+     `RawArgs` is the script body. This uses `RawArgs` instead of the
+     decomposed `Flags` map because the map loses positional information.
+   - Example: `python -c 'import os; os.system("rm -rf /")'` → `RawArgs`
+     is `["-c", "import os; os.system(\"rm -rf /\")"]` → script body is
+     the element after `-c`.
+3. If matched and `inlineRule.Flags` is nil (eval rule):
+   - All elements of `cmd.Args` are joined with spaces to form the script body.
 4. Parse the script body with the appropriate language grammar
-5. For `bash -c`, recursively feed through the full parse → extract pipeline
+5. For `bash -c` and `eval`, recursively feed through `ParseAndExtract()`
 6. For other languages, walk the AST to extract function calls that could be
    shell invocations (e.g., `os.system()`, `subprocess.run()`, `` `backtick` ``)
 
 **Heredoc detection**:
 
-Heredocs are detected structurally from the bash AST — the grammar produces
-`heredoc_redirect` and `heredoc_body` nodes. The body text is extracted and,
-if the command is `bash` / `sh` / `cat | bash` etc., re-parsed as bash.
+Heredocs are detected structurally from the bash AST. Tree-sitter bash
+represents heredocs as children of `redirected_statement`:
+
+```
+(redirected_statement
+  body: (command
+    name: (command_name) "bash")
+  redirect: (heredoc_redirect
+    (heredoc_start) "EOF")
+  (heredoc_body
+    (heredoc_content) "rm -rf /\n")
+  (heredoc_end) "EOF")
+```
+
+The `heredoc_body` is a child of `redirected_statement`, NOT of
+`heredoc_redirect`. The detection algorithm:
 
 ```go
 func (id *InlineDetector) detectHeredocs(node Node, cmd *ExtractedCommand, source string) []InlineScript {
-    // Walk siblings/parents looking for heredoc_redirect
-    // Extract heredoc_body text
-    // Determine if the heredoc is feeding into a shell command
-    // (command is bash/sh, or piped to bash/sh)
-    ...
+    // node is the redirected_statement
+    // 1. Check if the command (body child) is a shell command (bash, sh, zsh)
+    cmdName := cmd.Name
+    isShellCmd := cmdName == "bash" || cmdName == "sh" || cmdName == "zsh"
+
+    // 2. Find heredoc_body children of the redirected_statement
+    for i := 0; i < int(node.NamedChildCount()); i++ {
+        child := node.NamedChild(i)
+        if child.Type() == "heredoc_body" {
+            body := source[child.StartByte():child.EndByte()]
+            if isShellCmd {
+                return []InlineScript{{Language: "bash", Body: body, Source: "heredoc"}}
+            }
+        }
+    }
+
+    // 3. Pipeline-aware detection: check if this command's output is piped
+    // to bash/sh. Handle `cat <<'EOF' | bash` pattern.
+    // This is detected at the pipeline level: if the redirected_statement
+    // is a pipeline child, check the NEXT pipeline sibling's command name.
+    // The extractor passes pipeline context to the inline detector.
+    return nil
 }
 ```
+
+**`cat <<'EOF' | bash` pattern**: This is detected at the pipeline level
+during extraction. When the extractor walks a pipeline node, it checks whether
+any `redirected_statement` child has a heredoc AND the next sibling in the
+pipeline is `bash`/`sh`. If so, the heredoc body is extracted as a bash
+inline script. This requires the pipeline walk to pass heredoc context forward.
+
+**Quoted vs unquoted heredoc delimiters**: When the delimiter is quoted
+(`<<'EOF'` or `<<"EOF"`), bash suppresses variable expansion in the body.
+When unquoted (`<<EOF`), variables are expanded. Our handling:
+- **Quoted delimiter**: Body text is taken as-is (no dataflow substitution)
+- **Unquoted delimiter**: Body text is passed through `ResolveString()` for
+  variable substitution before re-parsing
+
+The delimiter quoting is determined by checking the `heredoc_start` node
+for quote characters.
 
 **Multi-language AST walking for shell invocations**:
 
@@ -800,13 +1145,17 @@ func (id *InlineDetector) Detect(cmd ExtractedCommand, depth int) ([]ExtractedCo
 
     for _, script := range scripts {
         if script.Language == "bash" {
-            // Recursive bash parsing
+            // Recursive bash parsing via ParseAndExtract (merges all warnings)
             result := id.bashParser.ParseAndExtract(context.Background(), script.Body, depth+1)
             allCommands = append(allCommands, result.Commands...)
             allWarnings = append(allWarnings, result.Warnings...)
         } else {
             // Language-specific shell invocation extraction
-            cmds, warns := id.extractShellInvocations(script)
+            lp := id.getParser(script.Language) // Lazy initialization
+            if lp == nil {
+                continue // Unsupported language
+            }
+            cmds, warns := id.extractShellInvocations(lp, script)
             allCommands = append(allCommands, cmds...)
             allWarnings = append(allWarnings, warns...)
         }
@@ -829,6 +1178,9 @@ type LangGrammar struct {
 }
 
 // SupportedLanguages lists all languages available for inline script parsing.
+// These are NOT eagerly initialized — InlineDetector.getParser() lazily creates
+// parsers on first use. If no `python -c` commands are seen, the Python grammar
+// is never loaded.
 var SupportedLanguages = []LangGrammar{
     {Name: "bash", NewLanguage: bashgrammar.BashLanguage, NewScanner: bashscanner.New},
     {Name: "python", NewLanguage: pythongrammar.PythonLanguage, NewScanner: pythonscanner.New},
@@ -873,9 +1225,15 @@ Tree-sitter almost always returns a tree (with error recovery). The two cases:
 
 ### Panics
 
-The extractor and inline detector use `recover()` internally. A panic in
-any component produces a `WarnMatcherPanic` warning rather than crashing.
-This is the last line of defense — panics should be fixed, not expected.
+The parser, extractor, and inline detector each use `recover()` internally:
+
+- **Parser panic**: Produces `WarnExtractorPanic`, parser discarded from pool
+  (not returned — may be corrupted). See §6.2.
+- **Extractor/inline detector panic**: Produces `WarnExtractorPanic`. Partial
+  results extracted before the panic are preserved.
+
+`WarnMatcherPanic` is reserved for Batch 2 (pattern matcher panics).
+These are the last line of defense — panics should be fixed, not expected.
 
 ### Node Text Extraction
 
@@ -883,6 +1241,15 @@ When extracting text from AST nodes, we use byte offsets into the original
 source string. This is safe because tree-sitter byte offsets are always
 valid (they come from the same source). We validate that `StartByte() < EndByte()`
 and both are within source bounds.
+
+### Tree-sitter API Coupling
+
+The `Tree` struct wraps tree-sitter's `*Tree` and `Extract()` directly
+accesses tree-sitter `Node` types through `tree.inner`. This is intentional —
+both files are in the same `parse` package, and adding an abstraction layer
+over tree-sitter's node access would add overhead with no benefit. If
+tree-sitter-go changes its API, both `bash.go` and `extract.go` need
+updating, but this is bounded to a single package.
 
 ---
 
@@ -1113,9 +1480,12 @@ Covered in §6.5 above. This is the primary Alien Artifact for this component.
 
 **Key properties**:
 - Single forward pass: O(n) in AST nodes
-- May-alias on `||` branches: biased toward false positives (safety)
+- May-alias on `&&` and `||` branches: biased toward false positives (safety)
+- Strong update only for `;` (guaranteed sequential execution)
 - Flattened scoping for subshells/pipelines: conservative over-approximation
-- Expansion limit: max 16 substitution variants per `ResolveString` call
+- Command substitution values tracked as indeterminate (not falsely resolved)
+- Expansion limit: max 16 substitution variants per `ResolveString` call;
+  exceeding the cap produces `WarnExpansionCapped` → Indeterminate assessment
 - No fixpoint iteration needed (acyclic within a command string)
 
 ### Tree-sitter Error Recovery Exploitation
@@ -1187,12 +1557,19 @@ The implementation should proceed in this order, with tests at each step:
 
 1. **Grammar export** (or vendoring fallback) — Unblocks everything
 2. **Types** (`command.go`, `types.go`) — Shared types used by all components
-3. **BashParser** (`bash.go`) — Parse strings into ASTs
+3. **BashParser** (`bash.go`) — Parse strings into ASTs, with `ParseAndExtract()`
 4. **Normalize** (`normalize.go`) — Simple, no dependencies
-5. **CommandExtractor** (`extract.go`) — Core extraction without dataflow or inline
-6. **DataflowAnalyzer** (`dataflow.go`) — Integrate into extractor
-7. **InlineDetector** (`inline.go`) — Integrate into extractor
-8. **Grammar loading** (`grammars.go`) — Multi-language support for inline detection
+5. **CommandExtractor** (`extract.go`) — Core extraction WITH a minimal dataflow
+   stub (sequential `Define` + `Resolve` for `;` chains). Include empty-name
+   filtering, `RawArgs` population, `env` prefix unwrapping. This avoids having
+   to refactor the walker when integrating dataflow in step 6.
+6. **DataflowAnalyzer** (`dataflow.go`) — Extend the stub from step 5 with
+   `&&`/`||` may-alias handling, `MergeBranch`, expansion cap + warning,
+   `DefineIndeterminate` for command substitution. Multi-value expansion
+   producing multiple `ExtractedCommand` variants.
+7. **InlineDetector** (`inline.go`) — `eval`, flag-based detection using
+   `RawArgs`, heredoc detection with pipeline awareness.
+8. **Grammar loading** (`grammars.go`) — Lazy multi-language parser initialization.
 
 Each step should have passing tests before proceeding to the next.
 
@@ -1209,12 +1586,51 @@ Each step should have passing tests before proceeding to the next.
    but the AST walking for each language's `os.system()` equivalent needs
    detailed specification during implementation.
 
-3. **Heredoc language detection**: When is a heredoc treated as bash? Only
-   when the heredoc feeds into `bash`/`sh`? Or also for `cat <<'EOF' | bash`?
-   The implementation should handle both patterns.
+3. ~~**Heredoc language detection**~~: **Resolved** — heredocs are treated as
+   bash when: (a) the command owning the heredoc is `bash`/`sh`/`zsh`, OR
+   (b) the heredoc is in a pipeline where the next sibling command is
+   `bash`/`sh`/`zsh` (handles `cat <<'EOF' | bash`). See §6.6 Heredoc Detection.
 
 ---
 
 ## Review Disposition
 
-(To be filled after reviews)
+Incorporated feedback from: `01-treesitter-integration-review-security-correctness.md`,
+`01-treesitter-integration-review-systems-engineer.md`.
+
+| Finding | Reviewer | Severity | Summary | Disposition | Notes |
+|---------|----------|----------|---------|-------------|-------|
+| SC-P0.1 | security-correctness | P0 | `&&` chain strong updates create false negatives | Incorporated | §6.5 scoping model rewritten: `&&` now uses may-alias (union of values), only `;` uses strong update |
+| SC-P0.2 | security-correctness | P0 | Inline detection loses flag-value ordering after classifyArg | Incorporated | Added `RawArgs []string` to ExtractedCommand; inline detector uses RawArgs to find script body after trigger flag (§6.3, §6.6) |
+| SC-P1.1 | security-correctness | P1 | ResolveString expansion cap silently drops dangerous values | Incorporated | `ResolveString` now returns `(expansions, capped bool)`; extractor emits `WarnExpansionCapped`; eval pipeline treats as Indeterminate |
+| SC-P1.2 | security-correctness | P1 | `eval` command not in inline rules | Incorporated | Added `eval` to inlineRules with nil Flags (all args concatenated as script body). Documented xargs/find-exec as known limitations |
+| SC-P1.3 | security-correctness | P1 | Heredoc detection algorithm unspecified | Incorporated | §6.6 now specifies full algorithm: AST traversal from redirected_statement, pipeline-aware detection, quoted vs unquoted delimiter handling |
+| SC-P1.4 | security-correctness | P1 | Redundant hasErrorNodes walk | Incorporated | Merged with SE-01-P1.3. ERROR detection moved to Parse(), stored on Tree.hasError; Extract() reads from Tree, no re-walk |
+| SC-P2.1 | security-correctness | P2 | Short flag decomposition semantically incorrect for flags with values | Incorporated | Documented as known limitation in §6.3; inline detection uses RawArgs (not Flags map) for flag-value cases |
+| SC-P2.2 | security-correctness | P2 | Command substitution in variable assignments stored literally | Incorporated | Added `DefineIndeterminate()` — variables assigned via `$(...)` tracked as defined-but-unknown; `WarnCommandSubstitution` emitted |
+| SC-P2.3 | security-correctness | P2 | Subshell/pipeline flattening lacks test coverage | Incorporated | Added to test harness: explicit pipeline scoping cases, false-positive rate check for common patterns |
+| SC-P2.4 | security-correctness | P2 | Panicking parser returned to pool | Incorporated | Parse() now has recover(); panicked parser is NOT returned to pool (discarded for GC) |
+| SC-P2.5 | security-correctness | P2 | WarnMatcherPanic in parse package; need separate code | Incorporated | Added `WarnExtractorPanic` and `WarnCommandSubstitution`; `WarnMatcherPanic` reserved for Batch 2 |
+| SC-P2.6 | security-correctness | P2 | Property P2 (`Name != ""`) may be violated by ERROR recovery | Incorporated | extractSimpleCommand now returns nil (skips) when command_name is missing; Normalize("") fallback to RawName |
+| SC-P3.1 | security-correctness | P3 | `env`, `sudo`, `nice` not handled as transparent prefixes | Incorporated | `env` handled as transparent prefix in §6.3; `sudo`/`nice`/`nohup`/`time` documented as known limitations |
+| SC-P3.2 | security-correctness | P3 | `source`/`.` built-in not acknowledged | Incorporated | Documented as known limitation in §6.5 |
+| SC-P3.3 | security-correctness | P3 | Insufficient negative tests for inline detection | Incorporated | Added to test harness E3 |
+| SC-P3.4 | security-correctness | P3 | `Normalize("/")` returns empty string | Incorporated | extractSimpleCommand falls back to RawName when Normalize returns empty; §6.4 documents the edge case |
+| SE-01-P0.1 | systems-engineer | P0 | Parser pool tree lifetime / use-after-free risk | Incorporated | §6.2 now documents tree independence invariant with verification reference; if invariant breaks, S1 stress test catches it |
+| SE-01-P0.2 | systems-engineer | P0 | Multi-valued resolution → ExtractedCommand mapping unspecified | Incorporated | §6.5 now specifies: N expansions → N ExtractedCommand variants with DataflowResolved=true; example shown |
+| SE-01-P1.1 | systems-engineer | P1 | Short flag decomposition incorrect for flags with values | Incorporated | Merged with SC-P0.2; RawArgs solves flag-value association for inline detection |
+| SE-01-P1.2 | systems-engineer | P1 | Combined short flag decomposition unsafe for multi-byte runes | Incorporated | Added isASCII guard in classifyArg; non-ASCII args treated as single flag |
+| SE-01-P1.3 | systems-engineer | P1 | hasErrorNodes DFS called twice | Incorporated | Merged with SC-P1.4; single check during Parse(), stored on Tree |
+| SE-01-P1.4 | systems-engineer | P1 | Mixed `&&`/`||` chain semantics over-simplified | Incorporated | Merged with SC-P0.1; scoping table now covers mixed chains with may-execute union of all branches |
+| SE-01-P1.5 | systems-engineer | P1 | `eval`, `xargs`, `find -exec`, `env` not handled | Incorporated | `eval` added to inline rules; `env` handled as transparent prefix; `xargs`/`find -exec` documented as known limitations with guidance for Batch 2 matchers |
+| SE-01-P2.1 | systems-engineer | P2 | sync.Pool pre-warming claim vs reality | Incorporated | Removed "pre-warmed" claim; documented lazy population |
+| SE-01-P2.2 | systems-engineer | P2 | Tree wrapper leaks tree-sitter types into API | Not Incorporated | Intentional — same package, adding abstraction would add overhead with no benefit. Documented as design choice in §7 |
+| SE-01-P2.3 | systems-engineer | P2 | InlineDetector parser pool proliferation | Incorporated | InlineDetector.getParser() now lazily initializes; SupportedLanguages documented as lazy; §6.6 and §6.7 updated |
+| SE-01-P2.4 | systems-engineer | P2 | Heredoc body traversal unspecified | Incorporated | Merged with SC-P1.3; full algorithm specified in §6.6 with AST structure example |
+| SE-01-P2.5 | systems-engineer | P2 | ParseResult conflates parse/extract concerns | Incorporated | Added ParseAndExtract() as primary entry point; merges parse and extract warnings into single ParseResult |
+| SE-01-P2.6 | systems-engineer | P2 | Implementation order risk — dataflow before extraction | Incorporated | Step 5 now includes minimal dataflow stub (sequential Define+Resolve); step 6 extends with &&/\|\| handling |
+| SE-01-P3.1 | systems-engineer | P3 | Flags should use []Flag not map[string]string | Not Incorporated | Architecture already decided map[string]string (reviewed in SA-P2.4, SE-P3.1). RawArgs field addresses ordering needs |
+| SE-01-P3.2 | systems-engineer | P3 | Command substitution variable extraction unspecified | Incorporated | Merged with SC-P2.2; DefineIndeterminate() handles this case |
+| SE-01-P3.3 | systems-engineer | P3 | Test harness P2 invariant too strict | Incorporated | Merged with SC-P2.6; extractor skips commands with empty names, preserving P2 invariant |
+| SE-01-P3.4 | systems-engineer | P3 | Benchmark targets aspirational without baseline | Incorporated | Test harness updated: targets removed from B1/B3, replaced with "baseline to be established" |
+| SE-01-P3.5 | systems-engineer | P3 | Soak test memory growth assertion brittle | Incorporated | Test harness S2 updated: uses HeapInuse consistently, documents threshold rationale |
