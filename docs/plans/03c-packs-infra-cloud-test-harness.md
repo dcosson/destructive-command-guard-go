@@ -28,8 +28,8 @@ in core or database packs:
   for the same action (with/without auto-approve). Both variants must be
   tested and the severity difference verified.
 - **Ansible content matching**: Module arguments via `-a` flag values
-  require ArgContent matching similar to SQL content matching in database
-  packs.
+  require flag-value-aware matching (`SQLContent`) similar to the database
+  pack SQL-content approach.
 - **AWS breadth**: 15 destructive patterns across 7 services. Cross-service
   isolation must be verified.
 
@@ -230,6 +230,23 @@ func TestPropertyAWSServiceIsolation(t *testing.T) {
 }
 ```
 
+### P8: Ansible Flag-Value Content Matching Contract
+
+**Invariant**: Ansible module and module-argument detection must work when
+content appears in flag values (`-m`, `-a`, `--extra-vars`), not only in
+positional args.
+
+```go
+func TestPropertyAnsibleFlagValueMatching(t *testing.T) {
+    cmd1 := cmd("ansible", []string{"all"}, m("-m", "file", "-a", "state=absent"))
+    assert.True(t, packs.SQLContent("file").Match(cmd1))
+    assert.True(t, packs.SQLContent("state=absent").Match(cmd1))
+
+    cmd2 := cmd("ansible-playbook", []string{"site.yml"}, m("--extra-vars", "state=absent"))
+    assert.True(t, packs.SQLContent("state=absent").Match(cmd2))
+}
+```
+
 ---
 
 ## E: Deterministic Examples
@@ -268,6 +285,7 @@ terraform providers                                 → Allow
 terraform version                                   → Allow
 terraform show                                      → Allow
 terraform state list aws_instance.webfarm           → Allow (P0-1 regression test)
+terraform import aws_instance.web i-1234            → Ask/Indeterminate (no explicit safe/destructive matcher in v1)
 ```
 
 ### E2: infrastructure.pulumi Pattern Matrix (16 cases)
@@ -935,12 +953,12 @@ func TestSecurityAnsibleContentInjection(t *testing.T) {
 }
 ```
 
-### SEC3: Environment Sensitivity Escalation
+### SEC3: Environment Sensitivity Preconditions
 
 Verify env-sensitive patterns correctly escalate:
 
 ```go
-func TestSecurityEnvSensitivityEscalation(t *testing.T) {
+func TestSecurityEnvSensitivityPreConditions(t *testing.T) {
     // Sample from each pack
     envSensitivePatterns := []struct {
         packID       string
@@ -1029,7 +1047,7 @@ Manually evaluate AWS CLI commands not covered in v1 to prioritize v2:
 
 | Tier | Tests | Trigger |
 |------|-------|---------|
-| T1 (Fast, every commit) | P1-P7, E1-E8, F1-F3, SEC1-SEC3 | Every commit |
+| T1 (Fast, every commit) | P1-P8, E1-E8, F1-F3, SEC1-SEC3 | Every commit |
 | T2 (Standard, every PR) | T1 + B1-B3, S1-S2 | PR open/update |
 | T3 (Extended, nightly) | T1 + T2 + O1-O4 | Nightly schedule |
 | T4 (Manual, pre-release) | MQ1-MQ4 | Before each release |
@@ -1044,7 +1062,7 @@ Manually evaluate AWS CLI commands not covered in v1 to prioritize v2:
 
 ### Must Pass
 
-1. **All property tests pass** — P1-P7
+1. **All property tests pass** — P1-P8
 2. **All deterministic examples pass** — E1-E8
 3. **All fault injection tests pass** — F1-F3
 4. **All security tests pass** — SEC1-SEC3
@@ -1079,7 +1097,7 @@ Manually evaluate AWS CLI commands not covered in v1 to prioritize v2:
 
 ---
 
-## Review Disposition
+## Round 1 Review Disposition
 
 | # | Reviewer | Severity | Summary | Disposition | Notes |
 |---|----------|----------|---------|-------------|-------|
@@ -1091,3 +1109,11 @@ Manually evaluate AWS CLI commands not covered in v1 to prioritize v2:
 | 6 | dcg-alt-reviewer | P3 | O2 missing container deletion tier | Incorporated | O2 added container/project/stack deletion tier |
 | 7 | dcg-alt-reviewer | P3 | SEC1 flag ordering test coverage | Incorporated | SEC1 added aws flag-between-subcommands test |
 | 8 | N/A | N/A | Pattern and golden count updates | Incorporated | E1-E5, B2-B3, O1, O3, exit criteria updated for new patterns |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | domain-packs-r2 | P2 | Missing diagnostic test for Ansible flag-value content matching | Incorporated | Added P8 property test for `-m`/`-a`/`--extra-vars` flag-value matching contract |
+| 2 | domain-packs-r2 | P2 | Missing `terraform import` expected-behavior case | Incorporated | Added explicit E1 case as Ask/Indeterminate in current v1 behavior |
+| 3 | domain-packs-r2 | P3 | SEC3 name implied escalation behavior while testing static preconditions | Incorporated | Renamed SEC3 heading and function to preconditions wording |

@@ -407,6 +407,7 @@ redis-cli FLUSHDB                                → Deny/High (redis-flushdb)
 redis-cli DEL mykey                              → Ask/Medium (redis-key-delete)
 redis-cli UNLINK session:12345                   → Ask/Medium (redis-key-delete)
 redis-cli CONFIG SET maxmemory 100mb             → Ask/Medium (redis-config-set)
+redis-cli CONFIG GET maxmemory                   → Allow (redis-cli-readonly-safe does not include CONFIG; expected no destructive match)
 redis-cli SHUTDOWN                               → Ask/Medium (redis-shutdown)
 redis-cli DEBUG SEGFAULT                         → Ask/Medium (redis-debug)
 redis-cli DEBUG SLEEP 9999                       → Ask/Medium (redis-debug)
@@ -463,6 +464,7 @@ psql -c "SELECT 1" --command "DROP TABLE users"  → Deny/High (DROP in --comman
 # DELETE FROM with WHERE variations
 psql -c "DELETE FROM users WHERE 1=1"            → Allow (has WHERE — even if trivial)
 psql -c "DELETE FROM users\nWHERE id > 100"      → Allow (WHERE on next line)
+psql -c "DELETE FROM users; SELECT 1 WHERE true" → Allow (KNOWN FALSE NEGATIVE — WHERE in second statement masks DELETE without WHERE)
 
 # SQL in --command long form
 psql --command "DROP TABLE users"                → Deny/High (--command = -c)
@@ -559,7 +561,7 @@ func TestFaultSQLInjectionStrings(t *testing.T) {
         wantMatch bool // Whether DROP TABLE pattern should match
     }{
         {"union select", "' UNION SELECT * FROM users--", false},
-        {"comment bypass", "SELECT * FROM users /* DROP TABLE users */", true},
+        {"comment bypass", "SELECT * FROM users /* DROP TABLE users */", true}, // TP for keyword heuristic
         {"string literal", "SELECT 'DROP TABLE is dangerous'", true}, // FP but acceptable
         {"double dash comment", "SELECT 1 -- DROP TABLE users", true}, // FP but acceptable
         {"nested quotes", `SELECT "DROP TABLE users" FROM dual`, true}, // FP but acceptable
@@ -626,7 +628,7 @@ plus additional edge cases:
 
 For equivalent destructive operations across SQL databases (PostgreSQL,
 MySQL, SQLite), verify that severity and confidence assignments are
-consistent:
+consistent (except explicitly documented divergences like SQLite TRUNCATE):
 
 ```go
 func TestComparisonCrossDatabaseConsistency(t *testing.T) {
@@ -681,6 +683,12 @@ func TestComparisonCrossDatabaseConsistency(t *testing.T) {
                 assert.Equal(t, severities[0], severities[i],
                     "%s severity inconsistency", eq.name)
             }
+            // Confidence should also align for equivalent operations.
+            // Expected divergence: SQLite TRUNCATE is ConfidenceLow.
+            for i := 1; i < len(confidences); i++ {
+                assert.Equal(t, confidences[0], confidences[i],
+                    "%s confidence inconsistency", eq.name)
+            }
         })
     }
 }
@@ -729,7 +737,7 @@ func BenchmarkPostgresPackMatch(b *testing.B) {
         "drop-database":   cmd("psql", nil, m("-c", "DROP DATABASE myapp")),
         "drop-table":      cmd("psql", nil, m("-c", "DROP TABLE users")),
         "delete-no-where": cmd("psql", nil, m("-c", "DELETE FROM users")),
-        "interactive":     cmd("psql", []string{"-h", "localhost", "mydb"}, nil),
+        "interactive":     cmd("psql", []string{"mydb"}, m("-h", "localhost")),
         "dropdb":          cmd("dropdb", []string{"myapp"}, nil),
     }
     for name, c := range commands {
@@ -746,7 +754,7 @@ func BenchmarkMySQLPackMatch(b *testing.B) {
         "safe-select":   cmd("mysql", nil, m("-e", "SELECT * FROM users")),
         "drop-database": cmd("mysql", nil, m("-e", "DROP DATABASE myapp")),
         "mysqladmin":    cmd("mysqladmin", []string{"drop", "myapp"}, nil),
-        "interactive":   cmd("mysql", []string{"-h", "localhost", "mydb"}, nil),
+        "interactive":   cmd("mysql", []string{"mydb"}, m("-h", "localhost")),
     }
     for name, c := range commands {
         b.Run(name, func(b *testing.B) {
@@ -1100,13 +1108,13 @@ func TestSecurityRedisCaseEvasion(t *testing.T) {
 with `strings.EqualFold()` for fully case-insensitive matching. This
 eliminates the mixed-case evasion vector identified in review.
 
-### SEC4: Environment Sensitivity Escalation
+### SEC4: Environment Sensitivity Preconditions
 
 Verify that env-sensitive patterns correctly escalate severity when
 production environment is detected:
 
 ```go
-func TestSecurityEnvSensitivityEscalation(t *testing.T) {
+func TestSecurityEnvSensitivityPreConditions(t *testing.T) {
     envSensitivePatterns := []struct {
         packID  string
         pattern string
@@ -1127,7 +1135,7 @@ func TestSecurityEnvSensitivityEscalation(t *testing.T) {
                 "pattern should be env-sensitive")
             assert.Equal(t, tt.baseSeverity, dp.Severity,
                 "base severity mismatch")
-            // Escalation logic tested in env detection module (plan 04)
+            // End-to-end escalation behavior is tested in env detection / pipeline plans.
         })
     }
 }
@@ -1247,7 +1255,7 @@ the environment detection integration (plan 04) works correctly:
 
 ---
 
-## Review Disposition
+## Round 1 Review Disposition
 
 | # | Reviewer | Severity | Summary | Disposition | Notes |
 |---|----------|----------|---------|-------------|-------|
@@ -1259,3 +1267,13 @@ the environment detection integration (plan 04) works correctly:
 | 6 | dcg-alt-reviewer | P1 | DROP SCHEMA tests needed (DB-P1.4) | Incorporated | Added to E1 |
 | 7 | N/A | N/A | Golden file counts updated (61 → 75) | Incorporated | O1, B2, exit criteria updated |
 | 8 | N/A | N/A | Pattern counts updated (30 → 35 destructive) | Incorporated | Exit criteria updated |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | domain-packs-r2 | P2 | F3 comment-bypass case wording was misleading | Incorporated | Updated case comment to clarify it is a true positive for keyword heuristic |
+| 2 | domain-packs-r2 | P2 | Missing explicit known false-negative multi-statement case | Incorporated | Added `DELETE ...; SELECT ... WHERE ...` known-FN case to E7 |
+| 3 | domain-packs-r2 | P2 | B1 benchmark interactive command used args instead of flags | Incorporated | Updated benchmark command shapes to reflect extracted Flags vs Args structure |
+| 4 | domain-packs-r2 | P3 | O2 compared severity only, not confidence | Incorporated | Added confidence consistency assertions with divergence note |
+| 5 | domain-packs-r2 | P3 | SEC4 name implied escalation behavior but tested preconditions only | Incorporated | Renamed SEC4 and test function to preconditions-focused wording |

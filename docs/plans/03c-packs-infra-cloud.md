@@ -43,8 +43,8 @@ IaC tools and cloud CLIs that LLM coding agents interact with:
   LLM agents are likely to generate.
 - **Ansible module arguments**: Ansible passes module arguments via `-a`
   flag with key=value content (`-a 'state=absent'`). This requires
-  `ArgContent` matching on flag values, similar to the database packs'
-  SQL content matching.
+  flag-value-aware content matching (`SQLContent`) similar to the database
+  packs' SQL-content helpers.
 
 **Scope**:
 - 6 packs, each with safe + destructive patterns
@@ -74,7 +74,7 @@ graph TB
 
     subgraph "internal/packs"
         Registry["Registry<br/>(registry.go)"]
-        Builders["Builder DSL<br/>Name(), Flags(), ArgAt(),<br/>ArgContent(), ArgContentRegex()"]
+        Builders["Builder DSL<br/>Name(), Flags(), ArgAt(),<br/>ArgContent(), ArgContentRegex(), SQLContent()"]
     end
 
     subgraph "guard"
@@ -141,7 +141,7 @@ arguments:
 |------|---------|---------|
 | terraform | `ArgAt(0, "destroy")` | `terraform destroy` |
 | pulumi | `ArgAt(0, "destroy")` | `pulumi destroy` |
-| ansible | `Flags("-m") + ArgContent(value)` | `ansible all -m shell -a 'rm -rf /'` |
+| ansible | `Flags("-m") + SQLContent(value)` | `ansible all -m shell -a 'rm -rf /'` |
 | aws | `ArgAt(0, "ec2") + ArgAt(1, "terminate-instances")` | `aws ec2 terminate-instances` |
 | gcloud | `ArgAt(0, "compute") + ArgAt(1, "instances") + ArgAt(2, "delete")` | `gcloud compute instances delete` |
 | az | `ArgAt(0, "vm") + ArgAt(1, "delete")` | `az vm delete` |
@@ -178,8 +178,8 @@ content:
 packs.And(
     packs.Or(packs.Name("ansible"), packs.Name("ansible-playbook")),
     packs.Flags("-m"),
-    packs.ArgContent("file"),
-    packs.ArgContent("state=absent"),
+    packs.SQLContent("file"),
+    packs.SQLContent("state=absent"),
 )
 ```
 
@@ -191,8 +191,8 @@ For `ansible-playbook`, destructive intent is often embedded in
 packs.And(
     packs.Name("ansible-playbook"),
     packs.Or(
-        packs.ArgContent("state=absent"),
-        packs.ArgContent("ensure=absent"),
+        packs.SQLContent("state=absent"),
+        packs.SQLContent("ensure=absent"),
     ),
 )
 ```
@@ -443,15 +443,18 @@ var terraformPack = packs.Pack{
 
 #### 5.1.1 Terraform Notes
 
-- **`terraform import`**: Classified as safe (S4's state subcommand
-  handling allows `state list` and `state show`). Import adds resources
-  to state — it doesn't destroy anything. However, a bad import can
-  cause subsequent applies to modify the imported resource. Accepted as
-  safe for v1 — import itself doesn't modify infrastructure directly.
+- **`terraform import`**: Currently classified as **Indeterminate** (no
+  explicit safe/destructive match). This is acceptable in v1: import itself
+  does not destroy infrastructure, but prompting in interactive policy is a
+  conservative default until an explicit safe matcher is added.
 - **`terraform workspace delete`**: Covered by D8 at Medium severity.
   Workspace deletion permanently removes state files, which could orphan
   resources managed by that workspace. S4 excludes it via
   `Not(ArgAt(1, "delete"))`.
+  Severity rationale: this is state-container deletion without immediate
+  resource API deletion, so it remains below explicit destroy operations.
+  By contrast, `pulumi stack rm` is High because stack removal in Pulumi
+  also removes stack metadata/history that is central to recovery workflows.
 - **`terraform state push`**: Covered by D7 at Medium severity.
   Overwrites remote state with local copy — can cause resource orphaning
   or duplication if the local state is stale. S4 excludes it via
@@ -681,11 +684,11 @@ var ansiblePack = packs.Pack{
                 // arbitrary commands across fleets and cannot be safely
                 // allowlisted with a blocklist approach. See R1 P0-2.
                 packs.Or(
-                    packs.ArgContent("setup"),
-                    packs.ArgContent("gather_facts"),
-                    packs.ArgContent("ping"),
-                    packs.ArgContent("debug"),
-                    packs.ArgContent("stat"),
+                    packs.SQLContent("setup"),
+                    packs.SQLContent("gather_facts"),
+                    packs.SQLContent("ping"),
+                    packs.SQLContent("debug"),
+                    packs.SQLContent("stat"),
                 ),
             ),
         },
@@ -717,15 +720,15 @@ var ansiblePack = packs.Pack{
             Match: packs.And(
                 packs.Name("ansible"),
                 packs.Or(
-                    packs.ArgContent("shell"),
-                    packs.ArgContent("command"),
-                    packs.ArgContent("raw"),
+                    packs.SQLContent("shell"),
+                    packs.SQLContent("command"),
+                    packs.SQLContent("raw"),
                 ),
                 packs.Or(
-                    packs.ArgContentRegex(`rm\s+-`),
-                    packs.ArgContent("dd "),
-                    packs.ArgContent("mkfs"),
-                    packs.ArgContent("> /dev/"),
+                    packs.SQLContent(`rm\s+-`),
+                    packs.SQLContent("dd "),
+                    packs.SQLContent("mkfs"),
+                    packs.SQLContent("> /dev/"),
                 ),
             ),
             Severity:     guard.Critical,
@@ -743,9 +746,9 @@ var ansiblePack = packs.Pack{
             Match: packs.And(
                 packs.Name("ansible"),
                 packs.Or(
-                    packs.ArgContent("file"),
+                    packs.SQLContent("file"),
                 ),
-                packs.ArgContent("state=absent"),
+                packs.SQLContent("state=absent"),
             ),
             Severity:     guard.High,
             Confidence:   guard.ConfidenceHigh,
@@ -758,8 +761,8 @@ var ansiblePack = packs.Pack{
             Name: "ansible-service-stopped",
             Match: packs.And(
                 packs.Name("ansible"),
-                packs.ArgContent("service"),
-                packs.ArgContent("state=stopped"),
+                packs.SQLContent("service"),
+                packs.SQLContent("state=stopped"),
             ),
             Severity:     guard.High,
             Confidence:   guard.ConfidenceHigh,
@@ -773,10 +776,10 @@ var ansiblePack = packs.Pack{
             Match: packs.And(
                 packs.Name("ansible-playbook"),
                 packs.Or(
-                    packs.ArgContent("state=absent"),
-                    packs.ArgContent("ensure=absent"),
-                    packs.ArgContent("state=destroyed"),
-                    packs.ArgContent("state=terminated"),
+                    packs.SQLContent("state=absent"),
+                    packs.SQLContent("ensure=absent"),
+                    packs.SQLContent("state=destroyed"),
+                    packs.SQLContent("state=terminated"),
                 ),
             ),
             Severity:     guard.High,
@@ -793,8 +796,8 @@ var ansiblePack = packs.Pack{
             Name: "ansible-user-absent",
             Match: packs.And(
                 packs.Name("ansible"),
-                packs.ArgContent("user"),
-                packs.ArgContent("state=absent"),
+                packs.SQLContent("user"),
+                packs.SQLContent("state=absent"),
             ),
             Severity:     guard.Medium,
             Confidence:   guard.ConfidenceHigh,
@@ -825,12 +828,12 @@ var ansiblePack = packs.Pack{
             Match: packs.And(
                 packs.Name("ansible"),
                 packs.Or(
-                    packs.ArgContent("package"),
-                    packs.ArgContent("yum"),
-                    packs.ArgContent("apt"),
-                    packs.ArgContent("dnf"),
+                    packs.SQLContent("package"),
+                    packs.SQLContent("yum"),
+                    packs.SQLContent("apt"),
+                    packs.SQLContent("dnf"),
                 ),
-                packs.ArgContent("state=absent"),
+                packs.SQLContent("state=absent"),
             ),
             Severity:     guard.Medium,
             Confidence:   guard.ConfidenceHigh,
@@ -856,20 +859,20 @@ var ansiblePack = packs.Pack{
   Galaxy. Could be a supply chain risk but not directly destructive.
 - **`ansible-vault`**: Not covered — encrypts/decrypts secrets files.
   `ansible-vault decrypt` could expose secrets but doesn't destroy data.
-- **`ArgContent("file")` false positive (accepted)**: D2 uses
-  `ArgContent("file")` which does substring matching. If a resource value
+- **`SQLContent("file")` false positive (accepted)**: D2 uses
+  `SQLContent("file")` which does broad content matching over args and
+  selected flag values. If a resource value
   contains "file" (e.g., "profile", "logfile", "dockerfile"), D2 may
   false-match at High instead of the correct lower-severity pattern.
   This is accepted over-classification — the command IS flagged as
   destructive, just by the wrong pattern at a higher severity. Not a
   false negative.
 - **Module names in `-m` vs `-a`**: The module name comes after `-m`
-  (e.g., `-m file -a 'state=absent'`). In the extracted command,
-  `file` appears as the value of the `-m` flag, and `state=absent`
-  appears as the value of the `-a` flag. Both `ArgContent("file")` and
-  `ArgContent("state=absent")` match against all argument and flag
-  values. This is intentional — we want broad matching rather than
-  requiring exact flag-value position matching.
+  (e.g., `-m file -a 'state=absent'`). In extracted commands, `file`
+  is typically the value of `-m`, and `state=absent` is typically the
+  value of `-a` or `--extra-vars`. These patterns intentionally use
+  `SQLContent(...)` (flag-value-aware) rather than plain `ArgContent(...)`
+  so module/argument content is detected when carried in flags.
 
 ---
 
@@ -2222,7 +2225,7 @@ establishes the auto-approve severity split pattern that Pulumi also uses.
 
 ---
 
-## Review Disposition
+## Round 1 Review Disposition
 
 | # | Reviewer | Severity | Summary | Disposition | Notes |
 |---|----------|----------|---------|-------------|-------|
@@ -2259,3 +2262,12 @@ establishes the auto-approve severity split pattern that Pulumi also uses.
 | 31 | dcg-alt-reviewer | P3 | Pulumi D4 section comment wrong | Incorporated | Duplicate of #7 — same fix |
 | 32 | dcg-alt-reviewer | P3 | terraform import drift risk | Not Incorporated | Accepted for v1, import doesn't modify infra directly |
 | 33 | dcg-alt-reviewer | P3 | SEC1 flag ordering test coverage | Incorporated | Test harness SEC1 added aws flag-between-subcommands test case |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | domain-packs-r2 | P1 | Ansible patterns used ArgContent and missed flag values | Incorporated | Converted Ansible module/arg checks to `SQLContent(...)` (flag-value-aware) across S1 and D1-D7 |
+| 2 | domain-packs-r2 | P2 | §5.3.1 incorrectly claimed ArgContent matched flag values | Incorporated | Rewrote §5.3.1 to document SQLContent-based flag-value matching contract |
+| 3 | domain-packs-r2 | P2 | terraform import note said safe while patterns were no-match | Incorporated | Updated §5.1.1 to explicitly classify current behavior as Indeterminate |
+| 4 | domain-packs-r2 | P3 | workspace-delete vs stack-rm severity asymmetry lacked rationale | Incorporated | Added explicit rationale note contrasting Terraform workspace delete vs Pulumi stack rm |

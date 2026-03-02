@@ -718,8 +718,8 @@ var rsyncPack = packs.Pack{
         },
 
         // D2: rsync --delete-before (deletes destination files BEFORE transfer)
-        //     Higher severity than --delete because files are removed before
-        //     new versions arrive, creating a window where data is missing.
+        //     Same severity as --delete in v1. Ordering differs, but both
+        //     remove destination files not present in source.
         {
             Name: "rsync-delete-before",
             Match: packs.And(
@@ -1274,7 +1274,7 @@ var githubPack = packs.Pack{
 
 ## 6. Golden File Entries
 
-### 6.1 `frameworks` Golden Entries (38 entries)
+### 6.1 `frameworks` Golden Entries (44 entries)
 
 ```yaml
 format: v1
@@ -1581,7 +1581,7 @@ decision: Allow
 ---
 ```
 
-### 6.2 `remote.rsync` Golden Entries (10 entries)
+### 6.2 `remote.rsync` Golden Entries (12 entries)
 
 ```yaml
 format: v1
@@ -1674,7 +1674,7 @@ decision: Allow
 ---
 ```
 
-### 6.3 `secrets.vault` Golden Entries (18 entries)
+### 6.3 `secrets.vault` Golden Entries (23 entries)
 
 ```yaml
 format: v1
@@ -2000,7 +2000,7 @@ Shows how safe patterns interact with destructive patterns within each pack.
 
 | Safe↓ / Destructive→ | D1 db:drop | D2 db:reset | D3 schema:load | D4 rake:drop:all | D5 rake:destr | D6 flush | D7 syncdb | D8 fresh | D9 reset | D10 ecto.reset | D11 ecto.drop |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| S1 rails-db-migrate | — | — | — | — | — | — | blocked | — | — | — | — |
+| S1 rails-db-migrate | — | — | — | — | — | — | — | — | — | — | — |
 | S2 rails-db-seed | — | — | — | — | — | — | — | — | — | — | — |
 | S3 rails-non-db | — | — | — | — | — | — | — | — | — | — | — |
 | S4a managepy-non-db | — | — | — | — | — | — | — | — | — | — | — |
@@ -2013,10 +2013,8 @@ Shows how safe patterns interact with destructive patterns within each pack.
 
 **Note**: Interaction is minimal because each safe pattern is scoped to
 specific non-destructive subcommands of a specific tool, and destructive
-patterns target different subcommands. S1 could shadow D7 (both match
-`rails db:migrate`) — S1's `Not(--run-syncdb)` prevents this. S4b could
-shadow D7 (both match `manage.py migrate`) — S4b's `Not(--run-syncdb)`
-prevents this.
+patterns target different subcommands. S4b could shadow D7 (both match
+`manage.py migrate`) — S4b's `Not(--run-syncdb)` prevents this.
 
 ### 8.2 rsync Interaction Matrix
 
@@ -2765,7 +2763,7 @@ deterministic and auditable.
 
 ---
 
-## Review Disposition
+## Round 1 Review Disposition
 
 | # | Reviewer | Severity | Summary | Disposition | Notes |
 |---|----------|----------|---------|-------------|-------|
@@ -2800,3 +2798,11 @@ deterministic and auditable.
 | 29 | systems-engineer | P3 | Vault interaction matrix inconsistency | Incorporated | §8.3 rewritten with S2 Not clause interactions |
 | 30 | systems-engineer | P3 | bundle exec rake pre-filter waste | Not Incorporated | Already documented as Q5 |
 | 31 | systems-engineer | P3 | Vault S2 breadth scope not fully documented | Incorporated | §5.3.1 note 5 rewritten to document all S2 Not clauses |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | domain-packs-r2 | P2 | Frameworks S1/D7 matrix cell incorrectly marked blocked | Incorporated | Changed S1/D7 interaction cell to `—` and corrected explanatory note |
+| 2 | domain-packs-r2 | P3 | Golden section headers had stale pre-R1 entry counts | Incorporated | Updated §6.1/§6.2/§6.3 headers to 44/12/23 entries |
+| 3 | domain-packs-r2 | P3 | rsync D2 comment claimed higher severity while configured equal | Incorporated | Updated D2 comment to match actual Medium severity policy |

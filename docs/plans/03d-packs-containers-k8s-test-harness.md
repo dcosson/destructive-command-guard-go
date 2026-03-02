@@ -544,7 +544,7 @@ func TestComparisonContainerK8sUpstreamRust(t *testing.T) {
 }
 ```
 
-**Comparison corpus**: All 116 golden file commands from §6 of the plan doc.
+**Comparison corpus**: All 117 golden file commands from §6 of the plan doc.
 
 ### O2: Orchestrator Consistency
 
@@ -698,7 +698,7 @@ func BenchmarkContainerK8sGoldenCorpus(b *testing.B) {
 }
 ```
 
-**Target**: Full container/k8s corpus (116 entries) < 2ms total.
+**Target**: Full container/k8s corpus (117 entries) < 2ms total.
 
 ---
 
@@ -820,13 +820,16 @@ func TestSecurityKubectlDeleteResourceEscalation(t *testing.T) {
     for _, tt := range highImpact {
         t.Run(tt.resource, func(t *testing.T) {
             testCmd := cmd("kubectl", []string{"delete", tt.resource, "test"}, nil)
+            matched := false
             for _, dp := range kubectlPack.Destructive {
                 if dp.Match.Match(testCmd) {
+                    matched = true
                     assert.GreaterOrEqual(t, int(dp.Severity), int(tt.minSeverity),
                         "kubectl delete %s should be at least %v", tt.resource, tt.minSeverity)
                     break
                 }
             }
+            assert.True(t, matched, "kubectl delete %s should match at least one pattern", tt.resource)
         })
     }
 
@@ -835,24 +838,27 @@ func TestSecurityKubectlDeleteResourceEscalation(t *testing.T) {
     for _, res := range genericResources {
         t.Run("generic-"+res, func(t *testing.T) {
             testCmd := cmd("kubectl", []string{"delete", res, "test"}, nil)
+            matched := false
             for _, dp := range kubectlPack.Destructive {
                 if dp.Match.Match(testCmd) {
+                    matched = true
                     assert.Equal(t, guard.Medium, dp.Severity,
                         "kubectl delete %s should be Medium", res)
                     break
                 }
             }
+            assert.True(t, matched, "kubectl delete %s should match at least one pattern", res)
         })
     }
 }
 ```
 
-### SEC3: Environment Sensitivity Escalation
+### SEC3: Environment Sensitivity Preconditions
 
 Verify env-sensitive kubectl/helm patterns correctly escalate:
 
 ```go
-func TestSecurityContainerK8sEnvEscalation(t *testing.T) {
+func TestSecurityContainerK8sEnvSensitivityPreConditions(t *testing.T) {
     envSensitivePatterns := []struct {
         packID       string
         pattern      string
@@ -918,7 +924,7 @@ Manually verify kubectl delete with all significant resource types:
 6. `kubectl delete service` → Deny/High
 7. `kubectl delete pod` → Ask/Medium (catch-all)
 8. `kubectl delete configmap` → Ask/Medium (catch-all)
-9. `kubectl delete secret` → Ask/Medium (catch-all)
+9. `kubectl delete secret` → Deny/High (specific resource)
 10. `kubectl delete -f manifest.yaml` → Ask/Medium (catch-all)
 
 ---
@@ -946,9 +952,9 @@ Manually verify kubectl delete with all significant resource types:
 2. **All deterministic examples pass** — E1-E7
 3. **All fault injection tests pass** — F1-F3
 4. **All security tests pass** — SEC1-SEC3
-5. **Golden file corpus passes** — All 116 container/k8s entries
+5. **Golden file corpus passes** — All 117 container/k8s entries
 6. **Pattern reachability 100%** — Every destructive pattern reachable across
-   all 4 packs (35 patterns total)
+   all 4 packs (36 patterns total)
 7. **Cross-pack isolation verified** — P7 passes
 8. **Split env sensitivity verified** — P3 passes for all 4 packs
 9. **Docker dual-syntax parity** — P4 passes
@@ -966,10 +972,10 @@ Manually verify kubectl delete with all significant resource types:
 
 ### Tracked Metrics
 
-- Pattern count by pack (safe + destructive) — target: 17 safe + 35 destructive
+- Pattern count by pack (safe + destructive) — target: 17 safe + 36 destructive
   across 4 packs
 - Test count by category (unit, reachability, golden, property, security)
-- Golden file entry count — target: 116 entries across 4 packs
+- Golden file entry count — target: 117 entries across 4 packs
 - ArgAt matching latency per pattern (from B1)
 - Environment sensitivity coverage: kubectl + helm = env-sensitive,
   docker + compose = not env-sensitive
@@ -977,7 +983,7 @@ Manually verify kubectl delete with all significant resource types:
 - Docker dual-syntax coverage: 100% parity verified
 - Compose dual-naming coverage: 100% parity verified
 
-## Review Disposition
+## Round 1 Review Disposition
 
 | # | Reviewer | Severity | Summary | Disposition | Notes |
 |---|----------|----------|---------|-------------|-------|
@@ -991,3 +997,11 @@ Manually verify kubectl delete with all significant resource types:
 | 8 | dcg-alt-reviewer | P2 | O2 logs but doesn't assert severity equality | Incorporated | Changed to assert with expectEqual field and documented expected differences |
 | 9 | dcg-alt-reviewer | P2 | P7 only uses standalone compose form | Incorporated | Duplicate of #3; same fix |
 | 10 | dcg-alt-reviewer | P2 | Exit criteria counts outdated | Incorporated | Updated to 35 patterns, 116 golden entries |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | domain-packs-r2 | P2 | SEC2 could silently pass when no kubectl delete pattern matched | Incorporated | Added explicit `matched` assertions for both high-impact and generic loops |
+| 2 | domain-packs-r2 | P2 | MQ3 still listed `kubectl delete secret` as Ask/Medium | Incorporated | Updated MQ3 expected outcome to Deny/High |
+| 3 | domain-packs-r2 | P3 | SEC3 naming implied escalation behavior while testing preconditions only | Incorporated | Renamed SEC3 heading and function to preconditions terminology |

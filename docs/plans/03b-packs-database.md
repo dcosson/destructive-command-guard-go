@@ -533,6 +533,9 @@ var pgPack = packs.Pack{
 - `psql -f drop.sql` (file execution) matches neither safe nor destructive
   because we cannot inspect file contents. It passes as "no match" → Allow.
   This is a known limitation documented in §13.
+- `psql-alter-drop` intentionally stays `EnvSensitive: false` in v1. It is a
+  scoped schema mutation (column/index/constraint removal) at Medium
+  confidence, unlike full-object destruction patterns that are env-sensitive.
 - `createdb --template production_db new_db` copies an entire database. While
   read-only from the source's perspective, it can cause heavy I/O on a
   production server. We don't flag this — it's a benign-but-potentially-
@@ -754,6 +757,15 @@ matching will correctly distinguish them — `mysqldump` is a separate word
 that triggers the pack, and the `Name()` matcher in patterns ensures the
 right command is matched.
 
+**`Arg(value)` builder usage**: `mysqladmin-drop` and `mysqladmin-flush`
+intentionally use `Arg(...)` for exact any-position token matching (from the
+plan 02 matcher DSL). This captures cases where options shift token positions
+without relying on broad substring checks.
+
+**ALTER TABLE DROP env sensitivity**: `mysql-alter-drop` intentionally remains
+`EnvSensitive: false` in v1 for parity with PostgreSQL's `psql-alter-drop`.
+Both are treated as scoped schema mutations at Medium severity.
+
 ---
 
 ### 5.3 `database.sqlite` Pack (`internal/packs/database/sqlite.go`)
@@ -823,7 +835,7 @@ var sqlitePack = packs.Pack{
             Name: "sqlite3-dot-drop",
             Match: packs.And(
                 packs.Name("sqlite3"),
-                packs.ArgContent(`\.drop`),
+                packs.ArgContentRegex(`\.drop`),
             ),
             Severity:     guard.High,
             Confidence:   guard.ConfidenceMedium,
@@ -1273,6 +1285,11 @@ because connection flags are separated from the Redis command.
 (SEGFAULT, SLEEP, SET-ACTIVE-EXPIRE, etc.) at Medium severity. DEBUG SEGFAULT
 crashes the server, DEBUG SLEEP blocks it. These should only be used in
 development environments.
+
+**S2 exclusion maintenance invariant**: `redis-cli-interactive-safe` uses a
+negative exclusion list for destructive verbs. Whenever a new Redis
+destructive pattern is added, update S2's exclusion list in the same change
+to avoid safe-pattern shadowing.
 
 **CONFIG SET granularity**: All CONFIG SET operations are flagged at Medium
 severity. Some CONFIG SET parameters are benign (`loglevel`) while others
@@ -2231,7 +2248,7 @@ parallel). Step 1 must complete before any pack implementation.
 
 ---
 
-## Review Disposition
+## Round 1 Review Disposition
 
 | # | Reviewer | Severity | Summary | Disposition | Notes |
 |---|----------|----------|---------|-------------|-------|
@@ -2268,3 +2285,16 @@ parallel). Step 1 must complete before any pack implementation.
 | 31 | dcg-alt-reviewer | P3 | Database name containing SQL keywords false positive (DB-P3.2) | Not Incorporated | Extremely unlikely; accepted as defense-in-depth |
 | 32 | dcg-alt-reviewer | P3 | Env escalation tested only at flag level (DB-P3.3) | Not Incorporated | Correct architecture; escalation tested in plan 04 |
 | 33 | dcg-alt-reviewer | P3 | mongo keyword word-boundary dependency on plan 02 (DB-P3.4) | Not Incorporated | Dependency on plan 02 implementation, not actionable here |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | domain-packs-r2 | P1 | sqlite3-dot-drop used regex-like ArgContent and was unreachable | Incorporated | Switched D2 to `ArgContentRegex(\`\\.drop\`)` so `.drop` commands are matched correctly |
+| 2 | domain-packs-r2 | P2 | mysqladmin Arg() builder appeared undefined in local context | Incorporated | Added §5.2.1 note documenting `Arg(...)` semantics and cross-plan DSL source |
+| 3 | domain-packs-r2 | P2 | mongo-delete-many regex concern was withdrawn in review body | Not Incorporated | Reviewer concluded behavior is correct and withdrew the issue |
+| 4 | domain-packs-r2 | P2 | psql-alter-drop env-sensitivity rationale missing | Incorporated | Added explicit PostgreSQL note for v1 `EnvSensitive: false` rationale |
+| 5 | domain-packs-r2 | P2 | mysql-alter-drop env-sensitivity rationale missing | Incorporated | Added explicit MySQL parity rationale note |
+| 6 | domain-packs-r2 | P2 | redis interactive-safe exclusion drift risk | Incorporated | Added S2 maintenance invariant note in §5.5.1 |
+| 7 | domain-packs-r2 | P3 | Env-sensitivity property depth (harness concern) | Incorporated | Addressed in 03b test harness Round 2 updates |
+| 8 | domain-packs-r2 | P3 | Missing redis CONFIG GET expected-behavior test (harness concern) | Incorporated | Addressed in 03b test harness Round 2 updates |

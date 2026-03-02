@@ -44,7 +44,7 @@ This plan defines 4 container and Kubernetes orchestration packs:
 
 **Scope**:
 - 4 packs, each with safe + destructive patterns
-- 17 safe + 35 destructive patterns
+- 17 safe + 36 destructive patterns
 - 116 golden file entries across all 4 packs
 - Per-pattern unit tests with match and near-miss cases
 - Reachability tests for every destructive pattern
@@ -817,8 +817,8 @@ var composePack = packs.Pack{
 **Pack ID**: `kubernetes.kubectl`
 **Keywords**: `["kubectl"]`
 **Safe Patterns**: 4
-**Destructive Patterns**: 13
-**EnvSensitive**: Yes (all 13 destructive patterns)
+**Destructive Patterns**: 14
+**EnvSensitive**: Yes (all 14 destructive patterns)
 
 kubectl is the primary CLI for Kubernetes cluster management. Destructive
 operations can remove workloads, data, and affect cluster availability.
@@ -1042,6 +1042,8 @@ var kubectlPack = packs.Pack{
                 packs.Name("kubectl"),
                 packs.ArgAt(0, "apply"),
                 packs.Flags("--prune"),
+                packs.Not(packs.Flags("--all-namespaces")),
+                packs.Not(packs.Flags("-A")),
             ),
             Severity:     guard.High,
             Confidence:   guard.ConfidenceHigh,
@@ -1049,7 +1051,25 @@ var kubectlPack = packs.Pack{
             Remediation:  "Remove --prune flag. Apply manifests without pruning, then manually delete unwanted resources.",
             EnvSensitive: true,
         },
-        // D7c: kubectl delete --all-namespaces (cluster-wide deletion)
+        // D7c: kubectl apply --prune --all-namespaces (cluster-wide prune deletions)
+        {
+            Name: "kubectl-apply-prune-all-namespaces",
+            Match: packs.And(
+                packs.Name("kubectl"),
+                packs.ArgAt(0, "apply"),
+                packs.Flags("--prune"),
+                packs.Or(
+                    packs.Flags("--all-namespaces"),
+                    packs.Flags("-A"),
+                ),
+            ),
+            Severity:     guard.Critical,
+            Confidence:   guard.ConfidenceHigh,
+            Reason:       "kubectl apply --prune --all-namespaces can delete resources across ALL namespaces not present in manifests — cluster-wide impact",
+            Remediation:  "Remove --all-namespaces and scope to a single namespace before using --prune.",
+            EnvSensitive: true,
+        },
+        // D7d: kubectl delete --all-namespaces (cluster-wide deletion)
         {
             Name: "kubectl-delete-all-namespaces",
             Match: packs.And(
@@ -1066,7 +1086,7 @@ var kubectlPack = packs.Pack{
             Remediation:  "Use -n <namespace> to target a specific namespace instead.",
             EnvSensitive: true,
         },
-        // D7d: kubectl delete --all (all resources of a type in namespace)
+        // D7e: kubectl delete --all (all resources of a type in namespace)
         {
             Name: "kubectl-delete-all",
             Match: packs.And(
@@ -1165,7 +1185,8 @@ var kubectlPack = packs.Pack{
 - **`kubectl apply`**: Classified as safe (S4) unless `--prune` is used.
   Normal apply declaratively applies resource configurations. `kubectl
   apply --prune` deletes resources not present in the applied manifests —
-  this is caught by D7b (kubectl-apply-prune) at High.
+  this is caught by D7b (kubectl-apply-prune) at High. The
+  `--all-namespaces` / `-A` variant is escalated to Critical by D7c.
 - **`kubectl delete -f`**: Matches D8 (kubectl-delete-resource). The
   `-f` flag specifies a file, but the resource type in the file
   determines the actual impact. Since we can't inspect file contents,
@@ -1196,7 +1217,7 @@ var kubectlPack = packs.Pack{
   Deleting a secret causes cascading failures: pods mounting the secret
   fail on restart, ingress controllers lose TLS certs, service accounts
   lose credentials.
-- **Env-sensitive**: All 13 destructive patterns are env-sensitive.
+- **Env-sensitive**: All 14 destructive patterns are env-sensitive.
   Deleting a namespace in production vs. dev has vastly different impact.
 
 ---
@@ -1483,6 +1504,7 @@ kubectl drain worker-1 --ignore-daemonsets          → Deny/High (kubectl-drain
 kubectl replace --force -f deployment.yaml          → Deny/High (kubectl-replace-force)
 kubectl apply --prune -f manifests/                 → Deny/High (kubectl-apply-prune)
 kubectl apply --prune --all -f manifests/           → Deny/High (kubectl-apply-prune)
+kubectl apply --prune --all-namespaces -f manifests/ → Deny/Critical (kubectl-apply-prune-all-namespaces)
 kubectl delete pods --all                           → Deny/High (kubectl-delete-all)
 
 # kubectl — Destructive — Medium
@@ -1499,6 +1521,7 @@ kubectl get pods -n production                      → Allow (kubectl-get-safe)
 kubectl describe pod my-pod                         → Allow (kubectl-describe-safe)
 kubectl logs my-pod                                 → Allow (kubectl-readonly-safe)
 kubectl apply -f deployment.yaml                    → Allow (kubectl-modify-safe)
+kubectl scale --replicas=0 deployment/my-app        → Allow (KNOWN FALSE NEGATIVE — S4 cannot inspect --replicas value in v1)
 ```
 
 ### 6.4 `kubernetes.helm` (20 entries)
@@ -1787,12 +1810,12 @@ Not applicable for pattern packs. Container/Kubernetes packs use simple
    Compose pack. Establishes the standalone vs plugin dual naming pattern.
 
 3. **`internal/packs/kubernetes/kubectl.go`** + `kubectl_test.go` —
-   kubectl pack. Most complex pack (13 destructive patterns with
+   kubectl pack. Most complex pack (14 destructive patterns with
    resource type routing and flag-based escalation).
 
 4. **`internal/packs/kubernetes/helm.go`** + `helm_test.go` — Helm pack.
 
-5. **Golden file entries** — Add all 116 entries to
+5. **Golden file entries** — Add all 117 entries to
    `internal/eval/testdata/golden/`.
 
 6. **Run all tests** — Unit, reachability, completeness, golden file.
@@ -1839,7 +1862,7 @@ to establish the dual-syntax matching pattern.
 
 ---
 
-## Review Disposition
+## Round 1 Review Disposition
 
 | # | Reviewer | Severity | Summary | Disposition | Notes |
 |---|----------|----------|---------|-------------|-------|
@@ -1874,3 +1897,10 @@ to establish the dual-syntax matching pattern.
 | 29 | dcg-alt-reviewer | P3 | docker compose kill not covered | N/A | Confirming v2 deferral |
 | 30 | dcg-alt-reviewer | P3 | helm rollback Medium appropriate | N/A | Confirming appropriateness |
 | 31 | dcg-alt-reviewer | P3 | docker builder prune not covered | N/A | Confirming v2 deferral |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | domain-packs-r2 | P2 | `kubectl apply --prune --all-namespaces` under-classified at High | Incorporated | Added Critical D7c `kubectl-apply-prune-all-namespaces`; narrowed D7b with Not(all-namespaces/-A) |
+| 2 | domain-packs-r2 | P3 | Missing golden tracking entry for known `scale --replicas=0` false negative | Incorporated | Added explicit KNOWN FALSE NEGATIVE safe entry in §6.3 |
