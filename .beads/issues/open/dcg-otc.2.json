@@ -34,8 +34,14 @@
       "author": "Danny Cosson",
       "text": "Implemented command normalization + core extraction in commit 0647186: Normalize path stripping, env-prefix unwrap, command splitter/extractor, ParseAndExtract flow, minimal sequential dataflow substitution, and unit tests for simple/compound/pipeline/env/dataflow cases. go test ./... and go test -race ./internal/parse pass.",
       "created_at": "2026-03-02T15:29:55.004184-08:00"
+    },
+    {
+      "id": 2,
+      "author": "Danny Cosson",
+      "text": "Addressed blocking review feedback in commit 14fdefc: extractor now collects command contexts by AST walk (collectASTCommands), and inline env assignments no longer leak into global dataflow for non-export commands. Tests: go test ./... and go test -race ./internal/parse pass.",
+      "created_at": "2026-03-02T15:33:52.677038-08:00"
     }
   ],
   "created_at": "2026-03-02T14:24:42.629156-08:00",
-  "updated_at": "2026-03-02T15:29:55.004418-08:00"
+  "updated_at": "2026-03-02T15:33:52.677371-08:00"
 }

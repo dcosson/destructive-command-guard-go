@@ -3,6 +3,8 @@ package parse
 import (
 	"context"
 	"testing"
+
+	"github.com/dcosson/destructive-command-guard-go/guard"
 )
 
 func TestParseAndExtractBasicCases(t *testing.T) {
@@ -124,4 +126,61 @@ func TestParseAndExtractBasicCases(t *testing.T) {
 			tc.check(t, result.Commands)
 		})
 	}
+}
+
+func TestParseAndExtractDataflowBranching(t *testing.T) {
+	t.Parallel()
+
+	parser := NewBashParser()
+
+	t.Run("and chain may alias produces variants", func(t *testing.T) {
+		t.Parallel()
+		result := parser.ParseAndExtract(context.Background(), "DIR=/ && DIR=/tmp && rm -rf $DIR", 0)
+		if len(result.Commands) != 2 {
+			t.Fatalf("expected 2 rm variants, got %d: %#v", len(result.Commands), result.Commands)
+		}
+		seen := map[string]bool{}
+		for _, cmd := range result.Commands {
+			if cmd.Name != "rm" {
+				t.Fatalf("expected rm command, got %q", cmd.Name)
+			}
+			if len(cmd.Args) == 0 {
+				t.Fatalf("expected args on rm variant")
+			}
+			seen[cmd.Args[len(cmd.Args)-1]] = true
+			if !cmd.DataflowResolved {
+				t.Fatalf("expected DataflowResolved=true on variant")
+			}
+		}
+		if !seen["/"] || !seen["/tmp"] {
+			t.Fatalf("expected both / and /tmp variants, saw %#v", seen)
+		}
+	})
+
+	t.Run("inline env does not leak", func(t *testing.T) {
+		t.Parallel()
+		result := parser.ParseAndExtract(context.Background(), "TMP=/safe echo ok; echo $TMP", 0)
+		if len(result.Commands) != 2 {
+			t.Fatalf("expected 2 commands, got %d", len(result.Commands))
+		}
+		second := result.Commands[1]
+		if len(second.Args) == 0 || second.Args[0] != "$TMP" {
+			t.Fatalf("inline env leaked into second command args: %#v", second.Args)
+		}
+	})
+
+	t.Run("command substitution warning", func(t *testing.T) {
+		t.Parallel()
+		result := parser.ParseAndExtract(context.Background(), "export FILE=$(mktemp); rm -rf $FILE", 0)
+		found := false
+		for _, w := range result.Warnings {
+			if w.Code == guard.WarnCommandSubstitution {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected WarnCommandSubstitution in warnings: %#v", result.Warnings)
+		}
+	})
 }
