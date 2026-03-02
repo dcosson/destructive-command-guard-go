@@ -1,0 +1,28 @@
+{
+  "id": "dcg-ap9",
+  "title": "R3 Review: Foundation + Other batch",
+  "description": "Round 3 batch review (rotated from R2). Focus on verifying R2 fixes are clean and cross-doc contract consistency. Docs: 03e-packs-other-test-harness.md, 03f-packs-personal-files.md, 03g-packs-macos.md, 04-api-and-cli.md, 04-api-and-cli-test-harness.md, 05-testing-and-benchmarks.md, 05-testing-and-benchmarks-test-harness.md",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg",
+    "round=R3",
+    "type=review"
+  ],
+  "assignee": "dcg-coder-1",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Completed R3 specialized/API/testing review batch. Commit fccfa67; 7 review docs added; findings total: 1 (P2 in 05-testing-and-benchmarks-test-harness), all others clean approvals.",
+      "created_at": "2026-03-02T13:44:39.210301-08:00"
+    }
+  ],
+  "created_at": "2026-03-02T13:41:22.747582-08:00",
+  "updated_at": "2026-03-02T14:08:51.918498-08:00",
+  "closed_at": "2026-03-02T13:44:39.221574-08:00",
+  "close_reason": "Completed assigned R3 review batch"
+}

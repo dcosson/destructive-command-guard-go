@@ -1,0 +1,20 @@
+{
+  "id": "dcg-o0q",
+  "title": "R3 Review: Domain packs batch",
+  "description": "Round 3 batch review (rotated from R2). Focus on verifying R2 fixes are clean and cross-doc contract consistency. Docs: 03b-packs-database.md, 03b-packs-database-test-harness.md, 03c-packs-infra-cloud.md, 03c-packs-infra-cloud-test-harness.md, 03d-packs-containers-k8s.md, 03d-packs-containers-k8s-test-harness.md, 03e-packs-other.md",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg",
+    "round=R3",
+    "type=review"
+  ],
+  "assignee": "dcg-reviewer",
+  "created_at": "2026-03-02T13:41:25.470334-08:00",
+  "updated_at": "2026-03-02T14:08:51.929103-08:00",
+  "closed_at": "2026-03-02T14:08:51.929103-08:00",
+  "close_reason": "Closed"
+}

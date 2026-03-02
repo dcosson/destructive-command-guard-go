@@ -1,0 +1,20 @@
+{
+  "id": "dcg-3e5",
+  "title": "R2 Review: Foundation chain (00-arch, 01, 01-th, 02, 02-th, 03a, 03a-th)",
+  "description": "Round 2 batch review of foundation docs: 00-architecture.md, 01-treesitter-integration.md, 01-treesitter-integration-test-harness.md, 02-matching-framework.md, 02-matching-framework-test-harness.md, 03a-packs-core.md, 03a-packs-core-test-harness.md. Use plan-review skill for each doc. Batch review mode - read all docs for cross-doc visibility.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg",
+    "round=R2",
+    "type=review"
+  ],
+  "assignee": "dcg-coder-1",
+  "created_at": "2026-03-02T12:45:24.577897-08:00",
+  "updated_at": "2026-03-02T14:08:51.825961-08:00",
+  "closed_at": "2026-03-02T12:51:19.682107-08:00",
+  "close_reason": "Completed assigned R2 review batch"
+}

@@ -1,0 +1,20 @@
+{
+  "id": "dcg-vb8",
+  "title": "R3 Incorporate: All batches (3 findings)",
+  "description": "Incorporate all R3 review findings. Only 3 findings total: 1 P1 in 03c (ansible safe matcher), 1 P2 in 03c-th (missing regression coverage), 1 P2 in specialized batch. Use plan-incorporate skill.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg",
+    "round=R3",
+    "type=incorporate"
+  ],
+  "assignee": "dcg-coder-2",
+  "created_at": "2026-03-02T13:49:55.949579-08:00",
+  "updated_at": "2026-03-02T14:08:51.898852-08:00",
+  "closed_at": "2026-03-02T14:08:51.898852-08:00",
+  "close_reason": "Closed"
+}

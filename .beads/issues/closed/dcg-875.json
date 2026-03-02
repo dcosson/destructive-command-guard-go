@@ -1,0 +1,20 @@
+{
+  "id": "dcg-875",
+  "title": "R2 Review: Specialized packs + API + Testing (03e-th, 03f, 03g, 04, 04-th, 05, 05-th)",
+  "description": "Round 2 batch review of specialized packs, API, and testing docs: 03e-packs-other-test-harness.md, 03f-packs-personal-files.md, 03g-packs-macos.md, 04-api-and-cli.md, 04-api-and-cli-test-harness.md, 05-testing-and-benchmarks.md, 05-testing-and-benchmarks-test-harness.md. Use plan-review skill for each doc. Batch review mode - read all docs for cross-doc visibility.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg",
+    "round=R2",
+    "type=review"
+  ],
+  "assignee": "dcg-reviewer",
+  "created_at": "2026-03-02T12:45:29.181756-08:00",
+  "updated_at": "2026-03-02T14:08:51.853079-08:00",
+  "closed_at": "2026-03-02T14:08:51.853078-08:00",
+  "close_reason": "Closed"
+}

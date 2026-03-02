@@ -1,0 +1,20 @@
+{
+  "id": "dcg-4b8",
+  "title": "R3 Review: Specialized + API + Testing batch",
+  "description": "Round 3 batch review (rotated from R2). Focus on verifying R2 fixes are clean and cross-doc contract consistency. Docs: 00-architecture.md, 01-treesitter-integration.md, 01-treesitter-integration-test-harness.md, 02-matching-framework.md, 02-matching-framework-test-harness.md, 03a-packs-core.md, 03a-packs-core-test-harness.md",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg",
+    "round=R3",
+    "type=review"
+  ],
+  "assignee": "dcg-coder-2",
+  "created_at": "2026-03-02T13:41:17.198715-08:00",
+  "updated_at": "2026-03-02T14:08:51.908297-08:00",
+  "closed_at": "2026-03-02T14:08:51.908297-08:00",
+  "close_reason": "Closed"
+}
