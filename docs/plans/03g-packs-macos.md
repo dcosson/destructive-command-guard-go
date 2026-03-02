@@ -43,7 +43,12 @@ simply doesn't exist in the binary. See plan 02 §5.3 for the build tag pattern.
 |---------|----------|---------------------|---------------|
 | `macos.communication` | osascript, shortcuts, automator | 9 | 2 |
 | `macos.privacy` | security, mdfind, sqlite3, Safari, Mail, Calendars, Photos Library | 5 | 1 |
-| `macos.system` | defaults, launchctl, diskutil, csrutil, tmutil, nvram, spctl, systemsetup, dscl, fdesetup, bless | 13 | 5 |
+| `macos.system` | defaults, launchctl, diskutil, csrutil, tmutil, nvram, spctl, systemsetup, dscl, fdesetup, bless | 13 (12 functional + 1 known-broken†) | 5 |
+
+† D7 `dscl-delete` is non-functional in v1 — the plan 01 parser decomposes
+`-delete` into short flags, making `ArgContent("-delete")` unreachable.
+Requires plan 02 `RawArgContent` matcher. Effective coverage is 12/13 until
+this dependency is resolved. See §5.3 D7 comment for details.
 
 ---
 
@@ -1463,7 +1468,7 @@ For example, `cat ~/Library/Messages/chat.db`:
 
 ---
 
-## Review Disposition
+## Round 1 Review Disposition
 
 | # | Reviewer | Severity | Summary | Disposition | Notes |
 |---|----------|----------|---------|-------------|-------|
@@ -1490,3 +1495,9 @@ For example, `cat ~/Library/Messages/chat.db`:
 | 21 | dcg-reviewer | P2 | SE-P2.4: diagram D-numbers don't match code | Incorporated | Diagram updated to use pattern names instead of D-numbers |
 | 22 | dcg-reviewer | P3 | SE-P3.1: sqlite3 keyword missing (dup of SE-P1.2) | Incorporated | Covered by SE-P1.2 fix |
 | 23 | dcg-reviewer | P3 | SE-P3.2: osascript docs misleading about flag value | Incorporated | Updated §4.1 to explain parser behavior accurately |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-reviewer | P2 | Known-broken dscl pattern counted as coverage | Incorporated | Summary table annotated: 12 functional + 1 known-broken; footnote added explaining D7 dependency on RawArgContent |
