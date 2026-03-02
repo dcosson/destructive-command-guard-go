@@ -716,7 +716,34 @@ func (m NegativeMatcher) Match(cmd parse.ExtractedCommand) bool {
 }
 ```
 
-#### 5.2.8 Builder Functions
+#### 5.2.8 AnyNameMatcher
+
+Matches any command regardless of name. Used for cross-cutting patterns that
+detect dangerous behavior based on argument content rather than command identity
+— for example, detecting access to personal file paths (`~/Desktop`, `~/Documents`)
+regardless of which command is used (`cat`, `rm`, `cp`, `vim`, etc.).
+
+```go
+// AnyNameMatcher matches any command name unconditionally.
+// Used for command-agnostic patterns where detection is based on
+// argument content (e.g., personal file path detection, sensitive
+// path detection) rather than a specific command.
+type AnyNameMatcher struct{}
+
+func (m AnyNameMatcher) Match(cmd parse.ExtractedCommand) bool {
+    return true
+}
+```
+
+Packs using `AnyNameMatcher` should use **argument content keywords** in their
+`Keywords` field rather than command name keywords. For example, a personal files
+pack would use keywords like `"Desktop"`, `"Documents"`, `"Downloads"` — the
+Aho-Corasick pre-filter matches these as substrings in the raw command, so
+`cat ~/Desktop/file.txt` triggers the pack because `Desktop` is found at a
+word boundary. This ensures the pre-filter remains effective: most commands
+don't contain personal path components, so they skip this pack entirely.
+
+#### 5.2.9 Builder Functions
 
 Convenience constructors to reduce verbosity when defining pack patterns:
 
@@ -783,6 +810,11 @@ func Or(matchers ...CommandMatcher) CompositeMatcher {
 func Not(matcher CommandMatcher) NegativeMatcher {
     return NegativeMatcher{Inner: matcher}
 }
+
+// AnyName creates an AnyNameMatcher (matches any command).
+func AnyName() AnyNameMatcher {
+    return AnyNameMatcher{}
+}
 ```
 
 **Example pack pattern** (used in the test pack, §5.9):
@@ -802,6 +834,28 @@ DestructivePattern{
     EnvSensitive: false,
 }
 ```
+
+**Example command-agnostic pattern** (personal file path detection):
+
+```go
+// Any command accessing personal directories (cross-cutting)
+DestructivePattern{
+    Name: "personal-files-access",
+    Match: And(AnyName(), ArgContentRegex(
+        `(?:^|/)(?:Desktop|Documents|Downloads|Pictures|Music|Videos)(?:/|$)`,
+    )),
+    Severity:     guard.Medium,
+    Confidence:   guard.ConfidenceHigh,
+    Reason:       "Command accesses a personal file directory",
+    Remediation:  "Verify this file access is intentional and necessary",
+    EnvSensitive: false,
+}
+```
+
+This pattern matches `cat ~/Desktop/notes.txt`, `rm ~/Documents/file`, and any
+other command targeting personal directories. The pack's `Keywords` field would
+contain `["Desktop", "Documents", "Downloads", "Pictures", "Music", "Videos"]`
+— path components rather than command names.
 
 ### 5.3 Pack Registry (`internal/packs/registry.go`)
 
@@ -959,6 +1013,23 @@ func (r *Registry) freeze() {
     }
 }
 ```
+
+**Platform-conditional packs**: Packs that are OS-specific (e.g., macOS system
+commands) use Go build tags for conditional registration:
+
+```go
+//go:build darwin
+
+package macos
+
+func init() {
+    packs.DefaultRegistry.Register(macosPack)
+}
+```
+
+This ensures the macOS pack is only compiled and registered on Darwin. The
+registry itself has no platform awareness — conditional registration is handled
+entirely by Go's build tag system at compile time.
 
 **Registration pattern**: Each pack file in `internal/packs/core/`,
 `internal/packs/database/`, etc. has an `init()` function that registers

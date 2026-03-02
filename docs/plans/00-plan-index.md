@@ -82,9 +82,11 @@ first to establish the pattern, then the rest follow.
 | [03c-packs-infra-cloud](./03c-packs-infra-cloud.md) | Infrastructure & Cloud packs | infrastructure.terraform, infrastructure.pulumi, infrastructure.ansible, cloud.aws, cloud.gcp, cloud.azure — IaC and cloud CLI destructive patterns, all env-sensitive. | 02, 03a | Not started |
 | [03d-packs-containers-k8s](./03d-packs-containers-k8s.md) | Containers & Kubernetes packs | containers.docker, containers.compose, kubernetes.kubectl, kubernetes.helm — container and orchestration destructive patterns. | 02, 03a | Not started |
 | [03e-packs-other](./03e-packs-other.md) | Other packs | frameworks, remote.rsync, secrets.vault, platform.github — remaining packs. | 02, 03a | Not started |
+| [03f-packs-personal-files](./03f-packs-personal-files.md) | Personal files pack | Cross-platform detection of commands accessing personal directories (Desktop, Documents, Downloads, iCloud, SSH keys). Uses command-agnostic AnyName matcher with path-based ArgContentRegex. | 02, 03a | Not started |
+| [03g-packs-macos](./03g-packs-macos.md) | macOS system pack | macOS-specific patterns: osascript communication (Messages, Mail), private data access (Keychain, message DBs, browser history), system modification (defaults, launchctl, diskutil). Platform-conditional via build tags. | 02, 03a | Not started |
 
 **Notes**: 03b through 03e all depend on 03a (not just 02) so they follow the
-established pattern. 03b-03e can run in parallel with each other.
+established pattern. 03b-03g can run in parallel with each other.
 
 ---
 
@@ -128,15 +130,17 @@ graph TD
     03c["03c: Infra & Cloud Packs"]
     03d["03d: Container & K8s Packs"]
     03e["03e: Other Packs"]
+    03f["03f: Personal Files"]
+    03g["03g: macOS System"]
     04["04: Public API & CLI<br/>(Batch 4)"]
     05["05: Testing & Benchmarks<br/>(Batch 5)"]
 
     01 --> 02
     02 --> 03a
-    03a --> 03b & 03c & 03d & 03e
+    03a --> 03b & 03c & 03d & 03e & 03f & 03g
     02 --> 04
     03a --> 04
-    03b & 03c & 03d & 03e --> 05
+    03b & 03c & 03d & 03e & 03f & 03g --> 05
     04 --> 05
 ```
 
