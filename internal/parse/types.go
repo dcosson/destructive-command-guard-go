@@ -1,19 +1,6 @@
 package parse
 
-import ts "github.com/dcosson/treesitter-go"
-
-type WarningCode string
-
-const (
-	WarnInputTooLarge WarningCode = "INPUT_TOO_LARGE"
-	WarnParseError    WarningCode = "PARSE_ERROR"
-	WarnParserPanic   WarningCode = "PARSER_PANIC"
-)
-
-type Warning struct {
-	Code    WarningCode
-	Message string
-}
+import "github.com/dcosson/destructive-command-guard-go/guard"
 
 type InlineScript struct {
 	Language string
@@ -21,24 +8,26 @@ type InlineScript struct {
 	Source   string
 }
 
+// ExtractedCommand contains exactly the cross-plan contract fields consumed by
+// downstream matching and API layers.
 type ExtractedCommand struct {
 	Name             string
 	RawName          string
 	Args             []string
 	RawArgs          []string
 	Flags            map[string]string
-	EnvVars          map[string]string
-	Subcommand       string
-	InlineScripts    []InlineScript
-	Stdin            string
+	InlineEnv        map[string]string
+	RawText          string
+	InPipeline       bool
+	Negated          bool
 	DataflowResolved bool
-	SourceNode       ts.Node
-	PipelinePosition int
+	StartByte        uint32
+	EndByte          uint32
 }
 
 type ParseResult struct {
 	Commands     []ExtractedCommand
 	ExportedVars map[string][]string
-	Warnings     []Warning
+	Warnings     []guard.Warning
 	HasError     bool
 }

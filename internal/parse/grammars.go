@@ -11,7 +11,7 @@ import (
 	"github.com/dcosson/treesitter-go/languages/perl"
 	"github.com/dcosson/treesitter-go/languages/python"
 	"github.com/dcosson/treesitter-go/languages/ruby"
-	"github.com/dcosson/treesitter-go/parser"
+	tsp "github.com/dcosson/treesitter-go/parser"
 )
 
 type LangGrammar struct {
@@ -36,7 +36,8 @@ type LangParser struct {
 func NewLangParser(grammar LangGrammar) *LangParser {
 	lp := &LangParser{Grammar: grammar}
 	lp.pool.New = func() any {
-		p := parser.NewParser()
+		// treesitter-go v0.1.0 parser constructor is in parser subpackage.
+		p := tsp.NewParser()
 		p.SetLanguage(grammar.Loader())
 		return p
 	}
@@ -44,7 +45,7 @@ func NewLangParser(grammar LangGrammar) *LangParser {
 }
 
 func (lp *LangParser) Parse(ctx context.Context, source []byte) *ts.Tree {
-	p := lp.pool.Get().(*parser.Parser)
+	p := lp.pool.Get().(*tsp.Parser)
 	defer lp.pool.Put(p)
 	return p.ParseString(ctx, source)
 }

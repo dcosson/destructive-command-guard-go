@@ -2,7 +2,7 @@
   "id": "dcg-otc.1",
   "title": "Scaffold internal/parse package with types, grammar loading, and BashParser",
   "description": "Create internal/parse package with foundational types (ExtractedCommand, ParseResult, InlineScript, WarningCode), grammar loading (LangGrammar, SupportedLanguages, NewLangParser with sync.Pool), BashParser with sync.Pool parser pooling, Parse() with panic recovery and MaxInputSize guard, Tree wrapper. Import tree-sitter-go via go get github.com/dcosson/treesitter-go@v0.1.0 (public module, no local linking needed). Unit tests: grammar loading, BashParser simple/compound/malformed, size boundary, concurrent stress test with -race.",
-  "status": "in_progress",
+  "status": "hooked",
   "priority": 2,
   "type": "task",
   "parent": "dcg-otc",
@@ -24,6 +24,14 @@
     "project=dcg"
   ],
   "assignee": "dcg-coder-1",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Implementation complete for dcg-otc.1 and tests passing (including race). Commit: b96fa8e. Ready for review.",
+      "created_at": "2026-03-02T15:23:20.636447-08:00"
+    }
+  ],
   "created_at": "2026-03-02T14:24:42.565249-08:00",
-  "updated_at": "2026-03-02T15:23:12.332791-08:00"
+  "updated_at": "2026-03-02T15:23:20.636819-08:00"
 }
