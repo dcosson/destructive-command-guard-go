@@ -1,0 +1,23 @@
+{
+  "id": "dcg-pb0",
+  "title": "03d: Containers \u0026 K8s Packs Test Harness",
+  "description": "Implement test harness for plan 03d: Container prune/volume tests, kubectl namespace-wide ops, Helm shadowing regression, golden file entries. Plan doc: docs/plans/03d-packs-containers-k8s-test-harness.md",
+  "status": "open",
+  "priority": 2,
+  "type": "epic",
+  "dependencies": [
+    {
+      "id": "dcg-ppb",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg",
+    "batch=3",
+    "test-harness=true"
+  ],
+  "created_at": "2026-03-02T14:12:51.57496-08:00",
+  "updated_at": "2026-03-02T14:12:51.57496-08:00"
+}

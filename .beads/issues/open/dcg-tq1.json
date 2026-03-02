@@ -1,0 +1,32 @@
+{
+  "id": "dcg-tq1",
+  "title": "03c: Infrastructure \u0026 Cloud Packs",
+  "description": "Implement plan 03c: infrastructure.terraform, infrastructure.pulumi, infrastructure.ansible, cloud.aws, cloud.gcp, cloud.azure — IaC and cloud CLI destructive patterns, env-sensitive. Plan doc: docs/plans/03c-packs-infra-cloud.md",
+  "status": "open",
+  "priority": 2,
+  "type": "epic",
+  "dependencies": [
+    {
+      "id": "dcg-1jl",
+      "type": "blocks"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-fdp",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-qz6",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg",
+    "batch=3"
+  ],
+  "created_at": "2026-03-02T14:12:38.537638-08:00",
+  "updated_at": "2026-03-02T14:12:38.537638-08:00"
+}

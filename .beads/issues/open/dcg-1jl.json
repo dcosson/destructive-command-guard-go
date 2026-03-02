@@ -1,0 +1,56 @@
+{
+  "id": "dcg-1jl",
+  "title": "03a: Core Packs (git, filesystem)",
+  "description": "Implement plan 03a: core.git and core.filesystem packs — the template for all other packs. Safe patterns + destructive patterns with full test coverage. Plan doc: docs/plans/03a-packs-core.md",
+  "status": "open",
+  "priority": 2,
+  "type": "epic",
+  "dependencies": [
+    {
+      "id": "dcg-qck",
+      "type": "blocks"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-6ut",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-tq1",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-ppb",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-93g",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-pm1",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-4ay",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-o5w",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-tga",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg",
+    "batch=3"
+  ],
+  "created_at": "2026-03-02T14:12:19.735745-08:00",
+  "updated_at": "2026-03-02T14:12:19.735745-08:00"
+}

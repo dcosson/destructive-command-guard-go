@@ -1,0 +1,23 @@
+{
+  "id": "dcg-qz6",
+  "title": "03c: Infrastructure \u0026 Cloud Packs Test Harness",
+  "description": "Implement test harness for plan 03c: Ansible flag-value matching tests, safe-pattern shadowing regression, env escalation tests, golden file entries. Plan doc: docs/plans/03c-packs-infra-cloud-test-harness.md",
+  "status": "open",
+  "priority": 2,
+  "type": "epic",
+  "dependencies": [
+    {
+      "id": "dcg-tq1",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg",
+    "batch=3",
+    "test-harness=true"
+  ],
+  "created_at": "2026-03-02T14:12:44.69354-08:00",
+  "updated_at": "2026-03-02T14:12:44.69354-08:00"
+}

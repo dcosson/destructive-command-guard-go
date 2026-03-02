@@ -1,0 +1,23 @@
+{
+  "id": "dcg-kss",
+  "title": "03e: Other Packs Test Harness",
+  "description": "Implement test harness for plan 03e: rsync source-removal tests, vault seal/unseal edge cases, github CLI scope tests, golden file entries. Plan doc: docs/plans/03e-packs-other-test-harness.md",
+  "status": "open",
+  "priority": 2,
+  "type": "epic",
+  "dependencies": [
+    {
+      "id": "dcg-93g",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg",
+    "batch=3",
+    "test-harness=true"
+  ],
+  "created_at": "2026-03-02T14:12:58.34155-08:00",
+  "updated_at": "2026-03-02T14:12:58.34155-08:00"
+}
