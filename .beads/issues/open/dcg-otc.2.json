@@ -40,8 +40,14 @@
       "author": "Danny Cosson",
       "text": "Addressed blocking review feedback in commit 14fdefc: extractor now collects command contexts by AST walk (collectASTCommands), and inline env assignments no longer leak into global dataflow for non-export commands. Tests: go test ./... and go test -race ./internal/parse pass.",
       "created_at": "2026-03-02T15:33:52.677038-08:00"
+    },
+    {
+      "id": 3,
+      "author": "Danny Cosson",
+      "text": "Pushed follow-up commit e3e63be to address AST extraction blocker: extraction now walks AST command/declaration nodes directly and maps variable_assignment/command_name/argument children in order, with source tokenization only as text fallback for node offset defects. Inline env remains command-scoped. Added dataflow_test.go plus expanded extract dataflow branch tests. Tests passing: go test ./... and go test -race ./internal/parse.",
+      "created_at": "2026-03-02T15:39:06.129347-08:00"
     }
   ],
   "created_at": "2026-03-02T14:24:42.629156-08:00",
-  "updated_at": "2026-03-02T15:33:52.677371-08:00"
+  "updated_at": "2026-03-02T15:39:06.130224-08:00"
 }

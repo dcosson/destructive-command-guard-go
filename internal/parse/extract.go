@@ -144,38 +144,49 @@ func (ce *CommandExtractor) extractFromASTCommand(info commandNodeInfo, source s
 		RawText:    nodeText(source, info.node),
 	}
 	var warnings []guard.Warning
-
-	required := 0
-	for i := 0; i < int(info.node.NamedChildCount()); i++ {
-		child := info.node.NamedChild(i)
-		if child.Type() == "variable_assignment" || child.Type() == "command_name" || isArgumentNodeType(child.Type()) {
-			required++
-		}
-	}
-
-	tokens := wordTokens(base.RawText)
-	if len(tokens) < required {
-		tokens = append([]string{}, fb.tokens...)
-	}
+	fallback := append([]string{}, fb.tokens...)
+	declKeyword := declarationKeyword(base.RawText)
 	if info.node.Type() == "declaration_command" {
-		for len(tokens) > 0 {
-			switch tokens[0] {
+		for len(fallback) > 0 {
+			switch fallback[0] {
 			case "export", "declare", "local", "typeset":
-				tokens = tokens[1:]
+				fallback = fallback[1:]
 			default:
 				goto doneDeclStrip
 			}
 		}
 	}
 doneDeclStrip:
-	pos := 0
-	nextToken := func() (string, bool) {
-		if pos >= len(tokens) {
+	fallbackPos := 0
+	peekFallback := func() (string, bool) {
+		if fallbackPos >= len(fallback) {
 			return "", false
 		}
-		t := tokens[pos]
-		pos++
+		return fallback[fallbackPos], true
+	}
+	nextFallback := func() (string, bool) {
+		if fallbackPos >= len(fallback) {
+			return "", false
+		}
+		t := fallback[fallbackPos]
+		fallbackPos++
 		return t, true
+	}
+	childText := func(child ts.Node) (string, bool) {
+		text := normalizeCommandText(nodeText(source, child))
+		if text != "" {
+			// Prefer AST span text, but if it diverges from lexical fallback token
+			// (known treesitter-go offset issue), consume fallback token instead.
+			if fb, ok := peekFallback(); ok {
+				if text == fb {
+					fallbackPos++
+					return text, true
+				}
+				return nextFallback()
+			}
+			return text, true
+		}
+		return nextFallback()
 	}
 
 	variants := []ExtractedCommand{base}
@@ -184,7 +195,7 @@ doneDeclStrip:
 		child := info.node.NamedChild(i)
 		switch child.Type() {
 		case "variable_assignment":
-			tok, ok := nextToken()
+			tok, ok := childText(child)
 			if !ok {
 				continue
 			}
@@ -196,7 +207,7 @@ doneDeclStrip:
 				variants[idx].InlineEnv[k] = v
 			}
 		case "command_name":
-			tok, ok := nextToken()
+			tok, ok := childText(child)
 			if !ok {
 				continue
 			}
@@ -211,7 +222,7 @@ doneDeclStrip:
 			if !isArgumentNodeType(child.Type()) {
 				continue
 			}
-			tok, ok := nextToken()
+			tok, ok := childText(child)
 			if !ok {
 				continue
 			}
@@ -243,15 +254,16 @@ doneDeclStrip:
 
 	mergeMode := sepBefore == "&&" || sepBefore == "||" || sepBefore == "|"
 	if variants[0].Name == "" {
+		exportedDecl := info.node.Type() == "declaration_command" && declKeyword == "export"
 		for k, v := range variants[0].InlineEnv {
 			if containsCommandSubstitution(v) {
-				ce.defineIndeterminate(k, false, mergeMode)
+				ce.defineIndeterminate(k, exportedDecl, mergeMode)
 				warnings = append(warnings, guard.Warning{
 					Code:    guard.WarnCommandSubstitution,
 					Message: "variable assigned via command substitution",
 				})
 			} else {
-				ce.defineVar(k, v, false, mergeMode)
+				ce.defineVar(k, v, exportedDecl, mergeMode)
 			}
 		}
 		return nil, warnings
@@ -300,6 +312,14 @@ func wordTokens(raw string) []string {
 		}
 	}
 	return out
+}
+
+func declarationKeyword(raw string) string {
+	parts := wordTokens(raw)
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[0]
 }
 
 func splitSourceCommands(source string) []sourceCommand {
