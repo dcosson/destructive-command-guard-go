@@ -1,0 +1,28 @@
+{
+  "id": "dcg-ppb.1",
+  "title": "Implement containers.docker pack",
+  "description": "Create internal/packs/containers/docker.go (8 safe, 12 destructive). Handle dual syntax (old-style docker rm vs management docker container rm) via Or(). system prune (Critical), volume rm/prune (High), container/image/network rm/prune (Medium). Unit tests covering both syntaxes for every command. Golden files (~34 entries).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-ppb",
+  "dependencies": [
+    {
+      "id": "dcg-ppb",
+      "type": "parent-child"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-ppb.2",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "created_at": "2026-03-02T14:27:00.092317-08:00",
+  "updated_at": "2026-03-02T14:27:00.092317-08:00"
+}

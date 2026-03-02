@@ -1,0 +1,22 @@
+{
+  "id": "dcg-ppb.3",
+  "title": "Implement kubernetes.kubectl and kubernetes.helm packs",
+  "description": "Create internal/packs/kubernetes/kubectl.go (4 safe, 14 destructive) with resource-type severity tiers. Create helm.go (2 safe, 5 destructive). Both env-sensitive. Tests for singular/plural resource types. Golden files (~60 entries).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-ppb",
+  "dependencies": [
+    {
+      "id": "dcg-ppb",
+      "type": "parent-child"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "created_at": "2026-03-02T14:27:00.224636-08:00",
+  "updated_at": "2026-03-02T14:27:00.224636-08:00"
+}

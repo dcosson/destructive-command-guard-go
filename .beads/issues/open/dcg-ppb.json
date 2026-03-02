@@ -19,6 +19,18 @@
     {
       "id": "dcg-pb0",
       "type": "blocks"
+    },
+    {
+      "id": "dcg-ppb.1",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-ppb.2",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-ppb.3",
+      "type": "parent-child"
     }
   ],
   "created_by": "Danny Cosson",

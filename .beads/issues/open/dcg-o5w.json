@@ -23,6 +23,22 @@
     {
       "id": "dcg-4rr",
       "type": "blocks"
+    },
+    {
+      "id": "dcg-o5w.1",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-o5w.2",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-o5w.3",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-o5w.4",
+      "type": "parent-child"
     }
   ],
   "created_by": "Danny Cosson",

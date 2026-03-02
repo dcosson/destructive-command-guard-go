@@ -1,0 +1,28 @@
+{
+  "id": "dcg-pb0.1",
+  "title": "Build container/k8s pack property tests and deterministic examples",
+  "description": "Property tests P1-P8 (reachability, mutual exclusion, split env sensitivity, Docker dual-syntax parity, Compose dual-naming, cross-pack isolation, kubectl catch-all). Deterministic examples E1-E7 (Docker 30, Compose 22, kubectl 27, Helm 20 cases).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-pb0",
+  "dependencies": [
+    {
+      "id": "dcg-pb0",
+      "type": "parent-child"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-pb0.2",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "created_at": "2026-03-02T14:30:19.516554-08:00",
+  "updated_at": "2026-03-02T14:30:19.516554-08:00"
+}

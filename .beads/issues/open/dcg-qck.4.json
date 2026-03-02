@@ -1,0 +1,32 @@
+{
+  "id": "dcg-qck.4",
+  "title": "Implement policy engine",
+  "description": "Create guard/policy.go with Policy interface, StrictPolicy, InteractivePolicy, PermissivePolicy. Exhaustive 15-cell decision matrix tests (5 severity x 3 policies).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-qck",
+  "dependencies": [
+    {
+      "id": "dcg-qck",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-qck.1",
+      "type": "blocks"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-qck.8",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "created_at": "2026-03-02T14:25:25.701086-08:00",
+  "updated_at": "2026-03-02T14:25:25.701086-08:00"
+}

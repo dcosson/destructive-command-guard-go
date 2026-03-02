@@ -19,6 +19,22 @@
     {
       "id": "dcg-qz6",
       "type": "blocks"
+    },
+    {
+      "id": "dcg-tq1.1",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-tq1.2",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-tq1.3",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-tq1.4",
+      "type": "parent-child"
     }
   ],
   "created_by": "Danny Cosson",

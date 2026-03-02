@@ -43,6 +43,18 @@
     {
       "id": "dcg-tga",
       "type": "blocks"
+    },
+    {
+      "id": "dcg-1jl.1",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-1jl.2",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-1jl.3",
+      "type": "parent-child"
     }
   ],
   "created_by": "Danny Cosson",

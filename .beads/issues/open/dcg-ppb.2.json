@@ -1,0 +1,26 @@
+{
+  "id": "dcg-ppb.2",
+  "title": "Implement containers.compose pack",
+  "description": "Create internal/packs/containers/compose.go (3 safe, 5 destructive). Handle dual naming (docker-compose vs docker compose). down -v, down --rmi, down, rm -f, stop. Tests verifying both naming styles. Cross-pack non-interference with docker via ArgAt(0, compose). Golden files (~22 entries).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-ppb",
+  "dependencies": [
+    {
+      "id": "dcg-ppb",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-ppb.1",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "created_at": "2026-03-02T14:27:00.174939-08:00",
+  "updated_at": "2026-03-02T14:27:00.174939-08:00"
+}

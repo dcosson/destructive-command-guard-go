@@ -1,0 +1,26 @@
+{
+  "id": "dcg-fdp.7",
+  "title": "Implement end-to-end tests and performance profiling",
+  "description": "E2E tests: ~20 real-world scenarios, parameterized policy testing, subprocess hook mode tests, test mode exit code/output. Allocation tests: allocation baselines, 10K-evaluation heap growth. CI tier configuration (Tiers 1-4). Profiling documentation.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-fdp",
+  "dependencies": [
+    {
+      "id": "dcg-fdp",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-fdp.1",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "created_at": "2026-03-02T14:28:39.931315-08:00",
+  "updated_at": "2026-03-02T14:28:39.931315-08:00"
+}

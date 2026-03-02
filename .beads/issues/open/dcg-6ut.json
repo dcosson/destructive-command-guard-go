@@ -19,6 +19,18 @@
     {
       "id": "dcg-02t",
       "type": "blocks"
+    },
+    {
+      "id": "dcg-6ut.1",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-6ut.2",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-6ut.3",
+      "type": "parent-child"
     }
   ],
   "created_by": "Danny Cosson",

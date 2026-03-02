@@ -11,6 +11,16 @@
       "type": "blocks"
     }
   ],
+  "dependents": [
+    {
+      "id": "dcg-pb0.1",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-pb0.2",
+      "type": "parent-child"
+    }
+  ],
   "created_by": "Danny Cosson",
   "owner": "dcosson@gmail.com",
   "labels": [

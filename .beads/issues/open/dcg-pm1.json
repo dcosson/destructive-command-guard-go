@@ -15,6 +15,10 @@
     {
       "id": "dcg-fdp",
       "type": "blocks"
+    },
+    {
+      "id": "dcg-pm1.1",
+      "type": "parent-child"
     }
   ],
   "created_by": "Danny Cosson",

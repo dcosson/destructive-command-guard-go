@@ -1,0 +1,22 @@
+{
+  "id": "dcg-pm1.1",
+  "title": "Implement personal.files and personal.ssh packs",
+  "description": "Create internal/packs/personal/files.go (0 safe, 5 destructive using AnyName matcher, tiered severity for delete/overwrite/access) and ssh.go (2 safe, 2 destructive). All path regex patterns (personalPathRe, sshPrivateKeyRe, etc). personalPathVariants() test helper. Tests for all path forms (tilde, HOME, /Users, /home, /root), near-miss cases, cross-pack interaction with core.filesystem. Golden files (~40 entries).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-pm1",
+  "dependencies": [
+    {
+      "id": "dcg-pm1",
+      "type": "parent-child"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "created_at": "2026-03-02T14:27:41.101737-08:00",
+  "updated_at": "2026-03-02T14:27:41.101737-08:00"
+}

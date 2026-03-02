@@ -1,0 +1,26 @@
+{
+  "id": "dcg-4ay.2",
+  "title": "Implement macos.system pack",
+  "description": "Create internal/packs/macos/system.go (build-tagged darwin, 5 safe, 13 destructive) for csrutil, diskutil, launchctl, tmutil, nvram, spctl, dscl (D7 known-broken with SKIP markers), fdesetup, defaults, systemsetup. Unit tests and golden files.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-4ay",
+  "dependencies": [
+    {
+      "id": "dcg-4ay",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-4ay.1",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "created_at": "2026-03-02T14:27:41.217637-08:00",
+  "updated_at": "2026-03-02T14:27:41.217637-08:00"
+}

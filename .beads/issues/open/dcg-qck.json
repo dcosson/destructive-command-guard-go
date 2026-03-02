@@ -23,6 +23,38 @@
     {
       "id": "dcg-6bg",
       "type": "blocks"
+    },
+    {
+      "id": "dcg-qck.1",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-qck.2",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-qck.3",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-qck.4",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-qck.5",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-qck.6",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-qck.7",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-qck.8",
+      "type": "parent-child"
     }
   ],
   "created_by": "Danny Cosson",

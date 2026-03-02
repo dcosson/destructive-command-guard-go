@@ -1,0 +1,32 @@
+{
+  "id": "dcg-otc.5",
+  "title": "Implement multi-language shell invocation extraction",
+  "description": "Extend InlineDetector to parse non-bash inline scripts with language-specific tree-sitter grammars. AST walking for Python (os.system, subprocess), Ruby (backticks, system, exec), JavaScript (child_process), Perl (backticks, system, exec, qx). Extract string args and feed through bash ParseAndExtract. Unit tests per language, negative tests, integration chain tests.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-otc",
+  "dependencies": [
+    {
+      "id": "dcg-otc",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-otc.4",
+      "type": "blocks"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-otc.6",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "created_at": "2026-03-02T14:24:42.747475-08:00",
+  "updated_at": "2026-03-02T14:24:42.747475-08:00"
+}

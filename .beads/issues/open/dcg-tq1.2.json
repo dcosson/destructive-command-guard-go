@@ -1,0 +1,26 @@
+{
+  "id": "dcg-tq1.2",
+  "title": "Implement infrastructure.ansible pack",
+  "description": "Create internal/packs/infrastructure/ansible.go (2 safe, 7 destructive). Module argument matching via SQLContent/SQLContentRegex for shell/command/file/service/user/package modules. Unit tests for anchored vs unanchored regex. Golden files.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-tq1",
+  "dependencies": [
+    {
+      "id": "dcg-tq1",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-tq1.1",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "created_at": "2026-03-02T14:26:41.283245-08:00",
+  "updated_at": "2026-03-02T14:26:41.283245-08:00"
+}

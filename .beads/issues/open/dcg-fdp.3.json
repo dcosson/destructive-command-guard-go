@@ -1,0 +1,36 @@
+{
+  "id": "dcg-fdp.3",
+  "title": "Implement golden file corpus expansion and coverage analysis",
+  "description": "Expand golden files from ~500 to 750+ entries: structural variants (~100), false-positive traps (~50), cross-pack interactions (~30), dataflow (~30), edge cases (~40). TestGoldenCoverageAllPatterns (3+ per pattern), TestGoldenCoverageStructuralContexts.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-fdp",
+  "dependencies": [
+    {
+      "id": "dcg-fdp",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-fdp.1",
+      "type": "blocks"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-fdp.5",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-fdp.6",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "created_at": "2026-03-02T14:28:39.698579-08:00",
+  "updated_at": "2026-03-02T14:28:39.698579-08:00"
+}

@@ -13,6 +13,30 @@
     {
       "id": "dcg-n21",
       "type": "blocks"
+    },
+    {
+      "id": "dcg-otc.1",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-otc.2",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-otc.3",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-otc.4",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-otc.5",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-otc.6",
+      "type": "parent-child"
     }
   ],
   "created_by": "Danny Cosson",

@@ -1,0 +1,26 @@
+{
+  "id": "dcg-tq1.4",
+  "title": "Implement cloud.gcp and cloud.azure packs",
+  "description": "Create gcp.go (3 safe, 11 destructive) and azure.go (safe + destructive for az CLI). Multi-level subcommand matching. Both env-sensitive. Unit tests and golden files.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-tq1",
+  "dependencies": [
+    {
+      "id": "dcg-tq1",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-tq1.3",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "created_at": "2026-03-02T14:26:41.401902-08:00",
+  "updated_at": "2026-03-02T14:26:41.401902-08:00"
+}

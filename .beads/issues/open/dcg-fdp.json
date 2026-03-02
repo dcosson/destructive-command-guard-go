@@ -39,6 +39,34 @@
     {
       "id": "dcg-0ej",
       "type": "blocks"
+    },
+    {
+      "id": "dcg-fdp.1",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-fdp.2",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-fdp.3",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-fdp.4",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-fdp.5",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-fdp.6",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-fdp.7",
+      "type": "parent-child"
     }
   ],
   "created_by": "Danny Cosson",

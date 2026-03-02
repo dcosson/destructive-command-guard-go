@@ -1,0 +1,28 @@
+{
+  "id": "dcg-tga.1",
+  "title": "Build shared pack testing infrastructure and core pack property tests",
+  "description": "Shared pack test infra: reachability command map, getReachabilityCommand, matchPack, findDestructiveByName helpers (reused by all 03x test harnesses). Property tests P1-P5, P7 for core.git and core.filesystem.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-tga",
+  "dependencies": [
+    {
+      "id": "dcg-tga",
+      "type": "parent-child"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-tga.2",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "created_at": "2026-03-02T14:29:47.423606-08:00",
+  "updated_at": "2026-03-02T14:29:47.423606-08:00"
+}

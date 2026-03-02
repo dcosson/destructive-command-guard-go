@@ -1,0 +1,32 @@
+{
+  "id": "dcg-otc.3",
+  "title": "Implement full dataflow analysis with branch merging",
+  "description": "Replace dataflow stub with complete DataflowAnalyzer: Define (strong update for ;), DefineIndeterminate for command substitution, MergeBranch for \u0026\u0026/|| may-alias union, Resolve, ResolveString with cartesian product (capped at 16), ExportedVars. Update extractor walk for branch analyzers in list nodes, emit WarnExpansionCapped/WarnCommandSubstitution, produce multiple ExtractedCommand variants. Unit tests for all dataflow scenarios.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-otc",
+  "dependencies": [
+    {
+      "id": "dcg-otc",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-otc.2",
+      "type": "blocks"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-otc.4",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "created_at": "2026-03-02T14:24:42.67657-08:00",
+  "updated_at": "2026-03-02T14:24:42.67657-08:00"
+}

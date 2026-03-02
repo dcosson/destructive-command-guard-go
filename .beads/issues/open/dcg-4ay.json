@@ -15,6 +15,14 @@
     {
       "id": "dcg-fdp",
       "type": "blocks"
+    },
+    {
+      "id": "dcg-4ay.1",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-4ay.2",
+      "type": "parent-child"
     }
   ],
   "created_by": "Danny Cosson",

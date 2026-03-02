@@ -1,0 +1,26 @@
+{
+  "id": "dcg-pb0.2",
+  "title": "Build container/k8s pack fault injection, oracles, benchmarks, and security tests",
+  "description": "Fault injection F1-F3. Comparison oracles O1-O3. Benchmarks B1-B2. Stress S1. Security SEC1-SEC3 (Docker evasion, kubectl escalation, env sensitivity preconditions).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-pb0",
+  "dependencies": [
+    {
+      "id": "dcg-pb0",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-pb0.1",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "created_at": "2026-03-02T14:30:19.594241-08:00",
+  "updated_at": "2026-03-02T14:30:19.594241-08:00"
+}
