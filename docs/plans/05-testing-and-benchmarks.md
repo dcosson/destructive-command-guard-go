@@ -550,11 +550,11 @@ set -euo pipefail
 # Build both binaries
 go build -o dcg-go ./cmd/dcg-go
 # Upstream binary provided as artifact
-UPSTREAM_BINARY="${UPSTREAM_BINARY:-./upstream-dcg}"
+export UPSTREAM_BINARY="${UPSTREAM_BINARY:-./upstream-dcg}"
 
-go test -run TestComparisonAgainstUpstream ./internal/testharness/ \
-    -v -count=1 \
-    -upstream-binary="$UPSTREAM_BINARY"
+UPSTREAM_BINARY="$UPSTREAM_BINARY" \
+    go test -run TestComparisonAgainstUpstream ./internal/testharness/ \
+    -v -count=1
 ```
 
 Comparison tests run in CI Tier 3 (nightly) since they require the
@@ -2223,7 +2223,7 @@ Implementation of 05 (testing & benchmarks) is complete when:
 
 ---
 
-## Review Disposition
+## Round 1 Review Disposition
 
 | # | Reviewer | Severity | Summary | Disposition | Notes |
 |---|----------|----------|---------|-------------|-------|
@@ -2255,3 +2255,9 @@ Implementation of 05 (testing & benchmarks) is complete when:
 | 26 | dcg-reviewer | P3 | SE-P3.2: Grammar omits process_substitution | Not Incorporated | Already present at §8.1 line 1039 and §8.2 template |
 | 27 | dcg-reviewer | P3 | SE-P3.3: Hook tests don't verify stderr isolation | Incorporated | §9.2 added json.Valid(stdout) + stderr assertions |
 | 28 | dcg-reviewer | P3 | SE-P3.4: Upstream binary version pinning | Incorporated | §4.7 added version pinning config + bump policy |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-reviewer | P1 | Comparison CI runner doesn't pass UPSTREAM_BINARY to go test | Incorporated | Runner script fixed: export + env prefix for go test; removed unsupported -upstream-binary flag |
