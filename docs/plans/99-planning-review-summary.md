@@ -1,16 +1,16 @@
 # Planning Review Summary
 
-This document summarizes the review process across all planning documents for the destructive-command-guard-go project. The review covered **21 documents** across 2 rounds of review: the architecture doc (00), 11 plan docs (01–05, with 03 split into 7 sub-plans including 03f and 03g), and 9 companion test harness docs. Each document was independently reviewed and findings were incorporated back into the source documents.
+This document summarizes the review process across all planning documents for the destructive-command-guard-go project. The review covered **21 documents** across **3 rounds** of review: the architecture doc (00), 11 plan docs (01–05, with 03 split into 7 sub-plans including 03f and 03g), and 9 companion test harness docs. Each document was independently reviewed and findings were incorporated back into the source documents.
 
 ## Overall Aggregate
 
 | Metric | Value |
 |--------|-------|
-| Total findings | 456 |
-| Incorporated | 397 (87.1%) |
+| Total findings | 459 |
+| Incorporated | 400 (87.1%) |
 | Not Incorporated | 54 (11.8%) |
 | N/A | 5 (1.1%) |
-| Incorporation rate (excl. N/A) | 397/451 (88.0%) |
+| Incorporation rate (excl. N/A) | 400/454 (88.1%) |
 
 ### Convergence Table
 
@@ -18,15 +18,16 @@ This document summarizes the review process across all planning documents for th
 |-------|---------------|-------------|-----------------|----------|-----|-------|
 | R1 | 415 | 357 | 53 | 0 | 5 | — |
 | R2 | 41 | 40 | 1 | 0 | 0 | ↓90% |
+| R3 | 3 | 3 | 0 | 0 | 0 | ↓93% |
 
 ### Severity Breakdown
 
 | Severity | Count | Percentage |
 |----------|-------|------------|
 | P0 | 43 | 9.4% |
-| P1 | 123 | 27.0% |
-| P2 | 167 | 36.6% |
-| P3 | 123 | 27.0% |
+| P1 | 124 | 27.0% |
+| P2 | 169 | 36.8% |
+| P3 | 123 | 26.8% |
 
 ### Per-Document Finding Counts
 
@@ -41,8 +42,8 @@ This document summarizes the review process across all planning documents for th
 | 03a-packs-core-test-harness.md | 7 |
 | 03b-packs-database.md | 41 |
 | 03b-packs-database-test-harness.md | 11 |
-| 03c-packs-infra-cloud.md | 37 |
-| 03c-packs-infra-cloud-test-harness.md | 10 |
+| 03c-packs-infra-cloud.md | 38 |
+| 03c-packs-infra-cloud-test-harness.md | 11 |
 | 03d-packs-containers-k8s.md | 33 |
 | 03d-packs-containers-k8s-test-harness.md | 13 |
 | 03e-packs-other.md | 34 |
@@ -52,7 +53,7 @@ This document summarizes the review process across all planning documents for th
 | 04-api-and-cli.md | 28 |
 | 04-api-and-cli-test-harness.md | 8 |
 | 05-testing-and-benchmarks.md | 29 |
-| 05-testing-and-benchmarks-test-harness.md | 7 |
+| 05-testing-and-benchmarks-test-harness.md | 8 |
 
 ## Round 1 Review Summary
 
@@ -140,14 +141,33 @@ Round 2 also showed strong convergence characteristics: only 17 of 21 docs produ
 
 Only 1 R2 finding (2.4%) was not incorporated. The non-incorporation reason was a reviewer-withdrawn/confirmed-correct case rather than unresolved disagreement, so no material corrective work was deferred from R2.
 
+## Round 3 Review Summary
+
+### Incorporation Rates
+
+| Severity | Total | Incorporated | Not Incorporated | Rate |
+|----------|-------|-------------|-----------------|------|
+| P0 | 0 | 0 | 0 | N/A |
+| P1 | 1 | 1 | 0 | 100.0% |
+| P2 | 2 | 2 | 0 | 100.0% |
+| P3 | 0 | 0 | 0 | N/A |
+
+Round 3 findings were narrowly concentrated in **residual contract drift** rather than broad design issues. All three findings targeted recently changed interfaces/semantics and validated as real implementation blockers if left unresolved.
+
+The dominant theme was **test harness API-shape alignment**. The key fix was in 05-testing-and-benchmarks-test-harness, where O1 self-comparison referenced a top-level severity field that does not exist in the plan 04 `guard.Result` contract; this was corrected to assessment-based severity access.
+
+A second theme was **Ansible flag-value matching closure** in the infra/cloud chain (03c + 03c-th). Round 3 verified and incorporated the final pass to keep Ansible module/argument matching explicitly tied to flag-value-aware content matching, avoiding regressions to arg-only semantics.
+
+Convergence behavior remained strong: total findings dropped from 41 in R2 to 3 in R3 (↓93%), and all 3 were incorporated. No new P0s surfaced in R3, and no deferrals were needed.
+
 ## Document Metrics
 
 | Category | Files | Total Lines |
 |----------|-------|-------------|
-| Plan docs (00–05) | 13 | 24,903 |
-| Test harness docs | 9 | 9,263 |
-| Review docs (deleted after incorporation) | 42 | 10,410 |
-| **Total** | **64** | **44,576** |
+| Plan docs (00–05) | 13 | 24,966 |
+| Test harness docs | 9 | 9,315 |
+| Review docs (deleted after incorporation) | 66 | 10,815 |
+| **Total** | **88** | **45,096** |
 
 ### Per-Document Line Counts
 
@@ -156,38 +176,38 @@ Only 1 R2 finding (2.4%) was not incorporated. The non-incorporation reason was 
 | Document | Lines |
 |----------|-------|
 | 00-plan-index.md | 173 |
-| 00-architecture.md | 1,067 |
-| 01-treesitter-integration.md | 1,614 |
-| 02-matching-framework.md | 3,123 |
-| 03a-packs-core.md | 2,894 |
-| 03b-packs-database.md | 2,300 |
-| 03c-packs-infra-cloud.md | 2,273 |
-| 03d-packs-containers-k8s.md | 1,906 |
-| 03e-packs-other.md | 2,808 |
-| 03f-packs-personal-files.md | 838 |
-| 03g-packs-macos.md | 1,503 |
-| 04-api-and-cli.md | 2,141 |
-| 05-testing-and-benchmarks.md | 2,263 |
+| 00-architecture.md | 1,071 |
+| 01-treesitter-integration.md | 1,618 |
+| 02-matching-framework.md | 3,127 |
+| 03a-packs-core.md | 2,898 |
+| 03b-packs-database.md | 2,304 |
+| 03c-packs-infra-cloud.md | 2,292 |
+| 03d-packs-containers-k8s.md | 1,910 |
+| 03e-packs-other.md | 2,812 |
+| 03f-packs-personal-files.md | 842 |
+| 03g-packs-macos.md | 1,507 |
+| 04-api-and-cli.md | 2,145 |
+| 05-testing-and-benchmarks.md | 2,267 |
 
 **Test harness docs:**
 
 | Document | Lines |
 |----------|-------|
-| 01-treesitter-integration-test-harness.md | 1,008 |
-| 02-matching-framework-test-harness.md | 1,172 |
-| 03a-packs-core-test-harness.md | 757 |
-| 03b-packs-database-test-harness.md | 1,279 |
-| 03c-packs-infra-cloud-test-harness.md | 1,119 |
-| 03d-packs-containers-k8s-test-harness.md | 1,007 |
-| 03e-packs-other-test-harness.md | 1,022 |
-| 04-api-and-cli-test-harness.md | 1,029 |
-| 05-testing-and-benchmarks-test-harness.md | 870 |
+| 01-treesitter-integration-test-harness.md | 1,012 |
+| 02-matching-framework-test-harness.md | 1,176 |
+| 03a-packs-core-test-harness.md | 761 |
+| 03b-packs-database-test-harness.md | 1,283 |
+| 03c-packs-infra-cloud-test-harness.md | 1,129 |
+| 03d-packs-containers-k8s-test-harness.md | 1,011 |
+| 03e-packs-other-test-harness.md | 1,026 |
+| 04-api-and-cli-test-harness.md | 1,033 |
+| 05-testing-and-benchmarks-test-harness.md | 884 |
 
 ## Quality Signals
 
-**Severity distribution is healthy.** P0 findings represent 10.4% of total findings — high enough to demonstrate that reviewers found genuinely critical issues, but low enough to indicate that the plan drafts were substantially correct before review. The majority of findings (62.2%) are P2/P3, indicating refinements rather than fundamental flaws.
+**Severity distribution is healthy.** P0 findings represent 9.4% of total findings — high enough to demonstrate that reviewers found genuinely critical issues, but low enough to indicate that the plan drafts were substantially correct before review. The majority of findings (63.6%) are P2/P3, indicating refinements rather than fundamental flaws.
 
-**Incorporation rate scales with severity.** P0 findings have a 97.7% incorporation rate, while P2 findings are at 82.8%. This gradient is expected and healthy: higher-severity findings are almost always worth incorporating, while lower-severity findings are more likely to be intentional design trade-offs or v2 scope. P3 incorporation (85.0%) is notably higher than P2 (82.8%), reflecting the high incorporation rate of the newer 03f/03g plans where P3 findings tended to be straightforward additions (golden file expansion, missing test cases) rather than debatable design choices.
+**Incorporation rate scales with severity.** P0 findings are near-fully incorporated, while most non-incorporations cluster in lower-severity findings where v1 scope boundaries or explicit design trade-offs were documented. This gradient is expected and healthy: higher-severity findings are almost always incorporated, while lower-severity findings are more likely to reflect intentional scope control.
 
 **Non-incorporation reasons are well-justified.** No P0 findings were rejected outright — the single non-incorporated P0 was an N/A duplicate. Non-incorporation reasons are dominated by v1 scope exclusion (34%) and intentional design choices (28%), both of which indicate thoughtful triage rather than dismissal.
 
@@ -197,8 +217,8 @@ Only 1 R2 finding (2.4%) was not incorporated. The non-incorporation reason was 
 
 **The two newest packs (03f, 03g) introduced novel detection challenges.** Plan 03f's command-agnostic AnyName matching represents a fundamentally different detection approach from all prior packs, relying on argument content (path components) rather than command names for pre-filtering. Plan 03g's macOS communication pack requires regex-based sub-language detection for AppleScript within osascript invocations, since no mature tree-sitter AppleScript grammar exists. Both plans also exposed a parser limitation (dscl flag decomposition) that requires a new RawArgContent matcher in plan 02.
 
-**Plan 02 (matching framework) is the most complex document** at 3,061 lines (up from 2,990 after AnyNameMatcher addition), reflecting its role as the core matching engine that all packs depend on. It also had the highest finding density after the architecture doc, which is expected given its central position in the dependency graph.
+**Plan 02 (matching framework) is the most complex document** at 3,127 lines, reflecting its role as the core matching engine that all packs depend on. It also had the highest finding density after the architecture doc, which is expected given its central position in the dependency graph.
 
-**Convergence signal after R2 is strong.** Total findings dropped from 415 in R1 to 41 in R2 (↓90%), while incorporation increased to 97.6% in R2 (40/41). This pattern indicates the bulk of high-risk structural issues were resolved in R1 and that R2 primarily closed residual contract/coverage drift.
+**Convergence signal through R3 is very strong.** Total findings dropped from 415 in R1 to 41 in R2 (↓90%), then to 3 in R3 (↓93% from R2). All R3 findings were incorporated (100%). This pattern indicates the bulk of high-risk structural issues were resolved in R1, R2 closed residual contract/coverage drift, and R3 was primarily final contract polish.
 
-**R2 surfaced one aggregate-count discrepancy against batch-level manual reporting.** The disposition aggregator reports 41 R2 findings (9 P1, 22 P2, 10 P3), while one batch message reported 40 findings. The summary uses disposition-table aggregation as source of truth.
+**R3 scope narrowed to three docs with genuine residual issues.** Only 03c, 03c test harness, and 05 test harness produced new findings in R3; all other assigned docs converged cleanly with no new actionable issues.
