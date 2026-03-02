@@ -189,7 +189,11 @@ const (
     WarnPartialParse WarningCode = iota  // AST contained ERROR nodes
     WarnInlineDepthExceeded              // Inline script recursion hit max depth
     WarnInputTruncated                   // Input exceeded max length
+    WarnExpansionCapped                  // Variable expansion capped
+    WarnExtractorPanic                   // Command extractor panicked (recovered)
+    WarnCommandSubstitution              // Command substitution detected
     WarnMatcherPanic                     // A CommandMatcher panicked (recovered)
+    WarnUnknownPackID                    // Pack ID not found in registry/config
 )
 
 type Decision int
@@ -409,13 +413,18 @@ type CommandMatcher interface {
 
 // ExtractedCommand is a single command invocation extracted from the AST.
 type ExtractedCommand struct {
-    Name       string            // Normalized command name
-    Args       []string          // Positional arguments
-    Flags      map[string]string // Flag name → value (or "" for boolean flags)
-    InlineEnv  map[string]string // Inline env var assignments
-    RawText    string            // Original text span from source
-    InPipeline bool              // Is this part of a pipeline?
-    Negated    bool              // Preceded by ! (does not affect severity — cmd still runs)
+    Name             string            // Normalized command name
+    RawName          string            // Original command token before normalization
+    Args             []string          // Positional arguments
+    RawArgs          []string          // Original argument token order (flags + args interleaved)
+    Flags            map[string]string // Flag name → value (or "" for boolean flags)
+    InlineEnv        map[string]string // Inline env var assignments
+    RawText          string            // Original text span from source
+    InPipeline       bool              // Is this part of a pipeline?
+    Negated          bool              // Preceded by ! (does not affect severity — cmd still runs)
+    DataflowResolved bool              // True when argument values came from dataflow expansion
+    StartByte        uint32            // Start byte offset in original command string
+    EndByte          uint32            // End byte offset in original command string
 }
 ```
 
@@ -442,6 +451,7 @@ than implementing `CommandMatcher` from scratch):
 - **EnvMatcher**: Checks inline env var names/values
 - **CompositeMatcher**: AND/OR/NOT composition of the above
 - **NegativeMatcher**: Inverts a match (e.g., "rm -rf but NOT /tmp")
+- **AnyNameMatcher**: Matches any command name (for command-agnostic, arg-content-only rules)
 
 **Note on alias resolution**: The tool operates on the literal command string,
 not the resolved execution path. Shell aliases (`alias g=git`) and functions
@@ -1014,7 +1024,7 @@ impressive-looking work that produces no measurable user-facing improvement.
 
 ---
 
-## Review Disposition
+## Round 1 Review Disposition
 
 Incorporated feedback from: `00-architecture-review-security-architect.md`,
 `00-architecture-review-systems-engineer.md`.
@@ -1048,3 +1058,10 @@ Incorporated feedback from: `00-architecture-review-security-architect.md`,
 | SE-P3.1 | systems-engineer | P3 | Flags map loses ordering | Incorporated | Merged with SA-P2.4 |
 | SE-P3.2 | systems-engineer | P3 | Policy interface lacks context | Not Incorporated | Intentional minimalism documented in API section. Per-pack/per-rule overrides handled via allowlists or multiple Evaluate calls |
 | SE-P3.3 | systems-engineer | P3 | Inline recursion depth unbounded | Incorporated | Merged with SA-P1.2 |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-coder-1 | P1 | Foundation type contract drifts from downstream plans | Incorporated | Updated ExtractedCommand in Layer 3 with RawName/RawArgs/DataflowResolved/StartByte/EndByte and added AnyNameMatcher to built-in matcher list. |
+| 2 | dcg-coder-1 | P2 | Warning code set is stale relative to foundation pipeline | Incorporated | Expanded WarningCode list in Layer 1 to include ExpansionCapped, ExtractorPanic, CommandSubstitution, UnknownPackID. |

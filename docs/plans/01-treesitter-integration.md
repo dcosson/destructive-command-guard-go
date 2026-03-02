@@ -54,9 +54,10 @@ type ExtractedCommand struct {
 
 // ParseResult is the complete output of parsing + extraction.
 type ParseResult struct {
-    Commands []ExtractedCommand // All extracted commands (may include dataflow variants)
-    Warnings []Warning          // Parse + extraction warnings
-    HasError bool               // True if AST contained ERROR nodes
+    Commands     []ExtractedCommand   // All extracted commands (may include dataflow variants)
+    Warnings     []guard.Warning      // Parse + extraction warnings (shared contract with plan 02)
+    HasError     bool                 // True if AST contained ERROR nodes
+    ExportedVars map[string][]string  // Exported variables visible to downstream env detection
 }
 ```
 
@@ -276,27 +277,14 @@ type ExtractedCommand struct {
 
 // ParseResult is the complete output of the parse+extract pipeline.
 type ParseResult struct {
-    Commands []ExtractedCommand // May include dataflow variants (multiple per source command)
-    Warnings []Warning          // Parse + extraction warnings (merged)
-    HasError bool               // True if AST contained ERROR nodes
-}
-
-// Warning indicates a non-fatal condition during parsing or extraction.
-type Warning struct {
-    Code    WarningCode
-    Message string
-}
-
-type WarningCode int
-
-const (
-    WarnPartialParse        WarningCode = iota // AST contained ERROR nodes
-    WarnInlineDepthExceeded                    // Inline script recursion hit max
-    WarnInputTruncated                         // Input exceeded max length
-    WarnExpansionCapped                        // Dataflow expansion hit limit; result is Indeterminate
-    WarnExtractorPanic                         // Extractor or inline detector panicked (recovered)
-    WarnCommandSubstitution                    // Variable assigned via command substitution; value unknown
+    Commands     []ExtractedCommand  // May include dataflow variants (multiple per source command)
+    Warnings     []guard.Warning     // Parse + extraction warnings (shared contract with plan 02)
+    HasError     bool                // True if AST contained ERROR nodes
+    ExportedVars map[string][]string // Exported variables from DataflowAnalyzer.ExportedVars()
 )
+
+// Warning/WarningCode are defined in guard/types.go and imported directly.
+// This is a cross-plan contract with plan 02 and avoids conversion layers.
 
 // InlineScript represents an embedded script detected inside a command.
 type InlineScript struct {
@@ -428,7 +416,11 @@ func (bp *BashParser) Parse(ctx context.Context, command string) (*Tree, []Warni
 func (bp *BashParser) ParseAndExtract(ctx context.Context, command string, depth int) ParseResult {
     tree, parseWarnings := bp.Parse(ctx, command)
     if tree == nil {
-        return ParseResult{Warnings: parseWarnings, HasError: true}
+        return ParseResult{
+            Warnings:     parseWarnings,
+            HasError:     true,
+            ExportedVars: map[string][]string{},
+        }
     }
     extractor := NewCommandExtractor(bp)
     extractor.depth = depth
@@ -504,9 +496,10 @@ func (ce *CommandExtractor) Extract(tree *Tree) ParseResult {
     }()
 
     return ParseResult{
-        Commands: commands,
-        Warnings: warnings,
-        HasError: tree.hasError, // From Parse(), no re-walk needed
+        Commands:     commands,
+        Warnings:     warnings,
+        HasError:     tree.hasError,          // From Parse(), no re-walk needed
+        ExportedVars: ce.dataflow.ExportedVars(), // Cross-plan contract consumed by plan 02
     }
 }
 ```
@@ -1118,7 +1111,7 @@ func (id *InlineDetector) Detect(cmd ExtractedCommand, depth int) ([]ExtractedCo
     // (heredocs are detected during extraction, passed in via cmd metadata)
 
     var allCommands []ExtractedCommand
-    var allWarnings []Warning
+    var allWarnings []guard.Warning
 
     for _, script := range scripts {
         if script.Language == "bash" {
@@ -1572,7 +1565,7 @@ Each step should have passing tests before proceeding to the next.
 
 ---
 
-## Review Disposition
+## Round 1 Review Disposition
 
 Incorporated feedback from: `01-treesitter-integration-review-security-correctness.md`,
 `01-treesitter-integration-review-systems-engineer.md`.
@@ -1613,3 +1606,9 @@ Incorporated feedback from: `01-treesitter-integration-review-security-correctne
 | SE-01-P3.3 | systems-engineer | P3 | Test harness P2 invariant too strict | Incorporated | Merged with SC-P2.6; extractor skips commands with empty names, preserving P2 invariant |
 | SE-01-P3.4 | systems-engineer | P3 | Benchmark targets aspirational without baseline | Incorporated | Test harness updated: targets removed from B1/B3, replaced with "baseline to be established" |
 | SE-01-P3.5 | systems-engineer | P3 | Soak test memory growth assertion brittle | Incorporated | Test harness S2 updated: uses HeapInuse consistently, documents threshold rationale |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-coder-1 | P1 | ParseResult contract diverges from plan 02 foundation API | Incorporated | ParseResult now uses `[]guard.Warning` and includes `ExportedVars map[string][]string`; ParseAndExtract/Extract snippets updated with producer responsibilities. |

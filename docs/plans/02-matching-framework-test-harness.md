@@ -278,6 +278,56 @@ git checkout -b feature                     → Allow
 # Edge cases
 git push --force-with-lease --force main    → git-push-force (both flags, --force wins)
 echo "git push --force"                     → Allow (in string, not command)
+
+### E8: AnyName Command-Agnostic Matcher Coverage
+
+Verify command-agnostic matching behavior for packs that key off argument
+content rather than command name:
+
+```go
+func TestAnyNameMatcherCoverage(t *testing.T) {
+    m := packs.And(
+        packs.AnyName(),
+        packs.ArgContentRegex(`(?:~|\\$HOME)/Documents(?:/|$)`),
+    )
+
+    // Different command names, same protected-path argument content.
+    cases := []parse.ExtractedCommand{
+        {Name: "cat", Args: []string{"~/Documents/notes.txt"}},
+        {Name: "rm", Args: []string{"$HOME/Documents/file.txt"}},
+        {Name: "sqlite3", Args: []string{"~/Documents/db.sqlite"}},
+    }
+    for _, c := range cases {
+        require.True(t, m.Match(c))
+    }
+
+    // Candidate-pack selection contract: command-agnostic packs still need
+    // argument-content keywords to survive pre-filtering.
+    pf := eval.NewKeywordFilter(registry)
+    candidates := pf.Contains("cat ~/Documents/notes.txt", nil)
+    require.Contains(t, candidates.PackIDs, "personal.files")
+}
+```
+
+### E9: ArgContent Literal-vs-Regex Semantic Split
+
+Lock down the contract that `ArgContent()` is literal substring matching while
+`ArgContentRegex()` is regex matching:
+
+```go
+func TestArgContentLiteralVsRegex(t *testing.T) {
+    cmd := parse.ExtractedCommand{Args: []string{":main", "+refs/heads/main", "0"}}
+
+    // Literal semantics: "^:" and "^0$" are just plain substrings here.
+    require.False(t, packs.ArgContent("^:").Match(cmd))
+    require.False(t, packs.ArgContent("^0$").Match(cmd))
+
+    // Regex semantics: anchors are interpreted and should match.
+    require.True(t, packs.ArgContentRegex("^:").Match(cmd))
+    require.True(t, packs.ArgContentRegex("^\\+").Match(cmd))
+    require.True(t, packs.ArgContentRegex("^0$").Match(cmd))
+}
+```
 git push --force origin main | cat          → git-push-force (pipeline)
 git reset --hard && echo "done"             → git-reset-hard (&& chain)
 ```
@@ -1106,10 +1156,17 @@ complete and ready for Batch 3 (pack implementation):
 
 ---
 
-## Review Disposition
+## Round 1 Review Disposition
 
 | Finding | Reviewer | Severity | Summary | Disposition | Notes |
 |---------|----------|----------|---------|-------------|-------|
 | SE-02-P2.6 | systems-engineer | P2 | P8 monotonicity test incomplete | Incorporated | P8 rewritten with full ordering check using restrictiveness map. |
 | SE-02-P3.4 | systems-engineer | P3 | SEC2 documents limitation without resolution | Incorporated | SEC2 rewritten with concrete expectations. Bypass vectors now blocked by glob separator restriction. |
 | MF-P1.1 | security-correctness | P1 | Glob semantics unclear | Incorporated | E3 updated with command-separator restriction examples and `"*"` blocklist case. |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-coder-1 | P2 | Harness coverage omits AnyNameMatcher-specific behavior | Incorporated | Added E8 AnyName command-agnostic coverage with argument-content keywords across multiple command names. |
+| 2 | dcg-coder-1 | P2 | Harness lacks regression for ArgContent regex-literal misuse | Incorporated | Added E9 regression test locking literal `ArgContent` vs regex `ArgContentRegex` semantics. |

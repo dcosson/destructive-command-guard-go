@@ -625,6 +625,45 @@ func (m ArgContentMatcher) Match(cmd parse.ExtractedCommand) bool {
 }
 ```
 
+#### 5.2.4a RawArgContentMatcher
+
+Matches against `cmd.RawArgs` (pre-normalization, original token order).
+Use this when semantics depend on raw argument tokens that may be transformed
+or decomposed in normalized `Args`/`Flags` form.
+
+```go
+// RawArgContentMatcher checks raw argument tokens.
+// This is required for commands that encode subcommands as dash-prefixed
+// tokens (e.g., dscl . -delete), where normalization can lose the original
+// token shape.
+type RawArgContentMatcher struct {
+    Substring string
+    Regex     *regexp.Regexp // takes precedence when non-nil
+    AtIndex   int            // -1 means any raw arg
+}
+
+func (m RawArgContentMatcher) Match(cmd parse.ExtractedCommand) bool {
+    check := func(arg string) bool {
+        if m.Regex != nil {
+            return m.Regex.MatchString(arg)
+        }
+        return strings.Contains(arg, m.Substring)
+    }
+    if m.AtIndex >= 0 {
+        if m.AtIndex >= len(cmd.RawArgs) {
+            return false
+        }
+        return check(cmd.RawArgs[m.AtIndex])
+    }
+    for _, arg := range cmd.RawArgs {
+        if check(arg) {
+            return true
+        }
+    }
+    return false
+}
+```
+
 #### 5.2.5 EnvMatcher
 
 Checks inline environment variables (from the AST) for specific names/values.
@@ -791,6 +830,16 @@ func ArgContentRegex(pattern string) ArgContentMatcher {
     return ArgContentMatcher{Regex: regexp.MustCompile(pattern), AtIndex: -1}
 }
 
+// RawArgContent creates a RawArgContentMatcher with substring matching.
+func RawArgContent(substring string) RawArgContentMatcher {
+    return RawArgContentMatcher{Substring: substring, AtIndex: -1}
+}
+
+// RawArgContentRegex creates a RawArgContentMatcher with regex matching.
+func RawArgContentRegex(pattern string) RawArgContentMatcher {
+    return RawArgContentMatcher{Regex: regexp.MustCompile(pattern), AtIndex: -1}
+}
+
 // Env creates an EnvMatcher.
 func Env(name, value string) EnvMatcher {
     return EnvMatcher{Name: name, Value: value}
@@ -816,6 +865,12 @@ func AnyName() AnyNameMatcher {
     return AnyNameMatcher{}
 }
 ```
+
+**ArgContent anti-footgun rule**: `ArgContent()` is literal substring matching
+only. Regex-like literals (for example `ArgContent("^:")`, `ArgContent("^0$")`)
+MUST NOT be used. Use `ArgContentRegex()` (or exact `Arg`/`ArgAt`/`ArgPrefix`)
+for anchored or regex semantics. This rule is mandatory for pack authoring and
+is enforced by matcher regression tests in the test harness.
 
 **Example pack pattern** (used in the test pack, §5.9):
 
@@ -3021,7 +3076,7 @@ on all prior steps.
 
 ---
 
-## Review Disposition
+## Round 1 Review Disposition
 
 | Finding | Reviewer | Severity | Summary | Disposition | Notes |
 |---------|----------|----------|---------|-------------|-------|
@@ -3059,3 +3114,10 @@ on all prior steps.
 | SE-02-P3.3 | systems-engineer | P3 | Golden file no versioning | Incorporated | §5.10: `format: v1` header line added. Parser validates on load. |
 | SE-02-P3.4 | systems-engineer | P3 | SEC2 documents limitation without resolution | Incorporated | Test harness SEC2: Concrete expectations added. Bypass vectors now blocked by MF-P0.1 fix. |
 | SE-02-P3.5 | systems-engineer | P3 | `isEmptyOrWhitespace` unicode whitespace | Incorporated | Merged with MF-P3.3. Uses `strings.TrimSpace`. |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-coder-1 | P1 | Matcher set lacks RawArgs content matcher despite foundation need | Incorporated | Added `RawArgContentMatcher` plus `RawArgContent` / `RawArgContentRegex` builders to matcher DSL (§5.2.4a, §5.2.9). |
+| 2 | dcg-coder-1 | P2 | ArgContent API leaves regex-literal footgun unaddressed | Incorporated | Added explicit anti-footgun rule: regex-like literals must use `ArgContentRegex`, with test-harness enforcement note. |

@@ -359,7 +359,9 @@ and similar key=value argument patterns.
 1. Does your pattern match argument structure only (flags, positions)? → Use
    `Flags()`, `ArgAt()`, `Arg()` — no dataflow concern.
 2. Does your pattern match argument content (SQL keywords, file paths)? →
-   Consider using `ArgContent(regex)` and check `DataflowResolved`.
+   Use `ArgContentRegex(regex)` for regex semantics or `ArgContent(literal)`
+   for literal substring semantics, and check `DataflowResolved`.
+   Never pass regex-like literals (for example `^:`, `^0$`) to `ArgContent`.
 3. Does your pattern need inline environment context? → Check `InlineEnv`
    and set `EnvSensitive: true`.
 
@@ -409,9 +411,9 @@ var gitPack = packs.Pack{
                     packs.Flags("-d"),
                 )),
                 // Exclude colon refspecs (:branch = remote branch deletion)
-                packs.Not(packs.ArgContent("^:")),
+                packs.Not(packs.ArgContentRegex("^:")),
                 // Exclude + refspecs (+ref:ref = force push individual ref)
-                packs.Not(packs.ArgContent("^\\+")),
+                packs.Not(packs.ArgContentRegex("^\\+")),
             ),
         },
         // S2: Force-with-lease push (safer alternative to --force)
@@ -732,7 +734,7 @@ var gitPack = packs.Pack{
             Match: packs.And(
                 packs.Name("git"),
                 packs.ArgAt(0, "push"),
-                packs.ArgContent("^:"), // Arg starting with : = empty left side = deletion
+                packs.ArgContentRegex("^:"), // Arg starting with : = empty left side = deletion
             ),
             Severity:     guard.Medium,
             Confidence:   guard.ConfidenceHigh,
@@ -747,7 +749,7 @@ var gitPack = packs.Pack{
             Match: packs.And(
                 packs.Name("git"),
                 packs.ArgAt(0, "push"),
-                packs.ArgContent("^\\+"), // Arg starting with + = force push
+                packs.ArgContentRegex("^\\+"), // Arg starting with + = force push
             ),
             Severity:     guard.High,
             Confidence:   guard.ConfidenceMedium,
@@ -1179,7 +1181,7 @@ var fsPack = packs.Pack{
                 ),
                 packs.Or(
                     packs.Arg("0"),
-                    packs.ArgContent("^0$"),
+                    packs.ArgContentRegex("^0$"),
                 ),
             ),
             Severity:     guard.Medium,
@@ -2847,7 +2849,7 @@ Steps 1 and 2 can be parallelized. Steps 3–5 depend on 1 and 2.
 
 ---
 
-## Review Disposition
+## Round 1 Review Disposition
 
 | # | Reviewer | Severity | Summary | Disposition | Notes |
 |---|----------|----------|---------|-------------|-------|
@@ -2884,3 +2886,9 @@ Steps 1 and 2 can be parallelized. Steps 3–5 depend on 1 and 2.
 | 31 | dcg-reviewer | P3 | Benchmark targets aggressive (P3-3) | Incorporated | Test harness B1 targets marked as initial |
 | 32 | dcg-reviewer | P3 | P6 redundant with P2 (P3-4) | Incorporated | Test harness P6 merged into P2 |
 | 33 | dcg-reviewer | P3 | mv keyword false triggers (P3-5) | Not Incorporated | Same as #13 — performance negligible |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-coder-1 | P1 | Regex-like ArgContent usage creates false-negative pack rules | Incorporated | Replaced regex-like `ArgContent` uses with `ArgContentRegex` (`^:`, `^\\+`, `^0$`) and updated authoring guidance to forbid regex literals in `ArgContent`. |

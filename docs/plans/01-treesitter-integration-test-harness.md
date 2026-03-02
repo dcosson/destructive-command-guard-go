@@ -172,6 +172,41 @@ is bounded.
 Test by instrumenting the `InlineDetector` with a depth counter and verifying
 it never exceeds the limit, regardless of input nesting depth.
 
+### P7: ParseResult Boundary Contract Locked
+
+**Invariant**: `ParseResult` always carries cross-plan boundary fields in the
+form expected by plan 02:
+- `ExportedVars map[string][]string` populated from dataflow/export analysis
+- warning payloads expressed as `guard.Warning` (`Code`, `Message`)
+
+```go
+func TestPropertyParseResultBoundaryContract(t *testing.T) {
+    result := parser.ParseAndExtract(ctx,
+        "export RAILS_ENV=production && broken_syntax && rails db:reset", 0)
+
+    // Contract field exists and carries export values.
+    vals, ok := result.ExportedVars["RAILS_ENV"]
+    require.True(t, ok, "expected exported variable in ParseResult.ExportedVars")
+    require.Contains(t, vals, "production")
+
+    // Warning payload contract: shared warning type/codes.
+    for _, w := range result.Warnings {
+        require.NotEmpty(t, w.Message)
+        switch w.Code {
+        case guard.WarnPartialParse,
+            guard.WarnInlineDepthExceeded,
+            guard.WarnInputTruncated,
+            guard.WarnExpansionCapped,
+            guard.WarnExtractorPanic,
+            guard.WarnCommandSubstitution:
+            // valid shared warning code
+        default:
+            t.Fatalf("unexpected warning code in ParseResult boundary: %v", w.Code)
+        }
+    }
+}
+```
+
 ---
 
 ## 3. Deterministic Example Tests
@@ -283,7 +318,7 @@ var inlineTests = []struct {
     name           string
     input          string
     expectCommands []string // Expected extracted command names (including nested)
-    expectWarnings []WarningCode
+    expectWarnings []guard.WarningCode
 }{
     {
         name:           "python os.system",
@@ -952,7 +987,7 @@ requires explicit update (`go test -update-golden`).
 
 ---
 
-## Review Disposition
+## Round 1 Review Disposition
 
 Incorporated feedback from: `01-treesitter-integration-review-security-correctness.md`,
 `01-treesitter-integration-review-systems-engineer.md`.
@@ -965,3 +1000,9 @@ Incorporated feedback from: `01-treesitter-integration-review-security-correctne
 | SE-01-P3.3 | systems-engineer | P3 | Test harness P2 invariant too strict | Incorporated | Merged with SC-P2.6 |
 | SE-01-P3.4 | systems-engineer | P3 | Benchmark targets aspirational without baseline | Incorporated | B1 and B3 targets changed to "Baseline (record)" |
 | SE-01-P3.5 | systems-engineer | P3 | Soak test memory assertion brittle | Incorporated | S2 uses HeapInuse consistently, threshold reduced to 50MB with rationale |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-coder-1 | P2 | Harness does not lock the ParseResult boundary contract | Incorporated | Added P7 boundary-contract property test for `ExportedVars` and shared warning payload semantics, including mixed warning scenarios. |
