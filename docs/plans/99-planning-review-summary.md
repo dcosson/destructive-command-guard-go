@@ -1,57 +1,58 @@
 # Planning Review Summary
 
-This document summarizes the review process across all planning documents for the destructive-command-guard-go project. The review covered **21 documents** across 1 round of review: the architecture doc (00), 11 plan docs (01–05, with 03 split into 7 sub-plans including 03f and 03g), and 9 companion test harness docs. Each document was independently reviewed by two reviewers (security-correctness and systems-engineer perspectives), and findings were incorporated back into the source documents.
+This document summarizes the review process across all planning documents for the destructive-command-guard-go project. The review covered **21 documents** across 2 rounds of review: the architecture doc (00), 11 plan docs (01–05, with 03 split into 7 sub-plans including 03f and 03g), and 9 companion test harness docs. Each document was independently reviewed and findings were incorporated back into the source documents.
 
 ## Overall Aggregate
 
 | Metric | Value |
 |--------|-------|
-| Total findings | 415 |
-| Incorporated | 357 (86.0%) |
-| Not Incorporated | 53 (12.8%) |
-| N/A | 5 (1.2%) |
-| Incorporation rate (excl. N/A) | 357/410 (87.1%) |
+| Total findings | 456 |
+| Incorporated | 397 (87.1%) |
+| Not Incorporated | 54 (11.8%) |
+| N/A | 5 (1.1%) |
+| Incorporation rate (excl. N/A) | 397/451 (88.0%) |
 
 ### Convergence Table
 
 | Round | Total Findings | Incorporated | Not Incorporated | Deferred | N/A | Trend |
 |-------|---------------|-------------|-----------------|----------|-----|-------|
 | R1 | 415 | 357 | 53 | 0 | 5 | — |
+| R2 | 41 | 40 | 1 | 0 | 0 | ↓90% |
 
 ### Severity Breakdown
 
 | Severity | Count | Percentage |
 |----------|-------|------------|
-| P0 | 43 | 10.4% |
-| P1 | 114 | 27.5% |
-| P2 | 145 | 34.9% |
-| P3 | 113 | 27.2% |
+| P0 | 43 | 9.4% |
+| P1 | 123 | 27.0% |
+| P2 | 167 | 36.6% |
+| P3 | 123 | 27.0% |
 
 ### Per-Document Finding Counts
 
 | Document | Findings |
 |----------|----------|
-| 00-architecture.md | 27 |
-| 01-treesitter-integration.md | 34 |
-| 01-treesitter-integration-test-harness.md | 6 |
-| 02-matching-framework.md | 34 |
-| 02-matching-framework-test-harness.md | 3 |
-| 03a-packs-core.md | 33 |
+| 00-architecture.md | 29 |
+| 01-treesitter-integration.md | 35 |
+| 01-treesitter-integration-test-harness.md | 7 |
+| 02-matching-framework.md | 36 |
+| 02-matching-framework-test-harness.md | 5 |
+| 03a-packs-core.md | 34 |
 | 03a-packs-core-test-harness.md | 7 |
-| 03b-packs-database.md | 33 |
-| 03b-packs-database-test-harness.md | 6 |
-| 03c-packs-infra-cloud.md | 33 |
-| 03c-packs-infra-cloud-test-harness.md | 7 |
-| 03d-packs-containers-k8s.md | 31 |
-| 03d-packs-containers-k8s-test-harness.md | 10 |
-| 03e-packs-other.md | 31 |
+| 03b-packs-database.md | 41 |
+| 03b-packs-database-test-harness.md | 11 |
+| 03c-packs-infra-cloud.md | 37 |
+| 03c-packs-infra-cloud-test-harness.md | 10 |
+| 03d-packs-containers-k8s.md | 33 |
+| 03d-packs-containers-k8s-test-harness.md | 13 |
+| 03e-packs-other.md | 34 |
 | 03e-packs-other-test-harness.md | 7 |
 | 03f-packs-personal-files.md | 21 |
-| 03g-packs-macos.md | 23 |
+| 03g-packs-macos.md | 24 |
 | 04-api-and-cli.md | 28 |
-| 04-api-and-cli-test-harness.md | 7 |
-| 05-testing-and-benchmarks.md | 28 |
-| 05-testing-and-benchmarks-test-harness.md | 6 |
+| 04-api-and-cli-test-harness.md | 8 |
+| 05-testing-and-benchmarks.md | 29 |
+| 05-testing-and-benchmarks-test-harness.md | 7 |
 
 ## Round 1 Review Summary
 
@@ -118,14 +119,35 @@ The **systems-engineer reviewer** focused on cross-document consistency, API con
 
 Both reviewers independently identified several of the same issues (~18 overlapping findings across all plans), which were marked as duplicates during incorporation. The complementary perspectives provided substantially broader coverage than either reviewer alone would have achieved.
 
+## Round 2 Review Summary
+
+### Incorporation Rates
+
+| Severity | Total | Incorporated | Not Incorporated | Rate |
+|----------|-------|-------------|-----------------|------|
+| P0 | 0 | 0 | 0 | N/A |
+| P1 | 9 | 9 | 0 | 100.0% |
+| P2 | 22 | 21 | 1 | 95.5% |
+| P3 | 10 | 10 | 0 | 100.0% |
+
+Round 2 findings were concentrated in **foundation-chain contract alignment** between plans 00, 01, and 02. The main theme was locking shared type boundaries so downstream docs no longer drift: `ExtractedCommand`/warning taxonomy in 00, `ParseResult` warning/export contracts in 01, and raw-argument matcher support plus matcher-footgun guidance in 02.
+
+The second theme was **matcher semantic hardening** in the framework and core-pack docs. R2 closed the `ArgContent` vs `ArgContentRegex` ambiguity with explicit anti-footgun rules and regression tests, then propagated that correction into 03a by replacing regex-like `ArgContent` usages that would otherwise create false negatives.
+
+The third theme was **test harness coverage for newly introduced primitives**. R2 added explicit coverage for `AnyName` command-agnostic behavior and parse boundary contract assertions (including mixed warning scenarios), reducing the chance that future edits regress cross-plan API compatibility without immediate detection.
+
+Round 2 also showed strong convergence characteristics: only 17 of 21 docs produced new findings, and 4 docs were clean in R2. The largest residual finding cluster was in 03b/03c (database + infra-cloud batches), with foundation-chain docs mostly narrowed to one or two precise contract fixes per document.
+
+Only 1 R2 finding (2.4%) was not incorporated. The non-incorporation reason was a reviewer-withdrawn/confirmed-correct case rather than unresolved disagreement, so no material corrective work was deferred from R2.
+
 ## Document Metrics
 
 | Category | Files | Total Lines |
 |----------|-------|-------------|
-| Plan docs (00–05) | 13 | 24,722 |
-| Test harness docs | 9 | 9,080 |
-| Review docs (deleted after incorporation) | 24 | 9,454 |
-| **Total** | **46** | **43,256** |
+| Plan docs (00–05) | 13 | 24,903 |
+| Test harness docs | 9 | 9,263 |
+| Review docs (deleted after incorporation) | 42 | 10,410 |
+| **Total** | **64** | **44,576** |
 
 ### Per-Document Line Counts
 
@@ -134,32 +156,32 @@ Both reviewers independently identified several of the same issues (~18 overlapp
 | Document | Lines |
 |----------|-------|
 | 00-plan-index.md | 173 |
-| 00-architecture.md | 1,050 |
-| 01-treesitter-integration.md | 1,615 |
-| 02-matching-framework.md | 3,061 |
-| 03a-packs-core.md | 2,886 |
-| 03b-packs-database.md | 2,270 |
-| 03c-packs-infra-cloud.md | 2,261 |
-| 03d-packs-containers-k8s.md | 1,876 |
-| 03e-packs-other.md | 2,802 |
+| 00-architecture.md | 1,067 |
+| 01-treesitter-integration.md | 1,614 |
+| 02-matching-framework.md | 3,123 |
+| 03a-packs-core.md | 2,894 |
+| 03b-packs-database.md | 2,300 |
+| 03c-packs-infra-cloud.md | 2,273 |
+| 03d-packs-containers-k8s.md | 1,906 |
+| 03e-packs-other.md | 2,808 |
 | 03f-packs-personal-files.md | 838 |
-| 03g-packs-macos.md | 1,492 |
+| 03g-packs-macos.md | 1,503 |
 | 04-api-and-cli.md | 2,141 |
-| 05-testing-and-benchmarks.md | 2,257 |
+| 05-testing-and-benchmarks.md | 2,263 |
 
 **Test harness docs:**
 
 | Document | Lines |
 |----------|-------|
-| 01-treesitter-integration-test-harness.md | 967 |
-| 02-matching-framework-test-harness.md | 1,115 |
-| 03a-packs-core-test-harness.md | 753 |
-| 03b-packs-database-test-harness.md | 1,261 |
-| 03c-packs-infra-cloud-test-harness.md | 1,093 |
-| 03d-packs-containers-k8s-test-harness.md | 993 |
+| 01-treesitter-integration-test-harness.md | 1,008 |
+| 02-matching-framework-test-harness.md | 1,172 |
+| 03a-packs-core-test-harness.md | 757 |
+| 03b-packs-database-test-harness.md | 1,279 |
+| 03c-packs-infra-cloud-test-harness.md | 1,119 |
+| 03d-packs-containers-k8s-test-harness.md | 1,007 |
 | 03e-packs-other-test-harness.md | 1,022 |
-| 04-api-and-cli-test-harness.md | 1,022 |
-| 05-testing-and-benchmarks-test-harness.md | 854 |
+| 04-api-and-cli-test-harness.md | 1,029 |
+| 05-testing-and-benchmarks-test-harness.md | 870 |
 
 ## Quality Signals
 
@@ -177,4 +199,6 @@ Both reviewers independently identified several of the same issues (~18 overlapp
 
 **Plan 02 (matching framework) is the most complex document** at 3,061 lines (up from 2,990 after AnyNameMatcher addition), reflecting its role as the core matching engine that all packs depend on. It also had the highest finding density after the architecture doc, which is expected given its central position in the dependency graph.
 
-**This is Round 1 of review.** All plans have gone through one complete review cycle with two independent reviewers each. Whether a second round of review is warranted depends on whether the incorporated changes introduce new cross-document consistency issues. The 415 R1 findings with 87.1% incorporation rate suggest the plans are substantially mature, though a targeted R2 focusing on cross-document API contracts (particularly the new AnyNameMatcher and RawArgContent matcher additions to plan 02) and safe-pattern completeness could be valuable.
+**Convergence signal after R2 is strong.** Total findings dropped from 415 in R1 to 41 in R2 (↓90%), while incorporation increased to 97.6% in R2 (40/41). This pattern indicates the bulk of high-risk structural issues were resolved in R1 and that R2 primarily closed residual contract/coverage drift.
+
+**R2 surfaced one aggregate-count discrepancy against batch-level manual reporting.** The disposition aggregator reports 41 R2 findings (9 P1, 22 P2, 10 P3), while one batch message reported 40 findings. The summary uses disposition-table aggregation as source of truth.
