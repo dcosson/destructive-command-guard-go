@@ -30,8 +30,14 @@
       "author": "Danny Cosson",
       "text": "Implementation complete for dcg-otc.1 and tests passing (including race). Commit: b96fa8e. Ready for review.",
       "created_at": "2026-03-02T15:23:20.636447-08:00"
+    },
+    {
+      "id": 2,
+      "author": "Danny Cosson",
+      "text": "Addressed review feedback in commit 0647186: ExtractedCommand 12-field contract aligned, ParseResult uses guard.Warning, panic recovery now discards parser on panic. Note: treesitter-go v0.1.0 does not expose ts.NewParser at root; parser construction uses github.com/dcosson/treesitter-go/parser.NewParser with root ts types imported elsewhere.",
+      "created_at": "2026-03-02T15:29:55.004168-08:00"
     }
   ],
   "created_at": "2026-03-02T14:24:42.565249-08:00",
-  "updated_at": "2026-03-02T15:23:20.636819-08:00"
+  "updated_at": "2026-03-02T15:29:55.00443-08:00"
 }

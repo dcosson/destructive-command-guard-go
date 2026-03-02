@@ -2,7 +2,7 @@
   "id": "dcg-otc.2",
   "title": "Implement command normalization and core command extraction",
   "description": "Implement Normalize() in normalize.go. Core CommandExtractor in extract.go: AST walk across all node types, extractSimpleCommand with inline env vars, classifyArg with flag decomposition, RawArgs population, env prefix unwrapping, RawName fallback, panic recovery, ParseAndExtract convenience method. Stub dataflow (sequential Define/Resolve only). Unit tests: normalize edge cases, table-driven extract tests for simple commands, flags, pipelines, compound, redirections.",
-  "status": "in_progress",
+  "status": "hooked",
   "priority": 2,
   "type": "task",
   "parent": "dcg-otc",
@@ -28,6 +28,14 @@
     "project=dcg"
   ],
   "assignee": "dcg-coder-1",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Implemented command normalization + core extraction in commit 0647186: Normalize path stripping, env-prefix unwrap, command splitter/extractor, ParseAndExtract flow, minimal sequential dataflow substitution, and unit tests for simple/compound/pipeline/env/dataflow cases. go test ./... and go test -race ./internal/parse pass.",
+      "created_at": "2026-03-02T15:29:55.004184-08:00"
+    }
+  ],
   "created_at": "2026-03-02T14:24:42.629156-08:00",
-  "updated_at": "2026-03-02T15:29:37.195806-08:00"
+  "updated_at": "2026-03-02T15:29:55.004418-08:00"
 }
