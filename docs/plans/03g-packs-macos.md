@@ -41,9 +41,9 @@ simply doesn't exist in the binary. See plan 02 §5.3 for the build tag pattern.
 
 | Pack ID | Keywords | Destructive Patterns | Safe Patterns |
 |---------|----------|---------------------|---------------|
-| `macos.communication` | osascript, shortcuts, automator | 6 | 2 |
-| `macos.privacy` | security, mdfind, sqlite3 | 5 | 1 |
-| `macos.system` | defaults, launchctl, diskutil, csrutil, tmutil, nvram, spctl, systemsetup, dscl, fdesetup, bless | 11 | 3 |
+| `macos.communication` | osascript, shortcuts, automator | 9 | 2 |
+| `macos.privacy` | security, mdfind, sqlite3, Safari, Mail, Calendars, Photos Library | 5 | 1 |
+| `macos.system` | defaults, launchctl, diskutil, csrutil, tmutil, nvram, spctl, systemsetup, dscl, fdesetup, bless | 13 | 5 |
 
 ---
 
@@ -53,42 +53,47 @@ simply doesn't exist in the binary. See plan 02 §5.3 for the build tag pattern.
 graph TB
     subgraph "macos.communication pack"
         COM_KW["Keywords: osascript, shortcuts, automator"]
-        COM_S1["S1: osascript-display<br/>(safe: display dialog/notification)"]
-        COM_S2["S2: osascript-finder-benign<br/>(safe: Finder get, open folder)"]
-        COM_D1["D1: osascript-send-message<br/>Critical"]
-        COM_D2["D2: osascript-send-email<br/>Critical"]
-        COM_D3["D3: osascript-control-app<br/>High"]
-        COM_D4["D4: osascript-system-events<br/>Critical"]
-        COM_D5["D5: shortcuts-run<br/>High"]
-        COM_D6["D6: automator-run<br/>High"]
+        COM_S1["osascript-display<br/>(safe: display dialog/notification)"]
+        COM_S2["osascript-finder-benign<br/>(safe: Finder get, open folder)"]
+        COM_D1["osascript-send-message<br/>Critical"]
+        COM_D2["osascript-send-email<br/>Critical"]
+        COM_D3["osascript-system-events<br/>Critical"]
+        COM_D4["osascript-sensitive-app<br/>High"]
+        COM_D5["shortcuts-run<br/>High"]
+        COM_D6["automator-run<br/>High"]
+        COM_D7["osascript-finder-destructive<br/>High"]
+        COM_D8["open-terminal<br/>High"]
+        COM_D9["osascript-jxa-catchall<br/>Medium"]
     end
 
     subgraph "macos.privacy pack"
-        PRI_KW["Keywords: security, mdfind, sqlite3"]
-        PRI_S1["S1: security-find-cert<br/>(safe: certificate operations)"]
-        PRI_D1["D1: keychain-read-password<br/>Critical"]
-        PRI_D2["D2: keychain-dump<br/>Critical"]
-        PRI_D3["D3: messages-db-access<br/>High"]
-        PRI_D4["D4: browser-history-access<br/>High"]
-        PRI_D5["D5: spotlight-search-personal<br/>Medium"]
+        PRI_KW["Keywords: security, mdfind, sqlite3,<br/>Safari, Mail, Calendars, Photos Library"]
+        PRI_S1["security-find-cert<br/>(safe: certificate operations)"]
+        PRI_D1["keychain-read-password<br/>Critical"]
+        PRI_D2["keychain-dump<br/>Critical"]
+        PRI_D3["messages-db-access<br/>High"]
+        PRI_D4["private-data-access<br/>High"]
+        PRI_D5["spotlight-search<br/>Medium"]
     end
 
     subgraph "macos.system pack"
         SYS_KW["Keywords: defaults, launchctl,<br/>diskutil, csrutil, tmutil, ..."]
-        SYS_S1["S1: defaults-read<br/>(safe: reading preferences)"]
-        SYS_S2["S2: launchctl-list<br/>(safe: listing services)"]
-        SYS_S3["S3: diskutil-info<br/>(safe: disk information)"]
-        SYS_D1["D1: defaults-delete<br/>High"]
-        SYS_D2["D2: defaults-write-system<br/>High"]
-        SYS_D3["D3: launchctl-remove<br/>Critical"]
-        SYS_D4["D4: diskutil-erase<br/>Critical"]
-        SYS_D5["D5: csrutil-disable<br/>Critical"]
-        SYS_D6["D6: tmutil-delete<br/>Critical"]
-        SYS_D7["D7: nvram-write<br/>Critical"]
-        SYS_D8["D8: spctl-disable<br/>Critical"]
-        SYS_D9["D9: systemsetup-modify<br/>High"]
-        SYS_D10["D10: dscl-delete<br/>Critical"]
-        SYS_D11["D11: fdesetup-disable<br/>Critical"]
+        SYS_S1["defaults-read<br/>(safe)"]
+        SYS_S2["launchctl-list<br/>(safe)"]
+        SYS_S3["nvram-read<br/>(safe)"]
+        SYS_S4["diskutil-info<br/>(safe)"]
+        SYS_S4a["diskutil-apfs-list<br/>(safe)"]
+        SYS_D1["csrutil-disable<br/>Critical"]
+        SYS_D2["diskutil-erase<br/>Critical (incl. apfs)"]
+        SYS_D3["launchctl-remove<br/>Critical (incl. kickstart/kill)"]
+        SYS_D4["tmutil-delete<br/>Critical"]
+        SYS_D5["nvram-clear/write/delete<br/>Critical"]
+        SYS_D6["spctl-disable<br/>Critical"]
+        SYS_D7["dscl-delete<br/>Critical (BROKEN—see §9)"]
+        SYS_D8["fdesetup-disable<br/>Critical"]
+        SYS_D9["defaults-delete<br/>High"]
+        SYS_D10["defaults-write<br/>High"]
+        SYS_D11["systemsetup-modify<br/>High"]
     end
 ```
 
@@ -117,7 +122,10 @@ Each file has the `//go:build darwin` constraint.
 
 `osascript` executes AppleScript (or JavaScript for Automation). The dangerous
 case is when the script targets communication or automation apps. Detection
-is via `ArgContentRegex` on the `-e` flag value or script file content.
+is via `ArgContentRegex` on the script content argument. (Note: the plan 01
+parser treats `-e` as a boolean short flag, so the script content that follows
+`-e` becomes a positional argument in `cmd.Args`. `ArgContentRegex` searches
+`cmd.Args`, so it finds the script content correctly.)
 
 The key pattern to match in osascript content:
 
@@ -224,6 +232,7 @@ var communicationPack = packs.Pack{
 
     Safe: []packs.SafePattern{
         // S1: Display dialogs and notifications are benign.
+        // Not clauses prevent safe-pattern-shadowing for multi-tell scripts.
         {
             Name: "osascript-display",
             Match: packs.And(
@@ -232,15 +241,22 @@ var communicationPack = packs.Pack{
                 packs.Not(packs.ArgContentRegex(osascriptMessagesRe.String())),
                 packs.Not(packs.ArgContentRegex(osascriptMailRe.String())),
                 packs.Not(packs.ArgContentRegex(osascriptSystemEventsRe.String())),
+                packs.Not(packs.ArgContentRegex(osascriptSensitiveAppsRe.String())),
             ),
         },
 
         // S2: Benign Finder operations (get info, open folder, reveal).
+        // Not clauses prevent safe-pattern-shadowing for multi-tell scripts
+        // that combine Finder operations with dangerous app targets (MO-P0.1).
         {
             Name: "osascript-finder-benign",
             Match: packs.And(
                 packs.Name("osascript"),
                 packs.ArgContentRegex(osascriptFinderBenignRe.String()),
+                packs.Not(packs.ArgContentRegex(osascriptMessagesRe.String())),
+                packs.Not(packs.ArgContentRegex(osascriptMailRe.String())),
+                packs.Not(packs.ArgContentRegex(osascriptSystemEventsRe.String())),
+                packs.Not(packs.ArgContentRegex(osascriptSensitiveAppsRe.String())),
             ),
         },
     },
@@ -320,11 +336,73 @@ var communicationPack = packs.Pack{
         // D6: Running Automator workflows.
         {
             Name: "automator-run",
-            Match: packs.Name("automator"),
+            Match: packs.And(
+                packs.Name("automator"),
+                packs.Not(packs.Or(
+                    packs.Flags("--help"),
+                    packs.Flags("-h"),
+                    packs.Flags("--version"),
+                )),
+            ),
             Severity:   guard.High,
             Confidence: guard.ConfidenceMedium,
             Reason:     "Automator workflows can perform arbitrary automation",
             Remediation: "Review the workflow before running",
+        },
+
+        // D7: Destructive Finder operations via osascript.
+        // Finder delete, empty trash, and move to trash are destructive
+        // even though Finder itself is considered a benign app for reads.
+        {
+            Name: "osascript-finder-destructive",
+            Match: packs.And(
+                packs.Name("osascript"),
+                packs.ArgContentRegex(`(?i)tell\s+application\s+"Finder"\s+to\s+(?:delete|empty\s+trash|move\s+.+\s+to\s+trash)`),
+            ),
+            Severity:   guard.High,
+            Confidence: guard.ConfidenceHigh,
+            Reason:     "osascript performs destructive Finder operation (delete/trash)",
+            Remediation: "Review the Finder operation — files deleted via Finder " +
+                "may be moved to Trash but empty trash is irreversible",
+        },
+
+        // D8: Opening Terminal/iTerm via `open -a` — potential hook bypass.
+        // An agent could spawn an unmonitored terminal that bypasses the
+        // destructive command guard hook system entirely.
+        {
+            Name: "open-terminal",
+            Match: packs.And(
+                packs.Name("open"),
+                packs.Flags("-a"),
+                packs.Or(
+                    packs.ArgContent("Terminal"),
+                    packs.ArgContent("iTerm"),
+                ),
+            ),
+            Severity:   guard.High,
+            Confidence: guard.ConfidenceHigh,
+            Reason:     "Opening a terminal app could bypass the command guard hook system",
+            Remediation: "Do not open separate terminal windows — use the current shell",
+        },
+
+        // ---- Medium ----
+
+        // D9: JXA (JavaScript for Automation) catch-all.
+        // JXA uses different syntax (Application("...")) that evades the
+        // AppleScript tell-application regex patterns. Flag any JXA execution
+        // at Medium as a precaution until specific JXA patterns are added in v2.
+        {
+            Name: "osascript-jxa-catchall",
+            Match: packs.And(
+                packs.Name("osascript"),
+                packs.Flags("-l"),
+                packs.ArgContent("JavaScript"),
+            ),
+            Severity:   guard.Medium,
+            Confidence: guard.ConfidenceLow,
+            Reason:     "JXA scripts can perform arbitrary automation " +
+                "including message sending and app control",
+            Remediation: "Review the JavaScript for Automation content carefully",
         },
     },
 }
@@ -370,10 +448,12 @@ var notesDbRe = regexp.MustCompile(
 )
 
 // Combined pattern for any macOS private data path.
+// Covers both ~/Library/... and ~/Pictures/Photos Library.photoslibrary/.
 var macosPrivateDataRe = regexp.MustCompile(
-    `(?:~|(?:\$HOME|\$\{HOME\})|/(?:Users)/[^/]+)/Library/` +
-        `(?:Messages/|Mail/|Safari/|Application Support/AddressBook/|` +
-        `Group Containers/group\.com\.apple\.notes/|Calendars/)`,
+    `(?:~|(?:\$HOME|\$\{HOME\})|/(?:Users)/[^/]+)/` +
+        `(?:Library/(?:Messages/|Mail/|Safari/|Application Support/AddressBook/|` +
+        `Group Containers/group\.com\.apple\.notes/|Calendars/)` +
+        `|Pictures/Photos Library\.photoslibrary/)`,
 )
 
 var privacyPack = packs.Pack{
@@ -381,9 +461,11 @@ var privacyPack = packs.Pack{
     Name:        "macOS Privacy",
     Description: "Detects access to macOS private data (messages, email, browsing history, keychain)",
     Keywords: []string{
-        "security", "mdfind",
-        // Path component keywords for private data locations
+        "security", "mdfind", "sqlite3",
+        // Path component keywords for all private data locations
         "Messages", "AddressBook", "apple.notes",
+        "Safari", "Mail", "Calendars",
+        "Photos Library",
     },
 
     Safe: []packs.SafePattern{
@@ -534,7 +616,24 @@ var systemPack = packs.Pack{
             ),
         },
 
-        // S3: Reading disk information is safe.
+        // S3: nvram read operations are safe. (SE-P2.1)
+        // `nvram -p` prints all, `nvram <variable>` (no '=') reads one.
+        {
+            Name: "nvram-read",
+            Match: packs.And(
+                packs.Name("nvram"),
+                packs.Or(
+                    packs.Flags("-p"),
+                    packs.Flags("-x"),
+                    packs.Flags("--print"),
+                ),
+            ),
+        },
+
+        // S4: Reading disk information is safe.
+        // Note: "apfs" removed from S3 — `diskutil apfs` has destructive
+        // subcommands (deleteContainer, deleteVolume) that would be shadowed
+        // as safe (MO-P0.2/SE-P1.3).
         {
             Name: "diskutil-info",
             Match: packs.And(
@@ -542,13 +641,17 @@ var systemPack = packs.Pack{
                 packs.Or(
                     packs.ArgAt(0, "info"),
                     packs.ArgAt(0, "list"),
-                    packs.ArgAt(0, "apfs"),  // apfs list is safe
                 ),
-                packs.Not(packs.Or(
-                    packs.ArgAt(0, "eraseDisk"),
-                    packs.ArgAt(0, "eraseVolume"),
-                    packs.ArgAt(0, "partitionDisk"),
-                )),
+            ),
+        },
+
+        // S3a: diskutil apfs list is safe (requires two-level subcommand check).
+        {
+            Name: "diskutil-apfs-list",
+            Match: packs.And(
+                packs.Name("diskutil"),
+                packs.ArgAt(0, "apfs"),
+                packs.ArgAt(1, "list"),
             ),
         },
     },
@@ -569,7 +672,7 @@ var systemPack = packs.Pack{
             Remediation: "SIP should not be disabled by coding agents",
         },
 
-        // D2: Erasing or partitioning disks.
+        // D2: Erasing or partitioning disks (including APFS destructive ops).
         {
             Name: "diskutil-erase",
             Match: packs.And(
@@ -579,11 +682,17 @@ var systemPack = packs.Pack{
                     packs.ArgAt(0, "eraseVolume"),
                     packs.ArgAt(0, "partitionDisk"),
                     packs.ArgAt(0, "secureErase"),
+                    // APFS-specific destructive operations (MO-P0.2)
+                    packs.And(packs.ArgAt(0, "apfs"), packs.Or(
+                        packs.ArgAt(1, "deleteContainer"),
+                        packs.ArgAt(1, "deleteVolume"),
+                        packs.ArgAt(1, "resizeContainer"),
+                    )),
                 ),
             ),
             Severity:   guard.Critical,
             Confidence: guard.ConfidenceHigh,
-            Reason:     "Erasing or repartitioning a disk causes irreversible data loss",
+            Reason:     "Erasing, repartitioning, or deleting disk volumes causes irreversible data loss",
             Remediation: "Do not erase or repartition disks",
         },
 
@@ -597,11 +706,13 @@ var systemPack = packs.Pack{
                     packs.ArgAt(0, "unload"),
                     packs.ArgAt(0, "bootout"),
                     packs.ArgAt(0, "disable"),
+                    packs.ArgAt(0, "kickstart"), // force-restarts a service (MO-P3.4)
+                    packs.ArgAt(0, "kill"),       // kills a service process (MO-P3.4)
                 ),
             ),
             Severity:   guard.Critical,
             Confidence: guard.ConfidenceHigh,
-            Reason:     "Removing or disabling a launch service can break system functionality",
+            Reason:     "Removing, disabling, or killing a launch service can break system functionality",
             Remediation: "Do not modify macOS launch services",
         },
 
@@ -621,11 +732,30 @@ var systemPack = packs.Pack{
             Remediation: "Do not delete Time Machine backups",
         },
 
-        // D5: Modifying firmware variables.
+        // D5a: Clearing ALL NVRAM variables — extremely destructive.
+        // Separated from the general nvram-write pattern for clarity (MO-P1.1).
+        {
+            Name: "nvram-clear",
+            Match: packs.And(
+                packs.Name("nvram"),
+                packs.Flags("-c"),
+            ),
+            Severity:   guard.Critical,
+            Confidence: guard.ConfidenceHigh,
+            Reason:     "nvram -c clears ALL firmware variables — can affect boot behavior " +
+                "and potentially brick the system",
+            Remediation: "Do not clear NVRAM firmware variables",
+        },
+
+        // D5b: Writing firmware variables (key=value syntax).
+        // Uses ArgContentRegex to match the '=' sign that distinguishes writes
+        // from reads. `nvram boot-args` (no '=') is a read; `nvram boot-args="-v"`
+        // (with '=') is a write. (SE-P2.1)
         {
             Name: "nvram-write",
             Match: packs.And(
                 packs.Name("nvram"),
+                packs.ArgContentRegex(`=`),
                 packs.Not(packs.Or(
                     packs.Flags("-p"),     // print all
                     packs.Flags("-x"),     // xml output
@@ -636,6 +766,19 @@ var systemPack = packs.Pack{
             Confidence: guard.ConfidenceHigh,
             Reason:     "Modifying NVRAM firmware variables can affect boot behavior",
             Remediation: "Do not modify firmware variables",
+        },
+
+        // D5c: Deleting specific NVRAM variable.
+        {
+            Name: "nvram-delete",
+            Match: packs.And(
+                packs.Name("nvram"),
+                packs.Flags("-d"),
+            ),
+            Severity:   guard.Critical,
+            Confidence: guard.ConfidenceHigh,
+            Reason:     "Deleting NVRAM firmware variables can affect boot behavior",
+            Remediation: "Do not delete firmware variables",
         },
 
         // D6: Disabling Gatekeeper.
@@ -655,6 +798,18 @@ var systemPack = packs.Pack{
         },
 
         // D7: Deleting directory service entries (users/groups).
+        //
+        // KNOWN BUG (SE-P1.1/MO-P1.2): This pattern is BROKEN in v1.
+        // dscl uses dash-prefixed subcommands (`dscl . -delete /Users/foo`).
+        // The plan 01 parser decomposes `-delete` into individual short flags
+        // [-d, -e, -l, -t], removing it from cmd.Args. ArgContent("-delete")
+        // searches cmd.Args and will never find it.
+        //
+        // Fix requires plan 02 enhancement: RawArgContent matcher that searches
+        // cmd.RawArgs (pre-flag-decomposition). Tracked as future work.
+        //
+        // For now, this pattern is documented but non-functional. The test
+        // section includes SKIP markers for dscl tests.
         {
             Name: "dscl-delete",
             Match: packs.And(
@@ -662,7 +817,7 @@ var systemPack = packs.Pack{
                 packs.Or(
                     packs.ArgContent("-delete"),
                     packs.ArgContent("delete"),
-                    packs.ArgContent("-create"),  // creating users/groups is also risky
+                    packs.ArgContent("-create"),
                     packs.ArgContent("create"),
                 ),
             ),
@@ -758,6 +913,10 @@ func init() {
 **S2: osascript-finder-benign**:
 - `osascript -e 'tell application "Finder" to get name of every disk'` → safe
 - `osascript -e 'tell application "Finder" to open folder "Documents"'` → safe
+- `osascript -e 'tell application "Finder" to reveal' -e 'tell application "Messages" to send "hi"'` → NOT safe (S2 Not clause for Messages, MO-P0.1)
+- `osascript -e 'tell application "Finder" to get' -e 'tell application "Mail" to ...'` → NOT safe (S2 Not clause for Mail)
+- `osascript -e 'tell application "Finder" to open' -e 'tell application "System Events" to ...'` → NOT safe (S2 Not clause for System Events)
+- `osascript -e 'tell application "Finder" to reveal' -e 'tell application "Contacts" to ...'` → NOT safe (S2 Not clause for sensitive apps)
 
 **D1: osascript-send-message**:
 - `osascript -e 'tell application "Messages" to send "hello" to buddy "John"'` → Critical
@@ -781,6 +940,24 @@ func init() {
 
 **D6: automator-run**:
 - `automator workflow.workflow` → High
+- `automator --help` → no match (excluded by Not clause)
+- `automator --version` → no match (excluded by Not clause)
+
+**D7: osascript-finder-destructive**:
+- `osascript -e 'tell application "Finder" to delete file "x" of desktop'` → High
+- `osascript -e 'tell application "Finder" to empty trash'` → High
+- `osascript -e 'tell application "Finder" to move file "x" to trash'` → High
+
+**D8: open-terminal**:
+- `open -a Terminal` → High
+- `open -a iTerm` → High
+- `open -a Safari` → no match (not Terminal/iTerm)
+- `open README.md` → no match (no -a flag)
+
+**D9: osascript-jxa-catchall**:
+- `osascript -l JavaScript -e 'Application("Messages").send(...)'` → Medium
+- `osascript -l JavaScript -e 'Application("Finder").selection()'` → Medium
+- `osascript -e 'display dialog "hello"'` → no match (no -l JavaScript)
 
 ### 6.2 `macos.privacy` Tests
 
@@ -806,6 +983,8 @@ func init() {
 - `cat ~/Library/Mail/V10/MailData/Envelope\ Index` → High
 - `ls ~/Library/Application\ Support/AddressBook/` → High
 - `cat ~/Library/Group\ Containers/group.com.apple.notes/NoteStore.sqlite` → High
+- `sqlite3 ~/Pictures/Photos\ Library.photoslibrary/database/Photos.sqlite` → High (MO-P2.2)
+- `ls ~/Library/Calendars/` → High
 
 **D5: spotlight-search**:
 - `mdfind "tax return"` → Medium
@@ -821,37 +1000,58 @@ func init() {
 - `launchctl list` → safe
 - `launchctl print system` → safe
 
-**S3: diskutil-info**:
+**S3: nvram-read**:
+- `nvram -p` → safe (print all)
+- `nvram -x` → safe (XML output)
+- `nvram --print` → safe
+
+**S4: diskutil-info**:
 - `diskutil info disk0` → safe
 - `diskutil list` → safe
+
+**S4a: diskutil-apfs-list**:
+- `diskutil apfs list` → safe
+- `diskutil apfs deleteVolume disk2s1` → NOT safe (missing ArgAt(1, "list"))
 
 **D1: csrutil-disable**:
 - `csrutil disable` → Critical
 
-**D2: diskutil-erase**:
+**D2: diskutil-erase** (including apfs destructive):
 - `diskutil eraseDisk JHFS+ "Macintosh HD" disk0` → Critical
 - `diskutil eraseVolume APFS "Data" disk0s2` → Critical
 - `diskutil partitionDisk disk0 GPT JHFS+ "Disk" 100%` → Critical
+- `diskutil apfs deleteContainer disk3` → Critical (MO-P0.2)
+- `diskutil apfs deleteVolume disk3s2` → Critical (MO-P0.2)
+- `diskutil apfs resizeContainer disk3 0b` → Critical (MO-P0.2)
 
-**D3: launchctl-remove**:
+**D3: launchctl-remove** (including kickstart/kill):
 - `launchctl remove com.apple.service` → Critical
 - `launchctl unload /Library/LaunchDaemons/com.apple.service.plist` → Critical
 - `launchctl bootout system/com.apple.service` → Critical
+- `launchctl kickstart -k system/com.apple.service` → Critical (MO-P3.4)
+- `launchctl kill SIGKILL system/com.apple.service` → Critical (MO-P3.4)
 
 **D4: tmutil-delete**:
 - `tmutil delete /Volumes/Backup/2024-01-01-000000` → Critical
 - `tmutil deletelocalsnapshots 2024-01-01-000000` → Critical
 
-**D5: nvram-write**:
+**D5a: nvram-clear**:
+- `nvram -c` → Critical
+
+**D5b: nvram-write**:
 - `nvram boot-args="-v"` → Critical
-- `nvram -p` → no match (read-only print)
+- `nvram boot-args` → no match (read: no '=' in args)
+
+**D5c: nvram-delete**:
+- `nvram -d boot-args` → Critical
 
 **D6: spctl-disable**:
 - `spctl --master-disable` → Critical
 
-**D7: dscl-delete**:
-- `dscl . -delete /Users/testuser` → Critical
-- `dscl . -create /Users/newuser` → Critical
+**D7: dscl-delete** (SKIP — known broken, see §5.3 D7 comment):
+- `dscl . -delete /Users/testuser` → SHOULD be Critical, but pattern BROKEN in v1
+  (parser decomposes `-delete` into short flags; ArgContent never matches)
+- `dscl . -create /Users/newuser` → SHOULD be Critical, same issue
 
 **D8: fdesetup-disable**:
 - `fdesetup disable` → Critical
@@ -872,20 +1072,32 @@ func init() {
 
 ## 7. Test Infrastructure
 
-### 7.1 Build Tag Test Isolation
+### 7.1 Build Tag Test Strategy
 
-Tests must run with the `darwin` build tag. On CI (likely Linux), these tests
-should be skipped or run in a macOS CI environment. Use:
+**Requirement** (MO-P2.5): Pattern matching logic MUST be testable on all
+platforms (including Linux CI). The approach:
+
+1. **Pattern definitions** in always-built files (no build tags). All pack
+   structs, regex patterns, and matching logic go in files without
+   `//go:build darwin` constraints.
+
+2. **Registration only** gated by build tags. Only the `init()` functions
+   that register packs with the registry use `//go:build darwin`:
 
 ```go
 //go:build darwin
 
-package macos_test
+package macos
+
+func init() {
+    packs.DefaultRegistry.Register(communicationPack)
+    packs.DefaultRegistry.Register(privacyPack)
+    packs.DefaultRegistry.Register(systemPack)
+}
 ```
 
-Alternatively, test the matching logic without build tags by extracting pattern
-definitions into a separate internal file that is always built, with only the
-`init()` registration gated by build tags.
+3. **Tests** are always-built and test the pattern matching directly, without
+   depending on registry registration. This ensures full CI coverage on Linux.
 
 ### 7.2 osascript Content Variation Tests
 
@@ -896,7 +1108,7 @@ The AppleScript content regex should be tested against variations:
 - Case variations: `Tell Application "MESSAGES"` (regex is case-insensitive)
 - Multi-line scripts: `tell application "Messages"\nsend "hi"\nend tell`
 - JXA variant: `osascript -l JavaScript -e 'Application("Messages").send(...)'`
-  (different syntax — documented as known gap for v1)
+  (caught by D9 jxa-catchall at Medium; specific JXA patterns deferred to v2)
 
 ### 7.3 Cross-Pack Interaction with personal.files
 
@@ -911,83 +1123,316 @@ For example, `cat ~/Library/Messages/chat.db`:
 ## 8. Golden File Entries
 
 ```yaml
-# macos.communication pack
+# ===== macos.communication pack =====
+
+# S1: osascript-display (safe)
+- input: 'osascript -e ''display dialog "Hello World"'''
+  pack: macos.communication
+  # Safe — display only
+
+- input: 'osascript -e ''display notification "Build complete"'''
+  pack: macos.communication
+  # Safe — notification only
+
+- input: 'osascript -e ''display dialog "ok"'' -e ''tell application "Messages" to send "hi"'''
+  pack: macos.communication
+  pattern: osascript-send-message
+  severity: Critical
+  # Near-miss for S1: multi-tell with Messages
+
+# S2: osascript-finder-benign (safe)
+- input: 'osascript -e ''tell application "Finder" to get name of every disk'''
+  pack: macos.communication
+  # Safe — Finder read
+
+- input: 'osascript -e ''tell application "Finder" to reveal'' -e ''tell application "Messages" to send "x"'''
+  pack: macos.communication
+  pattern: osascript-send-message
+  severity: Critical
+  # Near-miss for S2: multi-tell with Messages (MO-P0.1)
+
+# D1: osascript-send-message (Critical)
 - input: 'osascript -e ''tell application "Messages" to send "hello" to buddy "John"'''
   pack: macos.communication
   pattern: osascript-send-message
   severity: Critical
 
-- input: 'osascript -e ''display dialog "Hello World"'''
+- input: 'osascript -e ''tell application "Messages" to get every chat'''
   pack: macos.communication
-  # Safe — display only
+  pattern: osascript-send-message
+  severity: Critical
 
+# D2: osascript-send-email (Critical)
+- input: 'osascript -e ''tell application "Mail" to make new outgoing message'''
+  pack: macos.communication
+  pattern: osascript-send-email
+  severity: Critical
+
+# D3: osascript-system-events (Critical)
+- input: 'osascript -e ''tell application "System Events" to keystroke "q" using command down'''
+  pack: macos.communication
+  pattern: osascript-system-events
+  severity: Critical
+
+# D4: osascript-sensitive-app (High)
+- input: 'osascript -e ''tell application "Contacts" to get every person'''
+  pack: macos.communication
+  pattern: osascript-sensitive-app
+  severity: High
+
+- input: 'osascript -e ''tell application "Safari" to open location "http://example.com"'''
+  pack: macos.communication
+  pattern: osascript-sensitive-app
+  severity: High
+
+# D5: shortcuts-run (High)
 - input: "shortcuts run 'My Shortcut'"
   pack: macos.communication
   pattern: shortcuts-run
   severity: High
 
-# macos.privacy pack
+- input: "shortcuts list"
+  # Near-miss: no "run" subcommand
+
+# D6: automator-run (High)
+- input: "automator workflow.workflow"
+  pack: macos.communication
+  pattern: automator-run
+  severity: High
+
+- input: "automator --help"
+  # Near-miss: excluded by Not clause
+
+# D7: osascript-finder-destructive (High)
+- input: 'osascript -e ''tell application "Finder" to delete file "x" of desktop'''
+  pack: macos.communication
+  pattern: osascript-finder-destructive
+  severity: High
+
+- input: 'osascript -e ''tell application "Finder" to empty trash'''
+  pack: macos.communication
+  pattern: osascript-finder-destructive
+  severity: High
+
+# D8: open-terminal (High)
+- input: "open -a Terminal"
+  pack: macos.communication
+  pattern: open-terminal
+  severity: High
+
+- input: "open -a Safari"
+  # Near-miss: not Terminal/iTerm
+
+# D9: osascript-jxa-catchall (Medium)
+- input: 'osascript -l JavaScript -e ''Application("Messages").send("hi")'''
+  pack: macos.communication
+  pattern: osascript-jxa-catchall
+  severity: Medium
+
+# ===== macos.privacy pack =====
+
+# S1: security-find-cert (safe)
+- input: "security find-certificate -a"
+  pack: macos.privacy
+  # Safe — certificate operation
+
+- input: "security verify-cert -c cert.pem"
+  pack: macos.privacy
+  # Safe — certificate verification
+
+# D1: keychain-read-password (Critical)
 - input: "security find-generic-password -s MyService"
   pack: macos.privacy
   pattern: keychain-read-password
   severity: Critical
 
+- input: "security find-internet-password -s example.com"
+  pack: macos.privacy
+  pattern: keychain-read-password
+  severity: Critical
+
+# D2: keychain-dump (Critical)
 - input: "security dump-keychain"
   pack: macos.privacy
   pattern: keychain-dump
   severity: Critical
 
+- input: "security export -t identities"
+  pack: macos.privacy
+  pattern: keychain-dump
+  severity: Critical
+
+# D3: messages-db-access (High)
 - input: 'sqlite3 ~/Library/Messages/chat.db "SELECT * FROM message"'
   pack: macos.privacy
   pattern: messages-db-access
   severity: High
 
-- input: "security find-certificate -a"
+- input: "cat ~/Library/Messages/chat.db"
   pack: macos.privacy
-  # Safe — certificate operation
+  pattern: messages-db-access
+  severity: High
 
-# macos.system pack
+# D4: private-data-access (High)
+- input: "sqlite3 ~/Library/Safari/History.db"
+  pack: macos.privacy
+  pattern: private-data-access
+  severity: High
+
+- input: "ls ~/Library/Application Support/AddressBook/"
+  pack: macos.privacy
+  pattern: private-data-access
+  severity: High
+
+- input: "sqlite3 ~/Pictures/Photos Library.photoslibrary/database/Photos.sqlite"
+  pack: macos.privacy
+  pattern: private-data-access
+  severity: High
+
+# D5: spotlight-search (Medium)
+- input: 'mdfind "tax return"'
+  pack: macos.privacy
+  pattern: spotlight-search
+  severity: Medium
+
+- input: "mdfind -name passwords.txt"
+  pack: macos.privacy
+  pattern: spotlight-search
+  severity: Medium
+
+# ===== macos.system pack =====
+
+# S1: defaults-read (safe)
+- input: "defaults read com.apple.finder"
+  pack: macos.system
+  # Safe — read only
+
+# S2: launchctl-list (safe)
+- input: "launchctl list"
+  pack: macos.system
+  # Safe — listing services
+
+- input: "launchctl print system"
+  pack: macos.system
+  # Safe — printing service info
+
+# S3: nvram-read (safe)
+- input: "nvram -p"
+  pack: macos.system
+  # Safe — print all
+
+# S4: diskutil-info (safe)
+- input: "diskutil info disk0"
+  pack: macos.system
+  # Safe — disk info
+
+- input: "diskutil list"
+  pack: macos.system
+  # Safe — disk listing
+
+# S4a: diskutil-apfs-list (safe)
+- input: "diskutil apfs list"
+  pack: macos.system
+  # Safe — APFS listing only
+
+# D1: csrutil-disable (Critical)
 - input: "csrutil disable"
   pack: macos.system
   pattern: csrutil-disable
   severity: Critical
 
+# D2: diskutil-erase (Critical)
 - input: "diskutil eraseDisk JHFS+ 'Macintosh HD' disk0"
   pack: macos.system
   pattern: diskutil-erase
   severity: Critical
 
+- input: "diskutil apfs deleteVolume disk2s1"
+  pack: macos.system
+  pattern: diskutil-erase
+  severity: Critical
+
+- input: "diskutil apfs deleteContainer disk2"
+  pack: macos.system
+  pattern: diskutil-erase
+  severity: Critical
+
+# D3: launchctl-remove (Critical)
+- input: "launchctl remove com.apple.service"
+  pack: macos.system
+  pattern: launchctl-remove
+  severity: Critical
+
+- input: "launchctl kickstart -k system/com.apple.service"
+  pack: macos.system
+  pattern: launchctl-remove
+  severity: Critical
+
+# D5a: nvram-clear (Critical)
+- input: "nvram -c"
+  pack: macos.system
+  pattern: nvram-clear
+  severity: Critical
+
+# D5b: nvram-write (Critical)
+- input: 'nvram boot-args="-v"'
+  pack: macos.system
+  pattern: nvram-write
+  severity: Critical
+
+- input: "nvram boot-args"
+  # Near-miss: read (no '='), not a write
+
+# D6: spctl-disable (Critical)
+- input: "spctl --master-disable"
+  pack: macos.system
+  pattern: spctl-disable
+  severity: Critical
+
+# D9: defaults-delete (High)
 - input: "defaults delete com.apple.finder"
   pack: macos.system
   pattern: defaults-delete
   severity: High
 
-- input: "defaults read com.apple.finder"
+# D10: defaults-write (High)
+- input: "defaults write com.apple.dock autohide -bool true"
   pack: macos.system
-  # Safe — read only
+  pattern: defaults-write
+  severity: High
 
-- input: "launchctl list"
+# D11: systemsetup-modify (High)
+- input: "systemsetup -settimezone America/New_York"
   pack: macos.system
-  # Safe — listing services
+  pattern: systemsetup-modify
+  severity: High
+
+- input: "systemsetup -gettimezone"
+  # Near-miss: getter flag, safe
 ```
 
 ---
 
-## 9. Open Questions
+## 9. Open Questions & Known Limitations
 
-1. **JXA (JavaScript for Automation)**: `osascript -l JavaScript -e '...'` uses
-   JavaScript syntax to control apps. The `tell application` regex won't match
-   JXA's `Application("Messages")` syntax. Recommendation: add a separate regex
-   for JXA `Application("...")` calls in v2.
+1. **JXA specific app patterns (v2)**: The v1 JXA catch-all (D9) flags all
+   `osascript -l JavaScript` at Medium. For v2, add specific JXA regexes
+   matching `Application("Messages")`, `Application("Mail")`, etc. to detect
+   at the same severity as their AppleScript equivalents:
+   ```
+   (?i)Application\(\s*"(?:Messages|Mail|System Events|Contacts|Calendar)"
+   ```
 
 2. **osascript script files**: `osascript myscript.scpt` runs a script from a
    file. We cannot analyze the file content statically. Recommendation: flag
    all `osascript <file>` invocations at Medium as a precaution, since the
    script could target any app.
 
-3. **`open -a` command**: `open -a Messages` opens an app. This is lower risk
-   than `osascript` (it doesn't automate the app), but could be unexpected.
-   Recommendation: add to v2 if users report false negatives.
+3. **`open -a` for non-terminal apps**: v1 covers `open -a Terminal` and
+   `open -a iTerm` as hook bypass vectors. Other apps (`open -a Messages`,
+   `open -a Mail`) are lower risk since they don't provide shell access.
+   Recommendation: add broader `open -a` coverage in v2 if users report
+   false negatives.
 
 4. **`say` command**: `say "hello"` uses text-to-speech. Harmless but could be
    surprising. Recommendation: out of scope — not a privacy or safety concern.
@@ -996,3 +1441,52 @@ For example, `cat ~/Library/Messages/chat.db`:
    user-domain writes (e.g., `com.apple.dock`) be Medium while system-domain
    writes are High? Recommendation: keep all at High for v1 simplicity; refine
    granularity in v2 if false-positive rate is too high.
+
+6. **`dscl` detection broken** (SE-P1.1/MO-P1.2): The `dscl . -delete` and
+   `dscl . -create` patterns are non-functional in v1 because the plan 01
+   parser decomposes `-delete` into individual short flags `[-d, -e, -l, -t]`,
+   removing it from `cmd.Args`. `ArgContent("-delete")` searches `cmd.Args`
+   and will never find it. **Required fix**: Add a `RawArgContent` matcher to
+   plan 02 that searches `cmd.RawArgs` (pre-flag-decomposition tokens). This
+   would also benefit other commands that use dash-prefixed subcommands.
+   Create a tracking bead for this enhancement.
+
+7. **mdfind severity refinement (v2)** (MO-P2.4): Currently all `mdfind`
+   invocations are Medium. Consider splitting in v2: scoped searches
+   (`-onlyin <dir>` or `-name`) at Medium, unscoped content searches at
+   High (since they can search ALL indexed personal file contents).
+
+8. **Photos Library delegation**: `~/Pictures/Photos Library.photoslibrary/`
+   is now included in macosPrivateDataRe. Note that the `personal.files` pack
+   also catches this path via the Pictures keyword at Medium severity.
+   The macos.privacy D4 pattern at High takes precedence.
+
+---
+
+## Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-alt-reviewer | P0 | MO-P0.1: S2 finder-benign shadows D1-D4 for multi-tell scripts | Incorporated | Added Not clauses to S2 for Messages, Mail, System Events, sensitive apps; also fixed S1 missing sensitive apps Not |
+| 2 | dcg-alt-reviewer | P0 | MO-P0.2: S3 diskutil apfs matches destructive subcommands as safe | Incorporated | Removed "apfs" from S3; added S4a for "diskutil apfs list" with ArgAt(1); added apfs destructive ops to D2 |
+| 3 | dcg-alt-reviewer | P1 | MO-P1.1: nvram -c caught only indirectly | Incorporated | Added explicit nvram-clear, nvram-write (with = check), nvram-delete patterns; added nvram-read safe pattern |
+| 4 | dcg-alt-reviewer | P1 | MO-P1.2: dscl ArgContent vs ArgAt | Incorporated | Documented as known broken — parser decomposes -delete into short flags; requires plan 02 RawArgContent matcher; SKIP in tests |
+| 5 | dcg-alt-reviewer | P1 | MO-P1.3: JXA bypass evades all patterns | Incorporated | Added D9 osascript-jxa-catchall at Medium for v1; specific JXA patterns deferred to v2 in §9 Q1 |
+| 6 | dcg-alt-reviewer | P2 | MO-P2.1: automator matches bare command name | Incorporated | Added Not clauses for --help, -h, --version |
+| 7 | dcg-alt-reviewer | P2 | MO-P2.2: Photos Library path missing from regex | Incorporated | Added ~/Pictures/Photos Library.photoslibrary/ to macosPrivateDataRe |
+| 8 | dcg-alt-reviewer | P2 | MO-P2.3: sqlite3 keyword missing from privacy pack | Incorporated | Added sqlite3, Safari, Mail, Calendars, Photos Library to Keywords |
+| 9 | dcg-alt-reviewer | P2 | MO-P2.4: mdfind severity too low for content search | Not Incorporated | Medium appropriate for v1 catch-all; documented as v2 refinement in §9 Q7 |
+| 10 | dcg-alt-reviewer | P2 | MO-P2.5: build tag CI coverage gap | Incorporated | Made pattern extraction a requirement; only init() gated by build tags |
+| 11 | dcg-alt-reviewer | P3 | MO-P3.1: sparse golden files | Incorporated | Expanded to 55+ entries with match/near-miss/safe variants |
+| 12 | dcg-alt-reviewer | P3 | MO-P3.2: open -a Terminal as hook bypass | Incorporated | Added D8 open-terminal pattern at High for Terminal and iTerm |
+| 13 | dcg-alt-reviewer | P3 | MO-P3.3: no multi-tell S2 test cases | Incorporated | Added S2 + D1/D2/D3/D4 combined test cases |
+| 14 | dcg-alt-reviewer | P3 | MO-P3.4: launchctl kickstart/kill missing | Incorporated | Added to D3 Or clause |
+| 15 | dcg-reviewer | P1 | SE-P1.1: dscl parser decomposes -delete into flags | Incorporated | Same fix as MO-P1.2 — documented as known broken, requires RawArgContent matcher |
+| 16 | dcg-reviewer | P1 | SE-P1.2: privacy keywords missing Safari, Mail, Calendars | Incorporated | Same fix as MO-P2.3/MO-P2.8 — keywords expanded |
+| 17 | dcg-reviewer | P1 | SE-P1.3: diskutil apfs safe shadows destructive | Incorporated | Same fix as MO-P0.2 |
+| 18 | dcg-reviewer | P2 | SE-P2.1: nvram reads flagged at Critical | Incorporated | Added nvram-read safe pattern; nvram-write now requires '=' in args |
+| 19 | dcg-reviewer | P2 | SE-P2.2: Finder destructive osascript undetected | Incorporated | Added D7 osascript-finder-destructive for delete/empty trash/move to trash |
+| 20 | dcg-reviewer | P2 | SE-P2.3: automator --help flagged | Incorporated | Same fix as MO-P2.1 |
+| 21 | dcg-reviewer | P2 | SE-P2.4: diagram D-numbers don't match code | Incorporated | Diagram updated to use pattern names instead of D-numbers |
+| 22 | dcg-reviewer | P3 | SE-P3.1: sqlite3 keyword missing (dup of SE-P1.2) | Incorporated | Covered by SE-P1.2 fix |
+| 23 | dcg-reviewer | P3 | SE-P3.2: osascript docs misleading about flag value | Incorporated | Updated §4.1 to explain parser behavior accurately |
