@@ -345,6 +345,10 @@ ansible all -m stat -a 'path=/etc'                  → Allow
 ansible all -m debug -a 'var=hostname'              → Allow
 ansible-playbook site.yml --syntax-check            → Allow
 ansible-playbook site.yml --list-tasks              → Allow
+
+# Safe-pattern shadowing regression (R3 P1 fix)
+ansible all -m shell -a 'rm -rf /tmp/setup'         → Deny/Critical (safe token in -a must NOT short-circuit)
+ansible all -m setup -a 'rm -rf /tmp/data'           → Allow (genuine safe module, -a content irrelevant)
 ```
 
 ### E4: cloud.aws Pattern Matrix (30 cases)
@@ -1117,3 +1121,9 @@ Manually evaluate AWS CLI commands not covered in v1 to prioritize v2:
 | 1 | domain-packs-r2 | P2 | Missing diagnostic test for Ansible flag-value content matching | Incorporated | Added P8 property test for `-m`/`-a`/`--extra-vars` flag-value matching contract |
 | 2 | domain-packs-r2 | P2 | Missing `terraform import` expected-behavior case | Incorporated | Added explicit E1 case as Ask/Indeterminate in current v1 behavior |
 | 3 | domain-packs-r2 | P3 | SEC3 name implied escalation behavior while testing static preconditions | Incorporated | Renamed SEC3 heading and function to preconditions wording |
+
+## Round 3 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-reviewer | P2 | Missing regression test for ansible safe-pattern shadowing edge case | Incorporated | Added E3 regression cases: `-m shell -a 'rm /tmp/setup'` → Deny/Critical + `-m setup -a 'rm /tmp/data'` → Allow |

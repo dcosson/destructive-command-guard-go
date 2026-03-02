@@ -512,7 +512,15 @@ func TestOracleSelfComparison(t *testing.T) {
             // Must be identical — same binary, same inputs
             assert.Equal(t, goResult.Decision, apiResult.Decision,
                 "self-comparison divergence for %q", entry.Command)
-            assert.Equal(t, goResult.Severity, apiResult.Severity,
+            // Severity lives under Assessment per plan 04 guard.Result contract
+            var goSev, apiSev string
+            if goResult.Assessment != nil {
+                goSev = goResult.Assessment.Severity
+            }
+            if apiResult.Assessment != nil {
+                apiSev = apiResult.Assessment.Severity
+            }
+            assert.Equal(t, goSev, apiSev,
                 "self-comparison severity divergence for %q", entry.Command)
         })
     }
@@ -868,3 +876,9 @@ The plan 05 test harness is complete when:
 | # | Reviewer | Severity | Summary | Disposition | Notes |
 |---|----------|----------|---------|-------------|-------|
 | 1 | dcg-reviewer | P1 | Self-comparison O1 uses runUpstream which calls 'check' but Go CLI uses 'test' | Incorporated | O1 rewritten to use guard.Evaluate directly for both sides; runUpstream reserved for Rust binary only |
+
+## Round 3 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-coder-1 | P2 | O1 self-comparison uses goResult.Severity instead of Assessment.Severity | Incorporated | O1 snippet updated to compare severity via Assessment.Severity with nil-safe handling per plan 04 guard.Result contract |

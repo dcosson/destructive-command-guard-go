@@ -683,12 +683,16 @@ var ansiblePack = packs.Pack{
                 // "command" module intentionally excluded — it can execute
                 // arbitrary commands across fleets and cannot be safely
                 // allowlisted with a blocklist approach. See R1 P0-2.
+                // Anchored regex ensures exact module-name match.
+                // Without anchors, safe tokens in -a payloads could
+                // satisfy the safe matcher and short-circuit destructive
+                // detection (e.g., `ansible -m shell -a 'rm /tmp/setup'`).
                 packs.Or(
-                    packs.SQLContent("setup"),
-                    packs.SQLContent("gather_facts"),
-                    packs.SQLContent("ping"),
-                    packs.SQLContent("debug"),
-                    packs.SQLContent("stat"),
+                    packs.SQLContentRegex("^setup$"),
+                    packs.SQLContentRegex("^gather_facts$"),
+                    packs.SQLContentRegex("^ping$"),
+                    packs.SQLContentRegex("^debug$"),
+                    packs.SQLContentRegex("^stat$"),
                 ),
             ),
         },
@@ -871,8 +875,17 @@ var ansiblePack = packs.Pack{
   (e.g., `-m file -a 'state=absent'`). In extracted commands, `file`
   is typically the value of `-m`, and `state=absent` is typically the
   value of `-a` or `--extra-vars`. These patterns intentionally use
-  `SQLContent(...)` (flag-value-aware) rather than plain `ArgContent(...)`
-  so module/argument content is detected when carried in flags.
+  `SQLContent(...)` / `SQLContentRegex(...)` (flag-value-aware) rather
+  than plain `ArgContent(...)` so module/argument content is detected
+  when carried in flags.
+- **Safe-module anchoring requirement**: Safe-module matchers (S1) MUST
+  use anchored regex (`^module_name$`) via `SQLContentRegex(...)` to
+  prevent safe tokens appearing inside `-a` payloads from satisfying
+  the safe matcher. For example, `ansible -m shell -a 'rm /tmp/setup'`
+  must NOT match `ansible-gather-safe` — the unanchored substring
+  "setup" in the `-a` payload would otherwise short-circuit destructive
+  detection. Destructive matchers use unanchored `SQLContent(...)` which
+  may over-classify (acceptable) but never under-classify.
 
 ---
 
@@ -2271,3 +2284,9 @@ establishes the auto-approve severity split pattern that Pulumi also uses.
 | 2 | domain-packs-r2 | P2 | §5.3.1 incorrectly claimed ArgContent matched flag values | Incorporated | Rewrote §5.3.1 to document SQLContent-based flag-value matching contract |
 | 3 | domain-packs-r2 | P2 | terraform import note said safe while patterns were no-match | Incorporated | Updated §5.1.1 to explicitly classify current behavior as Indeterminate |
 | 4 | domain-packs-r2 | P3 | workspace-delete vs stack-rm severity asymmetry lacked rationale | Incorporated | Added explicit rationale note contrasting Terraform workspace delete vs Pulumi stack rm |
+
+## Round 3 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-reviewer | P1 | Ansible safe-module matcher can short-circuit destructive commands via unanchored SQLContent | Incorporated | S1 safe-module patterns converted from `SQLContent(...)` to anchored `SQLContentRegex("^...$")`; §5.3.1 updated with safe-module anchoring requirement |

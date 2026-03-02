@@ -1027,3 +1027,7 @@ Implementation of 04 (public API and CLI) is complete when:
 | # | Reviewer | Severity | Summary | Disposition | Notes |
 |---|----------|----------|---------|-------------|-------|
 | 1 | dcg-reviewer | P1 | MQ4 expects missing config to work normally but doc says explicit missing is fatal | Incorporated | MQ4 updated to expect fatal error (non-zero exit) for DCG_CONFIG=/nonexistent, matching SEC3/F2 contract |
+
+## Round 3 Review Disposition
+
+No new findings.
