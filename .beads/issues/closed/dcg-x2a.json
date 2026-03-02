@@ -1,0 +1,44 @@
+{
+  "id": "dcg-x2a",
+  "title": "Draft plan 03c-packs-infra-cloud",
+  "description": "Draft the detailed plan doc for 03c-packs-infra-cloud using /plan-draft. Covers: infrastructure.terraform, infrastructure.pulumi, infrastructure.ansible, cloud.aws, cloud.gcp, cloud.azure — IaC and cloud CLI destructive patterns, all env-sensitive.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "dependencies": [
+    {
+      "id": "dcg-tcx",
+      "type": "blocks"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-htc",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg-go"
+  ],
+  "assignee": "dcg-writer",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Plan 03c-packs-infra-cloud drafted and committed at 9915494. Test harness included. Ready for review.",
+      "created_at": "2026-03-01T01:11:24.537506-08:00"
+    },
+    {
+      "id": 2,
+      "author": "Danny Cosson",
+      "text": "R1 review incorporation complete at 417224d. 33 findings (27 incorporated, 6 not incorporated). Plan and test harness updated. 17 safe + 58 destructive patterns, 132 golden entries.",
+      "created_at": "2026-03-01T01:53:23.835206-08:00"
+    }
+  ],
+  "created_at": "2026-02-28T20:50:05.934682-08:00",
+  "updated_at": "2026-03-01T01:53:38.248746-08:00",
+  "closed_at": "2026-03-01T01:53:38.248746-08:00",
+  "close_reason": "Closed"
+}

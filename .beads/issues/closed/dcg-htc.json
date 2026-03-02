@@ -1,0 +1,54 @@
+{
+  "id": "dcg-htc",
+  "title": "Draft plan 05-testing-and-benchmarks",
+  "description": "Draft the detailed plan doc for 05-testing-and-benchmarks using /plan-draft. Covers: benchmark suite, comparison tests against upstream Rust version, fuzz testing, mutation testing harness, golden file corpus expansion to 500+ commands, grammar-derived coverage analysis, end-to-end tests with real-world command samples, performance profiling and optimization.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "dependencies": [
+    {
+      "id": "dcg-hdp",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-4ir",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-x2a",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-wfn",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-d1d",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg-go"
+  ],
+  "assignee": "dcg-writer",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Plan 05-testing-and-benchmarks drafted. Plan doc at 7dc1c8f, test harness at 70c9e99. Ready for review.",
+      "created_at": "2026-03-01T04:37:08.659879-08:00"
+    },
+    {
+      "id": 2,
+      "author": "Danny Cosson",
+      "text": "R1 reviews incorporated at 952134e. 28 findings (2 P0, 7 P1, 10 P2, 9 P3), 27 incorporated, 1 not incorporated. Both reviewers confirmed. This is the final plan.",
+      "created_at": "2026-03-01T05:33:24.717061-08:00"
+    }
+  ],
+  "created_at": "2026-02-28T20:50:13.353176-08:00",
+  "updated_at": "2026-03-01T05:33:31.927761-08:00",
+  "closed_at": "2026-03-01T05:33:25.370003-08:00",
+  "close_reason": "Closed"
+}

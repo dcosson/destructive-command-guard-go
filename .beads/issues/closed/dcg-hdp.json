@@ -1,0 +1,44 @@
+{
+  "id": "dcg-hdp",
+  "title": "Draft plan 04-api-and-cli",
+  "description": "Draft the detailed plan doc for 04-api-and-cli using /plan-draft. Covers: guard package public API (Evaluate, Result, Option types), CLI binary (hook mode for Claude Code JSON protocol, test mode, packs mode), config file loading (YAML), integration tests exercising the full pipeline.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "dependencies": [
+    {
+      "id": "dcg-tcx",
+      "type": "blocks"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-htc",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg-go"
+  ],
+  "assignee": "dcg-writer",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Plan 04-api-and-cli drafted. Plan doc at 972242c, test harness at 051795f. Ready for review.",
+      "created_at": "2026-03-01T03:50:31.17571-08:00"
+    },
+    {
+      "id": 2,
+      "author": "Danny Cosson",
+      "text": "Round 1 reviews incorporated at 8b86f7f. 28 findings from 2 reviewers — 25 incorporated, 3 not incorporated. Both reviewers confirmed dispositions. Ready to close.",
+      "created_at": "2026-03-01T04:20:27.525222-08:00"
+    }
+  ],
+  "created_at": "2026-02-28T20:50:10.675616-08:00",
+  "updated_at": "2026-03-01T04:26:55.720431-08:00",
+  "closed_at": "2026-03-01T04:20:33.598203-08:00",
+  "close_reason": "Closed"
+}

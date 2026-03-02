@@ -1,0 +1,45 @@
+{
+  "id": "dcg-tcx",
+  "title": "Draft plan 03a-packs-core",
+  "description": "Draft the detailed plan doc for 03a-packs-core using /plan-draft. Covers: core.git and core.filesystem packs — the most important packs and the template for all others. Includes safe patterns and destructive patterns with full test coverage. These establish the pattern that 03b-03e will follow.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "dependencies": [
+    {
+      "id": "dcg-oqp",
+      "type": "blocks"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-4ir",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-x2a",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-wfn",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-d1d",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-hdp",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg-go"
+  ],
+  "created_at": "2026-02-28T20:50:02.768173-08:00",
+  "updated_at": "2026-02-28T23:45:20.096484-08:00",
+  "closed_at": "2026-02-28T23:45:20.096484-08:00",
+  "close_reason": "Closed"
+}
