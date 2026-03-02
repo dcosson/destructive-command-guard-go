@@ -951,9 +951,10 @@ echo 'blocklist: ["rm *"]' > /tmp/test-config.yaml
 DCG_CONFIG=/tmp/test-config.yaml dcg-go test "rm -rf /"
 # Expected: Decision: Deny (blocklist match)
 
-# Test with missing config
+# Test with explicit missing config — must be fatal (non-zero exit)
 DCG_CONFIG=/nonexistent dcg-go test "git push --force"
-# Expected: works normally with defaults
+# Expected: fatal error (non-zero exit code), NOT defaults fallback
+# Per SEC3/F2: explicit DCG_CONFIG pointing to nonexistent path is fatal
 ```
 
 ---
@@ -1008,7 +1009,7 @@ Implementation of 04 (public API and CLI) is complete when:
 
 ---
 
-## Review Disposition
+## Round 1 Review Disposition
 
 | # | Reviewer | Severity | Summary | Disposition | Notes |
 |---|----------|----------|---------|-------------|-------|
@@ -1020,3 +1021,9 @@ Implementation of 04 (public API and CLI) is complete when:
 | 6 | dcg-reviewer | P1 | WithPacks include list test | Incorporated | Exit criteria #15 added |
 | 7 | dcg-reviewer | P2 | Multi-match compound test | Incorporated | Exit criteria #16 added |
 | 8 | N/A | N/A | Exit criteria expanded from 12 to 16 | Incorporated | Covers all new review-driven tests |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-reviewer | P1 | MQ4 expects missing config to work normally but doc says explicit missing is fatal | Incorporated | MQ4 updated to expect fatal error (non-zero exit) for DCG_CONFIG=/nonexistent, matching SEC3/F2 contract |
