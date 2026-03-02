@@ -16,9 +16,8 @@ that downstream matching (Batch 2) operates on.
 
 **Scope**:
 
-1. **Grammar export from tree-sitter-go** — Move grammars from
-   `internal/testgrammars/` to public `grammars/` in the tree-sitter-go repo
-   (or vendor as fallback per D6)
+1. **Import tree-sitter-go language packages** — Use public `languages/<lang>/`
+   packages from the tree-sitter-go repo (grammars are now public)
 2. **Bash parsing wrapper** — `sync.Pool`-backed parser that calls tree-sitter
 3. **AST command extraction** — Walk bash AST to extract `simple_command` nodes
    into `ExtractedCommand` structs
@@ -78,25 +77,23 @@ graph TB
 
     subgraph "tree-sitter-go (external)"
         TSParser["parser.Parser"]
-        BashGrammar["grammars/bash"]
-        BashScanner["scanners/bash"]
-        PythonGrammar["grammars/python"]
-        RubyGrammar["grammars/ruby"]
-        JSGrammar["grammars/javascript"]
+        BashLang["languages/bash"]
+        PythonLang["languages/python"]
+        RubyLang["languages/ruby"]
+        JSLang["languages/javascript"]
     end
 
     BashParser -->|"ParseString(ctx, []byte)"| TSParser
-    TSParser --> BashGrammar
-    TSParser --> BashScanner
+    TSParser --> BashLang
     BashParser -->|"AST root node"| Extractor
     Extractor -->|"walk simple_command"| Types
     Extractor --> Normalizer
     Extractor --> Dataflow
     Extractor -->|"detected inline scripts"| InlineDetector
     InlineDetector -->|"re-parse with language grammar"| TSParser
-    InlineDetector --> PythonGrammar
-    InlineDetector --> RubyGrammar
-    InlineDetector --> JSGrammar
+    InlineDetector --> PythonLang
+    InlineDetector --> RubyLang
+    InlineDetector --> JSLang
 ```
 
 ---
@@ -169,100 +166,83 @@ parsing (bounded by max depth).
 **External imports**:
 
 ```
-github.com/treesitter-go/treesitter/parser      → parser.NewParser(), parser.Parser
-github.com/treesitter-go/treesitter/grammars/bash    → bash.BashLanguage()
-github.com/treesitter-go/treesitter/scanners/bash    → bashscanner.New
-github.com/treesitter-go/treesitter/grammars/python  → python.PythonLanguage()
-github.com/treesitter-go/treesitter/scanners/python  → pythonscanner.New
-github.com/treesitter-go/treesitter/grammars/ruby    → ruby.RubyLanguage()
-...etc for each supported inline language
+github.com/treesitter-go/treesitter/parser            → parser.NewParser(), parser.Parser
+github.com/treesitter-go/treesitter/languages/bash     → bash.Language() *ts.Language
+github.com/treesitter-go/treesitter/languages/python   → python.Language() *ts.Language
+github.com/treesitter-go/treesitter/languages/ruby     → ruby.Language() *ts.Language
+github.com/treesitter-go/treesitter/languages/javascript → javascript.Language() *ts.Language
+github.com/treesitter-go/treesitter/languages/perl     → perl.Language() *ts.Language
+github.com/treesitter-go/treesitter/languages/lua      → lua.Language() *ts.Language
 ```
+
+Each `Language()` function returns a fully-configured `*ts.Language` with the
+grammar tables and external scanner already wired together internally. There is
+no need to separately import scanner packages or set `NewExternalScanner`.
 
 ---
 
-## 5. External Dependency: Grammar Export from tree-sitter-go
+## 5. External Dependency: tree-sitter-go Language Packages
 
 ### Current State
 
-Tree-sitter-go has grammars in `internal/testgrammars/<lang>/language.go`.
-These are generated files containing parse tables, lex functions, and symbol
-definitions. They are `internal` and cannot be imported by external modules.
-
-Scanners are already public at `scanners/<lang>/scanner.go`.
-
-### Required Change
-
-Move grammar packages from `internal/testgrammars/` to public `grammars/`:
+Tree-sitter-go now provides public language packages at `languages/<lang>/`.
+Each package exports a `Language()` function that returns a fully-configured
+`*ts.Language` with parse tables, lex functions, symbol definitions, and
+external scanner already wired together internally.
 
 ```
 tree-sitter-go/
-├── grammars/
-│   ├── bash/language.go       ← moved from internal/testgrammars/bash/
-│   ├── python/language.go     ← moved from internal/testgrammars/python/
-│   ├── ruby/language.go       ← moved from internal/testgrammars/ruby/
-│   ├── javascript/language.go ← moved from internal/testgrammars/javascript/
+├── languages/
+│   ├── bash/language.go         → bash.Language() *ts.Language
+│   ├── python/language.go       → python.Language() *ts.Language
+│   ├── ruby/language.go         → ruby.Language() *ts.Language
+│   ├── javascript/language.go   → javascript.Language() *ts.Language
+│   ├── perl/language.go         → perl.Language() *ts.Language
+│   ├── lua/language.go          → lua.Language() *ts.Language
+│   ├── golang/language.go       → golang.Language() *ts.Language
+│   ├── rust/language.go         → rust.Language() *ts.Language
+│   ├── c/language.go            → c.Language() *ts.Language
+│   ├── cpp/language.go          → cpp.Language() *ts.Language
+│   ├── typescript/language.go   → typescript.Language() *ts.Language
+│   ├── jsx/language.go          → jsx.Language() *ts.Language
+│   ├── tsx/language.go          → tsx.Language() *ts.Language
+│   ├── java/language.go         → java.Language() *ts.Language
+│   ├── html/language.go         → html.Language() *ts.Language
+│   ├── css/language.go          → css.Language() *ts.Language
+│   ├── json/language.go         → json.Language() *ts.Language
 │   └── ...
-├── scanners/                  ← already public, no change needed
-│   ├── bash/scanner.go
-│   ├── python/scanner.go
-│   └── ...
-└── internal/testgrammars/     ← keep for now, update tests to import from grammars/
+├── parser/                      → parser.NewParser(), parser.Parser
+├── internal/grammars/<lang>/    → internal grammar tables (not imported directly)
+├── internal/scanners/<lang>/    → internal scanner impls (wired by Language())
+└── internal/core/               → internal types
 ```
 
-Each grammar file currently imports `github.com/treesitter-go/treesitter/internal/core`
-for the `core.Symbol` type. The grammar export requires either:
-
-- (a) Moving the `Symbol` type to a public package, or
-- (b) Having the `grammars/` package re-define the symbol type locally
-
-Option (a) is cleaner. The `internal/core` package likely just defines `Symbol`
-as a uint16. A minimal public `core` or `types` package that exports `Symbol`
-would unblock the grammar export with minimal API surface.
-
-### Fallback: Temporary Vendoring (D6)
-
-If the tree-sitter-go export is delayed, we vendor grammar data directly:
-
-```
-destructive-command-guard-go/
-├── internal/
-│   └── vendored_grammars/
-│       ├── bash/language.go       ← copied from tree-sitter-go
-│       ├── python/language.go
-│       └── ...
-```
-
-The vendored copy would need import path adjustments for the `core.Symbol`
-type. This is a stopgap — the proper import replaces it once available.
-
-**Implementation task**: The grammar export is tracked as part of this plan's
-implementation. The first task is to make the tree-sitter-go change, the
-fallback is exercised only if that's blocked.
+No vendoring or grammar export is needed — languages are public and ready to
+import. Grammars and scanners remain internal implementation details; the
+`Language()` function is the only public entry point per language.
 
 ### Interface Contract
 
-DCG imports grammars like:
+DCG imports languages like:
 
 ```go
 import (
-    tsparser "github.com/treesitter-go/treesitter/parser"
-    bashgrammar "github.com/treesitter-go/treesitter/grammars/bash"
-    bashscanner "github.com/treesitter-go/treesitter/scanners/bash"
+    "github.com/treesitter-go/treesitter/parser"
+    "github.com/treesitter-go/treesitter/languages/bash"
 )
 
-func newBashParser() *tsparser.Parser {
-    lang := bashgrammar.BashLanguage()
-    lang.NewExternalScanner = bashscanner.New
-    p := tsparser.NewParser()
-    p.SetLanguage(lang)
+func newBashParser() *parser.Parser {
+    p := parser.NewParser()
+    p.SetLanguage(bash.Language())
     return p
 }
 ```
 
-The grammar export must preserve:
-- `BashLanguage() *language.Language` — returns fully populated language struct
-- All symbol constants (e.g., `SymSimpleCommand`, `SymPipeline`, etc.)
-- Compatible with `scanners/bash.New` as `ExternalScannerFactory`
+The `Language()` function returns a `*ts.Language` that encapsulates:
+- Parse tables (states, transitions, symbol metadata)
+- Lex functions (keyword matching, token recognition)
+- External scanner (e.g., bash heredoc/glob handling) — wired internally
+- All symbol constants accessible from the language object
 
 ---
 
@@ -339,9 +319,8 @@ import (
     "fmt"
     "sync"
 
-    tsparser "github.com/treesitter-go/treesitter/parser"
-    bashgrammar "github.com/treesitter-go/treesitter/grammars/bash"
-    bashscanner "github.com/treesitter-go/treesitter/scanners/bash"
+    "github.com/treesitter-go/treesitter/languages/bash"
+    "github.com/treesitter-go/treesitter/parser"
 )
 
 // MaxInputSize is the maximum command string length we'll parse.
@@ -366,11 +345,9 @@ func NewBashParser() *BashParser {
     return bp
 }
 
-func (bp *BashParser) newParser() *tsparser.Parser {
-    lang := bashgrammar.BashLanguage()
-    lang.NewExternalScanner = bashscanner.New
-    p := tsparser.NewParser()
-    p.SetLanguage(lang)
+func (bp *BashParser) newParser() *parser.Parser {
+    p := parser.NewParser()
+    p.SetLanguage(bash.Language())
     return p
 }
 
@@ -393,7 +370,7 @@ func (bp *BashParser) Parse(ctx context.Context, command string) (*Tree, []Warni
         }}
     }
 
-    p := bp.pool.Get().(*tsparser.Parser)
+    p := bp.pool.Get().(*parser.Parser)
     var panicked bool
     defer func() {
         if panicked {
@@ -476,10 +453,10 @@ func hasErrorNodes(node Node) bool {
 ```
 
 **Parser pooling invariant** (from architecture §7): The bash external scanner
-carries mutable state (heredoc tracking, glob paren depth). This state is
-implicitly reset during the first lex operation of each `Parse()` call via
-`Scanner.Deserialize(nil)`. We call `parser.Reset()` defensively before
-returning to pool for additional safety.
+(wired internally by `bash.Language()`) carries mutable state (heredoc tracking,
+glob paren depth). This state is implicitly reset during the first lex operation
+of each `Parse()` call via `Scanner.Deserialize(nil)`. We call `parser.Reset()`
+defensively before returning to pool for additional safety.
 
 **Panic recovery**: If `ParseString()` panics (e.g., due to a tree-sitter
 bug), the parser is NOT returned to the pool — it may be in a corrupted state.
@@ -1170,24 +1147,26 @@ func (id *InlineDetector) Detect(cmd ExtractedCommand, depth int) ([]ExtractedCo
 Centralizes grammar initialization and language-to-grammar mapping.
 
 ```go
-// LangGrammar maps a language name to its tree-sitter grammar loader.
+// LangGrammar maps a language name to its tree-sitter language loader.
 type LangGrammar struct {
-    Name           string
-    NewLanguage    func() *language.Language
-    NewScanner     language.ExternalScannerFactory // nil if no external scanner
+    Name        string
+    NewLanguage func() *ts.Language // Returns fully-configured language (grammar + scanner wired internally)
 }
 
 // SupportedLanguages lists all languages available for inline script parsing.
 // These are NOT eagerly initialized — InlineDetector.getParser() lazily creates
 // parsers on first use. If no `python -c` commands are seen, the Python grammar
 // is never loaded.
+//
+// Each Language() function returns a *ts.Language with the external scanner
+// already wired in — no separate scanner import needed.
 var SupportedLanguages = []LangGrammar{
-    {Name: "bash", NewLanguage: bashgrammar.BashLanguage, NewScanner: bashscanner.New},
-    {Name: "python", NewLanguage: pythongrammar.PythonLanguage, NewScanner: pythonscanner.New},
-    {Name: "ruby", NewLanguage: rubygrammar.RubyLanguage, NewScanner: rubyscanner.New},
-    {Name: "javascript", NewLanguage: jsgrammar.JavaScriptLanguage, NewScanner: jsscanner.New},
-    {Name: "perl", NewLanguage: perlgrammar.PerlLanguage, NewScanner: perlscanner.New},
-    {Name: "lua", NewLanguage: luagrammar.LuaLanguage, NewScanner: luascanner.New},
+    {Name: "bash", NewLanguage: bash.Language},
+    {Name: "python", NewLanguage: python.Language},
+    {Name: "ruby", NewLanguage: ruby.Language},
+    {Name: "javascript", NewLanguage: javascript.Language},
+    {Name: "perl", NewLanguage: perl.Language},
+    {Name: "lua", NewLanguage: lua.Language},
 }
 
 // NewLangParser creates a pooled parser for the given language.
@@ -1195,12 +1174,8 @@ func NewLangParser(grammar LangGrammar) *langParser {
     lp := &langParser{lang: grammar.Name}
     lp.pool = sync.Pool{
         New: func() any {
-            lang := grammar.NewLanguage()
-            if grammar.NewScanner != nil {
-                lang.NewExternalScanner = grammar.NewScanner
-            }
-            p := tsparser.NewParser()
-            p.SetLanguage(lang)
+            p := parser.NewParser()
+            p.SetLanguage(grammar.NewLanguage())
             return p
         },
     }
@@ -1555,21 +1530,23 @@ frequency.
 
 The implementation should proceed in this order, with tests at each step:
 
-1. **Grammar export** (or vendoring fallback) — Unblocks everything
-2. **Types** (`command.go`, `types.go`) — Shared types used by all components
-3. **BashParser** (`bash.go`) — Parse strings into ASTs, with `ParseAndExtract()`
-4. **Normalize** (`normalize.go`) — Simple, no dependencies
-5. **CommandExtractor** (`extract.go`) — Core extraction WITH a minimal dataflow
+1. **Types** (`command.go`, `types.go`) — Shared types used by all components
+2. **BashParser** (`bash.go`) — Parse strings into ASTs, with `ParseAndExtract()`.
+   Imports `languages/bash` directly — no grammar export or vendoring needed.
+3. **Normalize** (`normalize.go`) — Simple, no dependencies
+4. **CommandExtractor** (`extract.go`) — Core extraction WITH a minimal dataflow
    stub (sequential `Define` + `Resolve` for `;` chains). Include empty-name
    filtering, `RawArgs` population, `env` prefix unwrapping. This avoids having
-   to refactor the walker when integrating dataflow in step 6.
-6. **DataflowAnalyzer** (`dataflow.go`) — Extend the stub from step 5 with
+   to refactor the walker when integrating dataflow in step 5.
+5. **DataflowAnalyzer** (`dataflow.go`) — Extend the stub from step 4 with
    `&&`/`||` may-alias handling, `MergeBranch`, expansion cap + warning,
    `DefineIndeterminate` for command substitution. Multi-value expansion
    producing multiple `ExtractedCommand` variants.
-7. **InlineDetector** (`inline.go`) — `eval`, flag-based detection using
+6. **InlineDetector** (`inline.go`) — `eval`, flag-based detection using
    `RawArgs`, heredoc detection with pipeline awareness.
-8. **Grammar loading** (`grammars.go`) — Lazy multi-language parser initialization.
+7. **Grammar loading** (`grammars.go`) — Lazy multi-language parser initialization.
+   Uses `languages/<lang>.Language()` functions — each returns a fully-configured
+   `*ts.Language` with scanner wired internally.
 
 Each step should have passing tests before proceeding to the next.
 
@@ -1577,8 +1554,10 @@ Each step should have passing tests before proceeding to the next.
 
 ## 13. Open Questions
 
-1. **Grammar export timeline**: Can the tree-sitter-go change land before
-   DCG implementation starts? If not, we vendor and swap later.
+1. ~~**Grammar export timeline**~~: **Resolved** — tree-sitter-go now provides
+   public `languages/<lang>/` packages. Each `Language()` function returns a
+   fully-configured `*ts.Language` with scanner wired internally. No grammar
+   export or vendoring needed.
 
 2. **Language-specific AST walking patterns**: The patterns for extracting
    shell invocations from Python/Ruby/JS ASTs need to be specified per
