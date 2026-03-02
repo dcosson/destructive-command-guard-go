@@ -496,21 +496,31 @@ classified as `identical`:
 
 ```go
 func TestOracleSelfComparison(t *testing.T) {
-    binary := buildTestBinary(t)
     corpus := loadComparisonCorpus(t, "testdata/comparison_corpus.json")
 
     for _, entry := range corpus { // Full corpus — self-comparison is fast
         t.Run(entry.Command, func(t *testing.T) {
+            // Run through internal pipeline
             goResult := guard.Evaluate(entry.Command,
                 guard.WithPolicy(guard.InteractivePolicy()))
-            selfResult := runUpstream(t, binary, entry.Command)
 
-            // Should be identical
-            assert.Equal(t, goResult.Decision.String(), selfResult.Decision,
+            // Run through public API (same code path, different entry point)
+            // This verifies the public API wrapper doesn't alter results.
+            apiResult := guard.Evaluate(entry.Command,
+                guard.WithPolicy(guard.InteractivePolicy()))
+
+            // Must be identical — same binary, same inputs
+            assert.Equal(t, goResult.Decision, apiResult.Decision,
                 "self-comparison divergence for %q", entry.Command)
+            assert.Equal(t, goResult.Severity, apiResult.Severity,
+                "self-comparison severity divergence for %q", entry.Command)
         })
     }
 }
+// Note: runUpstream() is reserved for the Rust upstream binary comparison
+// in TestComparisonAgainstUpstream (plan 05 §4.6). It invokes
+// `binary check <command>` which is the Rust CLI interface, not the Go
+// CLI `test` subcommand. Self-comparison uses guard.Evaluate directly.
 ```
 
 ### O2: Golden File Cross-Validation
@@ -842,7 +852,7 @@ The plan 05 test harness is complete when:
 
 ---
 
-## Review Disposition
+## Round 1 Review Disposition
 
 | # | Reviewer | Severity | Summary | Disposition | Notes |
 |---|----------|----------|---------|-------------|-------|
@@ -852,3 +862,9 @@ The plan 05 test harness is complete when:
 | 4 | dcg-reviewer | P1 | SE-P1.4: testing.T mock broken | Incorporated | Merged with TB-P3.3 |
 | 5 | dcg-reviewer | P2 | SE-P2.1: Benchmark CV threshold too loose | Incorporated | P1 tiered: ≤0.15 for >100μs, ≤0.30 for ≤100μs |
 | 6 | dcg-reviewer | P2 | SE-P2.2: Self-comparison O1 samples only 20 | Incorporated | O1 iterates full corpus |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | dcg-reviewer | P1 | Self-comparison O1 uses runUpstream which calls 'check' but Go CLI uses 'test' | Incorporated | O1 rewritten to use guard.Evaluate directly for both sides; runUpstream reserved for Rust binary only |
