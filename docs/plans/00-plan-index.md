@@ -22,7 +22,7 @@ and feedback incorporated via `/plan-incorporate` before implementation begins.
 
 | Gate | Condition | Before proceeding to |
 |------|-----------|---------------------|
-| G1 | tree-sitter-go exports bash grammar publicly; bash parsing + command extraction passes tests on representative commands | Batch 2 |
+| G1 | Bash parsing + command extraction passes tests on representative commands (tree-sitter-go v0.1.0 available as module dependency) | Batch 2 |
 | G2 | Pattern matching framework works with at least 1 test pack; environment detection works; policy engine works; golden file infrastructure ready | Batch 3, Batch 4 |
 | G3 | All 21 packs implemented with per-pattern unit tests and golden file entries | Batch 5 |
 | G4 | Public API works end-to-end; CLI hook mode works with Claude Code protocol | Batch 5 |
@@ -33,17 +33,15 @@ and feedback incorporated via `/plan-incorporate` before implementation begins.
 
 | Doc | Component | Description | Depends On | Status |
 |-----|-----------|-------------|-----------|--------|
-| [01-treesitter-integration](./01-treesitter-integration.md) | Tree-sitter integration | Export grammars from tree-sitter-go. Bash parsing wrapper. AST command extraction (simple_command → name, args, flags, inline env vars). Command normalization (path stripping). Inline script detection (python -c, bash -c, heredocs). Multi-language parsing for extracted scripts. | — | Not started |
+| [01-treesitter-integration](./01-treesitter-integration.md) | Tree-sitter integration | Import tree-sitter-go (github.com/dcosson/treesitter-go v0.1.0). Bash parsing wrapper. AST command extraction (simple_command → name, args, flags, inline env vars). Command normalization (path stripping). Inline script detection (python -c, bash -c, heredocs). Multi-language parsing for extracted scripts. | — | Not started |
 
 **Notes**: This is a single plan because the parsing, extraction, normalization,
 and inline script detection are tightly coupled — they all operate on the same
 AST and share types. Splitting them would create interface churn.
 
-The tree-sitter-go grammar export is a prerequisite change in a separate repo.
-This plan should include the work needed there and define the interface contract.
-**Hard external dependency**: Batch 1 cannot complete without tree-sitter-go
-exporting grammars from `internal/testgrammars/` to `grammars/`. Fallback:
-temporarily vendor grammar data into DCG (see architecture D6).
+tree-sitter-go is published as `github.com/dcosson/treesitter-go` v0.1.0 with
+public `languages/<lang>/` packages. No local linking or vendoring needed —
+install via `go get`.
 
 ---
 
@@ -148,9 +146,8 @@ graph TD
 
 ## Open Questions
 
-1. **tree-sitter-go grammar export**: Needs to happen before Batch 1 can
-   complete. Should this be a separate tracked task or part of the 01 plan?
-   (Recommendation: part of 01, since it defines the interface contract.)
+1. ~~**tree-sitter-go grammar export**~~: **Resolved** — published as
+   `github.com/dcosson/treesitter-go` v0.1.0. Grammars are public.
 
 2. **Comparison test corpus**: Where do we get real-world commands for
    comparison testing against the upstream Rust version? Options: (a) generate

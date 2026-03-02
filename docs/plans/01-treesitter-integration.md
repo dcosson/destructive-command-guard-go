@@ -16,8 +16,8 @@ that downstream matching (Batch 2) operates on.
 
 **Scope**:
 
-1. **Import tree-sitter-go language packages** — Use public `languages/<lang>/`
-   packages from the tree-sitter-go repo (grammars are now public)
+1. **Import tree-sitter-go** — `go get github.com/dcosson/treesitter-go@v0.1.0`
+   (public module with `languages/<lang>/` packages)
 2. **Bash parsing wrapper** — `sync.Pool`-backed parser that calls tree-sitter
 3. **AST command extraction** — Walk bash AST to extract `simple_command` nodes
    into `ExtractedCommand` structs
@@ -167,13 +167,13 @@ parsing (bounded by max depth).
 **External imports**:
 
 ```
-github.com/treesitter-go/treesitter/parser            → parser.NewParser(), parser.Parser
-github.com/treesitter-go/treesitter/languages/bash     → bash.Language() *ts.Language
-github.com/treesitter-go/treesitter/languages/python   → python.Language() *ts.Language
-github.com/treesitter-go/treesitter/languages/ruby     → ruby.Language() *ts.Language
-github.com/treesitter-go/treesitter/languages/javascript → javascript.Language() *ts.Language
-github.com/treesitter-go/treesitter/languages/perl     → perl.Language() *ts.Language
-github.com/treesitter-go/treesitter/languages/lua      → lua.Language() *ts.Language
+github.com/dcosson/treesitter-go                       → ts.NewParser(), ts.Language (root package)
+github.com/dcosson/treesitter-go/languages/bash        → bash.Language() *ts.Language
+github.com/dcosson/treesitter-go/languages/python      → python.Language() *ts.Language
+github.com/dcosson/treesitter-go/languages/ruby        → ruby.Language() *ts.Language
+github.com/dcosson/treesitter-go/languages/javascript  → javascript.Language() *ts.Language
+github.com/dcosson/treesitter-go/languages/perl        → perl.Language() *ts.Language
+github.com/dcosson/treesitter-go/languages/lua         → lua.Language() *ts.Language
 ```
 
 Each `Language()` function returns a fully-configured `*ts.Language` with the
@@ -182,58 +182,32 @@ no need to separately import scanner packages or set `NewExternalScanner`.
 
 ---
 
-## 5. External Dependency: tree-sitter-go Language Packages
+## 5. External Dependency: tree-sitter-go
 
-### Current State
+### Module Info
 
-Tree-sitter-go now provides public language packages at `languages/<lang>/`.
-Each package exports a `Language()` function that returns a fully-configured
-`*ts.Language` with parse tables, lex functions, symbol definitions, and
-external scanner already wired together internally.
+tree-sitter-go is published as a Go module at `github.com/dcosson/treesitter-go`
+(v0.1.0, tagged). Install via `go get github.com/dcosson/treesitter-go@v0.1.0`.
 
-```
-tree-sitter-go/
-├── languages/
-│   ├── bash/language.go         → bash.Language() *ts.Language
-│   ├── python/language.go       → python.Language() *ts.Language
-│   ├── ruby/language.go         → ruby.Language() *ts.Language
-│   ├── javascript/language.go   → javascript.Language() *ts.Language
-│   ├── perl/language.go         → perl.Language() *ts.Language
-│   ├── lua/language.go          → lua.Language() *ts.Language
-│   ├── golang/language.go       → golang.Language() *ts.Language
-│   ├── rust/language.go         → rust.Language() *ts.Language
-│   ├── c/language.go            → c.Language() *ts.Language
-│   ├── cpp/language.go          → cpp.Language() *ts.Language
-│   ├── typescript/language.go   → typescript.Language() *ts.Language
-│   ├── jsx/language.go          → jsx.Language() *ts.Language
-│   ├── tsx/language.go          → tsx.Language() *ts.Language
-│   ├── java/language.go         → java.Language() *ts.Language
-│   ├── html/language.go         → html.Language() *ts.Language
-│   ├── css/language.go          → css.Language() *ts.Language
-│   ├── json/language.go         → json.Language() *ts.Language
-│   └── ...
-├── parser/                      → parser.NewParser(), parser.Parser
-├── internal/grammars/<lang>/    → internal grammar tables (not imported directly)
-├── internal/scanners/<lang>/    → internal scanner impls (wired by Language())
-└── internal/core/               → internal types
-```
+Public language packages are at `languages/<lang>/`. Each package exports a
+`Language()` function returning a fully-configured `*ts.Language` with parse
+tables, lex functions, symbol definitions, and external scanner wired internally.
 
-No vendoring or grammar export is needed — languages are public and ready to
-import. Grammars and scanners remain internal implementation details; the
-`Language()` function is the only public entry point per language.
+15 languages available: bash, python, ruby, javascript, perl, lua, golang,
+rust, c, cpp, typescript, tsx, java, html, css, json.
 
 ### Interface Contract
 
-DCG imports languages like:
+DCG imports tree-sitter-go like:
 
 ```go
 import (
-    "github.com/treesitter-go/treesitter/parser"
-    "github.com/treesitter-go/treesitter/languages/bash"
+    ts "github.com/dcosson/treesitter-go"
+    "github.com/dcosson/treesitter-go/languages/bash"
 )
 
-func newBashParser() *parser.Parser {
-    p := parser.NewParser()
+func newBashParser() *ts.Parser {
+    p := ts.NewParser()
     p.SetLanguage(bash.Language())
     return p
 }
@@ -307,8 +281,8 @@ import (
     "fmt"
     "sync"
 
-    "github.com/treesitter-go/treesitter/languages/bash"
-    "github.com/treesitter-go/treesitter/parser"
+    ts "github.com/dcosson/treesitter-go"
+    "github.com/dcosson/treesitter-go/languages/bash"
 )
 
 // MaxInputSize is the maximum command string length we'll parse.
@@ -333,8 +307,8 @@ func NewBashParser() *BashParser {
     return bp
 }
 
-func (bp *BashParser) newParser() *parser.Parser {
-    p := parser.NewParser()
+func (bp *BashParser) newParser() *ts.Parser {
+    p := ts.NewParser()
     p.SetLanguage(bash.Language())
     return p
 }
@@ -1547,10 +1521,9 @@ Each step should have passing tests before proceeding to the next.
 
 ## 13. Open Questions
 
-1. ~~**Grammar export timeline**~~: **Resolved** — tree-sitter-go now provides
-   public `languages/<lang>/` packages. Each `Language()` function returns a
-   fully-configured `*ts.Language` with scanner wired internally. No grammar
-   export or vendoring needed.
+1. ~~**Grammar export timeline**~~: **Resolved** — tree-sitter-go is published
+   at `github.com/dcosson/treesitter-go` v0.1.0 with public `languages/<lang>/`
+   packages. Install via `go get`. No vendoring or local linking needed.
 
 2. **Language-specific AST walking patterns**: The patterns for extracting
    shell invocations from Python/Ruby/JS ASTs need to be specified per

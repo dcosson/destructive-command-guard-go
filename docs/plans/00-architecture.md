@@ -149,10 +149,10 @@ graph TB
 
 | Dependency | Purpose |
 |-----------|---------|
-| `github.com/treesitter-go/treesitter` | Pure-Go tree-sitter runtime |
-| `github.com/treesitter-go/treesitter/grammars/bash` | Bash grammar (to be exported from tree-sitter-go) |
-| `github.com/treesitter-go/treesitter/grammars/python` | Python grammar (for inline script detection) |
-| (other grammars as needed) | Ruby, JS, etc. for inline script detection |
+| `github.com/dcosson/treesitter-go` | Pure-Go tree-sitter runtime (v0.1.0) |
+| `github.com/dcosson/treesitter-go/languages/bash` | Bash grammar |
+| `github.com/dcosson/treesitter-go/languages/python` | Python grammar (for inline script detection) |
+| (other grammars as needed) | Ruby, JS, etc. — `languages/<lang>/` packages |
 
 ### Layer 1: Core Library (`guard` package — public API)
 
@@ -741,28 +741,21 @@ agent running autonomously should use `StrictPolicy` (no Ask — uncertain means
 Deny). A user-facing interactive agent should use `InteractivePolicy` (uncertain
 means Ask). The library ships sensible defaults but lets callers override.
 
-### D6: Grammars exported from tree-sitter-go
+### D6: tree-sitter-go as a regular Go module dependency
 
-**Decision**: Have tree-sitter-go export grammar packages publicly rather
-than vendoring grammar data into DCG.
+**Decision**: Import tree-sitter-go (`github.com/dcosson/treesitter-go` v0.1.0)
+as a normal Go module. Grammars are public at `languages/<lang>/`.
 
-**Required import paths from tree-sitter-go:**
+**Import paths from tree-sitter-go:**
 
-- `github.com/treesitter-go/treesitter/grammars/bash` — language data
-  (currently in `internal/testgrammars/bash/language.go`)
-- `github.com/treesitter-go/treesitter/scanners/bash` — external scanner
-  (already public at `scanners/bash/scanner.go`)
-- Same pattern for other grammars: `grammars/python`, `scanners/python`, etc.
+- `github.com/dcosson/treesitter-go` — runtime (`ts.NewParser()`, `ts.Language`)
+- `github.com/dcosson/treesitter-go/languages/bash` — `bash.Language()`
+- `github.com/dcosson/treesitter-go/languages/python` — `python.Language()`
+- Same pattern for other grammars: `languages/ruby`, `languages/javascript`, etc.
 
-**Rationale**: Keeps a single source of truth for grammar data. DCG imports
-the grammars as a regular Go dependency. Requires a change to tree-sitter-go
-to move grammars from `internal/testgrammars/` to a public `grammars/` package.
-
-**Fallback**: If the tree-sitter-go export is delayed, DCG can temporarily
-vendor the grammar data (copy the generated language files). This unblocks
-development. The vendored copy would be replaced by the proper import once
-the export is available. Both repos are under the same owner so this is a
-coordination issue, not a blocking dependency.
+**Rationale**: Keeps a single source of truth for grammar data. DCG installs
+via `go get github.com/dcosson/treesitter-go@v0.1.0`. No vendoring, no local
+linking, no replace directives needed.
 
 ---
 
