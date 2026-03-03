@@ -2,7 +2,7 @@
   "id": "dcg-02t.2",
   "title": "Build database pack fault injection, oracles, benchmarks, and security tests",
   "description": "Fault injection (SQL injection-like content, nil/empty, long SQL). Comparison oracles (upstream, cross-pack severity). Benchmarks (per-pack, regex overhead). Stress and security (SQL not leaked, regex DoS, heuristic false positive rates).",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-02t",
@@ -23,5 +23,7 @@
   ],
   "assignee": "dcg-coder-2",
   "created_at": "2026-03-02T14:30:19.241135-08:00",
-  "updated_at": "2026-03-03T09:02:27.896473-08:00"
+  "updated_at": "2026-03-03T09:18:35.346151-08:00",
+  "closed_at": "2026-03-03T09:18:35.346151-08:00",
+  "close_reason": "Closed"
 }
