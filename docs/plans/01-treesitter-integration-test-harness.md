@@ -1010,3 +1010,20 @@ Incorporated feedback from: `01-treesitter-integration-review-security-correctne
 ## Round 3 Review Disposition
 
 No new findings.
+
+---
+
+## Completion Signoff
+
+- **Status**: Partial
+- **Date**: 2026-03-03
+- **Branch**: main
+- **Verified by**: dcg-coder-1
+- **Completed items**:
+  - Property, deterministic, golden, fault-injection, benchmark, security, and stress-style test categories are implemented in `internal/parse/*_test.go`.
+  - Golden regression harness is implemented and passing (`internal/parse/golden_test.go` + `internal/parse/testdata/golden/*.golden`).
+  - Boundary-contract coverage is implemented (`TestPropertyParseResultBoundaryContract`) and passing.
+  - Verification commands passed: `make test`; targeted race run for parse package.
+- **Outstanding gaps**:
+  - The documented corpus text files (`internal/parse/testdata/commands.txt`, `dataflow_cases.txt`, `inline_scripts.txt`, `error_recovery.txt`) are not present; test data is currently embedded/generated in tests. Severity: P3 (documentation/traceability gap).
+  - `inline.golden` is listed in this harness doc but does not exist under `internal/parse/testdata/golden/`. Severity: P3 (documentation-vs-assets mismatch).

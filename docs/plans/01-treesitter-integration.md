@@ -1589,3 +1589,20 @@ Incorporated feedback from: `01-treesitter-integration-review-security-correctne
 ## Round 3 Review Disposition
 
 No new findings.
+
+---
+
+## Completion Signoff
+
+- **Status**: Complete
+- **Date**: 2026-03-03
+- **Branch**: main
+- **Commit**: 3140080970777c49eae48c67ec3221286d723c86
+- **Verified by**: dcg-coder-1
+- **Test verification**: `make test` — PASS; `go test -race ./internal/parse -run 'Test(BashParserSimpleCommand|ParseAndExtractBasicCases|DataflowDefineAndMerge|InlineDetection|Normalize)$' -count=1` — PASS
+- **Deviations from plan**:
+  - Parser construction uses `github.com/dcosson/treesitter-go/parser` (`tsp.NewParser`) rather than root `ts.NewParser`, matching the actual upstream v0.1.0 API.
+  - Type/file layout differs slightly from the draft layout (`ExtractedCommand`/`ParseResult` are in `types.go`; `tree.go` added as a wrapper around raw tree-sitter tree values).
+- **Additions beyond plan**:
+  - Extractor includes a child-text reconstruction workaround for known tree-sitter byte-offset drift in v0.1.0.
+  - Expanded robustness test set exists in implementation (`fuzz`, `oracle`, `security`, `soak`, `concurrency`, and large coverage-matrix examples).

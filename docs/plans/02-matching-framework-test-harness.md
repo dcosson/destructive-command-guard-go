@@ -1174,3 +1174,20 @@ complete and ready for Batch 3 (pack implementation):
 ## Round 3 Review Disposition
 
 No new findings.
+
+---
+
+## Completion Signoff
+
+- **Status**: Partial
+- **Date**: 2026-03-03
+- **Branch**: main
+- **Verified by**: dcg-coder-1
+- **Completed items**:
+  - Broad automated test coverage exists across `internal/eval` and `guard` (property-like, deterministic, fault, security, oracle/comparison, benchmark, and stress-style tests).
+  - Golden-corpus testing exists and passes (`internal/eval/golden_test.go` with database-focused corpora).
+  - Baseline verification passed: `make test`; targeted race checks for representative `internal/eval` and `internal/parse` paths.
+- **Outstanding gaps**:
+  - This harness is written for the plan-02 matcher architecture (parse-driven matcher DSL and envdetect package), but the implemented architecture is materially different (raw-string rule predicates in `internal/eval`/`internal/packs`). Severity: P1 (harness-to-implementation mismatch).
+  - Several named harness expectations are not directly realizable against current code boundaries (for example matcher-type-specific coverage like `AnyName`/`ArgContentRegex` in a matcher DSL that is not implemented as documented). Severity: P2 (spec mismatch).
+  - Exit criterion "all tests pass with `-race`" for the full relevant suite is not yet evidenced in this signoff pass; only targeted race subsets were validated due a stalled long-running full race invocation in this environment. Severity: P2 (verification completeness gap).
