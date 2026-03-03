@@ -1,0 +1,17 @@
+[
+  {
+    "command": "echo \"don't rm -rf /\"",
+    "classification": "intentional_improvement",
+    "rationale": "Go AST separation treats string content as non-command text"
+  },
+  {
+    "command": "RAILS_ENV=production rails db:reset",
+    "classification": "intentional_improvement",
+    "rationale": "Frameworks pack coverage is broader in Go"
+  },
+  {
+    "command": "DIR=/tmp/corpus; rm -rf $DIR",
+    "classification": "intentional_improvement",
+    "rationale": "Go dataflow expansion catches variable-fed destructive commands"
+  }
+]
