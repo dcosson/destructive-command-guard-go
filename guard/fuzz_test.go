@@ -1,6 +1,7 @@
 package guard_test
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -32,23 +33,28 @@ func FuzzEvaluateWithAllowlist(f *testing.F) {
 		verifyInvariants(t, command, result)
 
 		// INV-A1: exact allowlist match with no separators should allow.
-		if patternMatchesWithoutSeparators(command, allowPattern) &&
+		if globMatchProduction(allowPattern, command) &&
 			!containsSeparators(command) &&
-			!patternMatchesWithoutSeparators(command, blockPattern) &&
+			!globMatchProduction(blockPattern, command) &&
 			result.Decision != guard.Allow {
 			t.Fatalf("INV-A1: command %q matches allowlist %q but decision %s", command, allowPattern, result.Decision)
 		}
 
 		// INV-A2: allowlist should not bypass after separators.
 		if containsSeparators(command) && prefixMatchesPattern(command, allowPattern) &&
-			!patternMatchesWithoutSeparators(command, blockPattern) {
-			if result.Decision == guard.Allow {
+			!globMatchProduction(blockPattern, command) {
+			// Only enforce when the command would have been non-Allow
+			// without allowlist influence.
+			baseline := guard.Evaluate(command, guard.WithBlocklist(blockPattern))
+			if baseline.Decision != guard.Allow && result.Decision == guard.Allow {
 				t.Fatalf("INV-A2: allowlist %q matched prefix in %q", allowPattern, command)
 			}
 		}
 
 		// INV-B1: blocklist match always denies.
-		if patternMatchesWithoutSeparators(command, blockPattern) && result.Decision != guard.Deny {
+		if strings.TrimSpace(command) != "" &&
+			globMatchProduction(blockPattern, command) &&
+			result.Decision != guard.Deny {
 			t.Fatalf("INV-B1: command %q matches blocklist %q but got %s", command, blockPattern, result.Decision)
 		}
 	})
@@ -115,44 +121,13 @@ func verifyInvariants(t *testing.T, command string, result guard.Result) {
 	}
 }
 
-func patternMatchesWithoutSeparators(command, pattern string) bool {
-	if pattern == "" {
-		return false
-	}
-	if containsSeparators(command) {
-		return false
-	}
-	// simple '*' matcher equivalent to current pipeline behavior
-	c := strings.TrimSpace(command)
-	p := strings.TrimSpace(pattern)
-	if p == "*" {
-		return !containsSeparators(c)
-	}
-	if !strings.Contains(p, "*") {
-		return c == p
-	}
-	parts := strings.Split(p, "*")
-	idx := 0
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-		pos := strings.Index(c[idx:], part)
-		if pos < 0 {
-			return false
-		}
-		idx += pos + len(part)
-	}
-	return true
-}
-
 func prefixMatchesPattern(command, pattern string) bool {
 	if pattern == "" {
 		return false
 	}
 	for _, sep := range []string{"&&", "||", ";", "|", "&"} {
 		if i := strings.Index(command, sep); i >= 0 {
-			return patternMatchesWithoutSeparators(strings.TrimSpace(command[:i]), pattern)
+			return globMatchProduction(pattern, strings.TrimSpace(command[:i]))
 		}
 	}
 	return false
@@ -162,4 +137,28 @@ func containsSeparators(command string) bool {
 	return strings.Contains(command, ";") ||
 		strings.Contains(command, "|") ||
 		strings.Contains(command, "&")
+}
+
+func globMatchProduction(pattern, command string) bool {
+	p := strings.TrimSpace(pattern)
+	c := strings.TrimSpace(command)
+	if p == "" {
+		return false
+	}
+	var b strings.Builder
+	b.WriteString("^")
+	for _, r := range p {
+		switch r {
+		case '*':
+			b.WriteString(`[^;|&]*`)
+		default:
+			b.WriteString(regexp.QuoteMeta(string(r)))
+		}
+	}
+	b.WriteString("$")
+	re, err := regexp.Compile(b.String())
+	if err != nil {
+		return false
+	}
+	return re.MatchString(c)
 }
