@@ -2,7 +2,7 @@
   "id": "dcg-0ej.1",
   "title": "Build mutation analysis harness and fuzz invariant tightness tests",
   "description": "Mutation infrastructure (operators: RemoveNot, RemoveNotAlternative, ShiftArgPosition; generateMutations, runPatternOnCorpus, runMutationAnalysis). Property P2-P3, fault injection F2, deterministic D2-D3. Mutation kill verification.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-0ej",
@@ -25,5 +25,7 @@
   ],
   "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:30:49.538241-08:00",
-  "updated_at": "2026-03-03T09:45:59.394441-08:00"
+  "updated_at": "2026-03-03T09:48:47.192595-08:00",
+  "closed_at": "2026-03-03T09:48:47.192595-08:00",
+  "close_reason": "Closed"
 }
