@@ -2,7 +2,7 @@
   "id": "dcg-fdp.5",
   "title": "Implement mutation testing harness",
   "description": "Create mutation.go with MutationResult/Report types, 10 mutation operators (RemoveCondition, NegateCondition, SwapCommandName, RemoveFlag, RemoveNot, RemoveNotAlternative, ShiftArgPosition, SwapSeverity, RemoveEnvTrigger, EmptyReason). TestMutationKillRate targeting 100% matching kill rate across all 21 packs.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-fdp",
@@ -23,5 +23,7 @@
   ],
   "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:28:39.818551-08:00",
-  "updated_at": "2026-03-03T09:01:33.325651-08:00"
+  "updated_at": "2026-03-03T09:04:52.350387-08:00",
+  "closed_at": "2026-03-03T09:04:52.350387-08:00",
+  "close_reason": "Closed"
 }
