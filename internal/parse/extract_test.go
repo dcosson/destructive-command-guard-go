@@ -183,4 +183,38 @@ func TestParseAndExtractDataflowBranching(t *testing.T) {
 			t.Fatalf("expected WarnCommandSubstitution in warnings: %#v", result.Warnings)
 		}
 	})
+
+	t.Run("or chain may alias produces variants", func(t *testing.T) {
+		t.Parallel()
+		result := parser.ParseAndExtract(context.Background(), "DIR=/tmp || DIR=/; rm -rf $DIR", 0)
+		if len(result.Commands) != 2 {
+			t.Fatalf("expected 2 rm variants, got %d: %#v", len(result.Commands), result.Commands)
+		}
+		seen := map[string]bool{}
+		for _, cmd := range result.Commands {
+			seen[cmd.Args[len(cmd.Args)-1]] = true
+		}
+		if !seen["/tmp"] || !seen["/"] {
+			t.Fatalf("expected both /tmp and / variants, saw %#v", seen)
+		}
+	})
+
+	t.Run("expansion cap warning", func(t *testing.T) {
+		t.Parallel()
+		input := "A=1 || A=2; B=1 || B=2; C=1 || C=2; D=1 || D=2; E=1 || E=2; rm -rf $A$B$C$D$E"
+		result := parser.ParseAndExtract(context.Background(), input, 0)
+		found := false
+		for _, w := range result.Warnings {
+			if w.Code == guard.WarnExpansionCapped {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected WarnExpansionCapped, warnings: %#v", result.Warnings)
+		}
+		if len(result.Commands) != maxExpansions {
+			t.Fatalf("expected capped %d variants, got %d", maxExpansions, len(result.Commands))
+		}
+	})
 }
