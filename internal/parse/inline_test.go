@@ -16,6 +16,7 @@ func TestInlineDetection(t *testing.T) {
 		name     string
 		input    string
 		contains []string
+		absent   []string
 	}{
 		{
 			name:     "python -c os.system",
@@ -30,6 +31,11 @@ func TestInlineDetection(t *testing.T) {
 		{
 			name:     "eval unquoted",
 			input:    `eval rm -rf /`,
+			contains: []string{"eval", "rm"},
+		},
+		{
+			name:     "eval quoted",
+			input:    `eval "rm -rf /"`,
 			contains: []string{"eval", "rm"},
 		},
 		{
@@ -52,6 +58,24 @@ func TestInlineDetection(t *testing.T) {
 			input:    "cat <<'EOF' | bash\nrm -rf /\nEOF",
 			contains: []string{"cat", "bash", "rm"},
 		},
+		{
+			name:     "gcc -c is not inline",
+			input:    "gcc -c file.c",
+			contains: []string{"gcc"},
+			absent:   []string{"rm", "bash", "python"},
+		},
+		{
+			name:     "python -c missing body",
+			input:    "python -c",
+			contains: []string{"python"},
+			absent:   []string{"rm"},
+		},
+		{
+			name:     "ruby -e empty body",
+			input:    `ruby -e ''`,
+			contains: []string{"ruby"},
+			absent:   []string{"rm", "git"},
+		},
 	}
 
 	for _, tc := range tests {
@@ -66,6 +90,11 @@ func TestInlineDetection(t *testing.T) {
 			for _, want := range tc.contains {
 				if !names[want] {
 					t.Fatalf("expected command %q in extraction result, got %#v", want, names)
+				}
+			}
+			for _, avoid := range tc.absent {
+				if names[avoid] {
+					t.Fatalf("did not expect command %q in extraction result, got %#v", avoid, names)
 				}
 			}
 		})
