@@ -24,6 +24,11 @@ func TestInlineDetection(t *testing.T) {
 			contains: []string{"python", "rm"},
 		},
 		{
+			name:     "python -c subprocess.run",
+			input:    `python -c "import subprocess; subprocess.run('git push --force', shell=True)"`,
+			contains: []string{"python", "git"},
+		},
+		{
 			name:     "bash -c simple",
 			input:    `bash -c "rm -rf /tmp/foo"`,
 			contains: []string{"bash", "rm"},
@@ -47,6 +52,16 @@ func TestInlineDetection(t *testing.T) {
 			name:     "node --eval",
 			input:    `node --eval "require('child_process').execSync('rm -rf /')"`,
 			contains: []string{"node", "rm"},
+		},
+		{
+			name:     "perl -E system",
+			input:    `perl -E 'system("rm -rf /")'`,
+			contains: []string{"perl", "rm"},
+		},
+		{
+			name:     "lua -e os.execute",
+			input:    `lua -e "os.execute('rm -rf /')"`,
+			contains: []string{"lua", "rm"},
 		},
 		{
 			name:     "heredoc direct shell",

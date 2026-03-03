@@ -2,7 +2,7 @@
   "id": "dcg-otc.4",
   "title": "Implement inline script detection",
   "description": "Implement InlineDetector with lazy parser init, inlineRules table (bash/sh/zsh -c, eval, python -c, ruby -e, perl -e/-E, node -e/--eval, lua -e), flag-based body extraction, eval handling, heredoc detection from AST, pipeline-aware heredoc, recursive bash parsing with MaxInlineDepth=3, WarnInlineDepthExceeded. Wire into extractor. Unit tests for all inline rules, heredoc, recursion depth, negative cases.",
-  "status": "hooked",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-otc",
@@ -40,8 +40,16 @@
       "author": "Danny Cosson",
       "text": "Implementation complete and ready for review. Inline detector + ParseAndExtract wiring is in (rules for bash/sh/zsh -c, eval, python/ruby/perl/node/lua; heredoc detection paths; recursion depth warning). Validation: go test ./... and go test -race ./internal/parse passed. Latest code commit: b6a5021.",
       "created_at": "2026-03-02T16:31:35.770044-08:00"
+    },
+    {
+      "id": 3,
+      "author": "Danny Cosson",
+      "text": "Reviewer approved otc.4 (b6a5021/a2d110f). Closing bead as complete.",
+      "created_at": "2026-03-02T16:33:34.02054-08:00"
     }
   ],
   "created_at": "2026-03-02T14:24:42.709177-08:00",
-  "updated_at": "2026-03-02T16:31:35.770508-08:00"
+  "updated_at": "2026-03-02T16:33:34.020728-08:00",
+  "closed_at": "2026-03-02T16:33:33.996303-08:00",
+  "close_reason": "Completed"
 }

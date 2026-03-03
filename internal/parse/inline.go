@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/dcosson/destructive-command-guard-go/guard"
+	ts "github.com/dcosson/treesitter-go"
 )
 
 const MaxInlineDepth = 3
@@ -104,8 +105,13 @@ func (id *InlineDetector) Detect(cmd ExtractedCommand, depth int) ([]ExtractedCo
 			out = append(out, res.Commands...)
 			warns = append(warns, res.Warnings...)
 		default:
-			id.getParser(script.Language) // lazy-init side effect for planned architecture
-			for _, shellCmd := range id.extractShellInvocations(script.Language, script.Content) {
+			lp := id.getParser(script.Language)
+			shellCmds := id.extractShellInvocationsFromAST(lp, script.Language, script.Content)
+			if len(shellCmds) == 0 {
+				// Fallback for parse errors or unsupported AST forms.
+				shellCmds = id.extractShellInvocationsRegex(script.Language, script.Content)
+			}
+			for _, shellCmd := range shellCmds {
 				res := id.bashParser.ParseAndExtract(context.Background(), shellCmd, depth+1)
 				out = append(out, res.Commands...)
 				warns = append(warns, res.Warnings...)
@@ -207,7 +213,62 @@ func (id *InlineDetector) detectFlagScripts(cmd ExtractedCommand) []InlineScript
 	return scripts
 }
 
-func (id *InlineDetector) extractShellInvocations(language, script string) []string {
+func (id *InlineDetector) extractShellInvocationsFromAST(lp *LangParser, language, script string) []string {
+	if lp == nil {
+		return nil
+	}
+	tree := lp.Parse(context.Background(), []byte(script))
+	if tree == nil {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	var out []string
+	var walk func(node ts.Node, nodeText string)
+	walk = func(node ts.Node, nodeText string) {
+		if node.IsNull() {
+			return
+		}
+		if couldContainShellInvocation(language, node.Type()) {
+			for _, cmd := range id.extractShellInvocationsRegex(language, nodeText) {
+				if _, ok := seen[cmd]; ok {
+					continue
+				}
+				seen[cmd] = struct{}{}
+				out = append(out, cmd)
+			}
+		}
+
+		// Reconstruct child texts from parent text using node child sizes.
+		childTexts := reconstructChildTexts(nodeText, node)
+		for i := 0; i < int(node.ChildCount()); i++ {
+			child := node.Child(i)
+			ct := ""
+			if i < len(childTexts) {
+				ct = childTexts[i]
+			}
+			walk(child, ct)
+		}
+	}
+	// Root text is the original script; child text reconstruction handles offset drift.
+	walk(tree.RootNode(), script)
+	return out
+}
+
+func couldContainShellInvocation(language, nodeType string) bool {
+	switch language {
+	case "python", "javascript":
+		return nodeType == "call" || nodeType == "expression_statement"
+	case "ruby", "perl":
+		return nodeType == "call" || nodeType == "command" || nodeType == "method_call" || nodeType == "program"
+	case "lua":
+		return nodeType == "function_call" || nodeType == "call" || nodeType == "statement"
+	default:
+		return true
+	}
+}
+
+func (id *InlineDetector) extractShellInvocationsRegex(language, script string) []string {
 	var res []string
 	var regexes []*regexp.Regexp
 	switch language {
