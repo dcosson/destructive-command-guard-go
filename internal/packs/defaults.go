@@ -20,6 +20,13 @@ func coreGitPack() Pack {
 		Keywords:    []string{"git", "push", "reset", "clean"},
 		Safe: []Rule{
 			{ID: "git-status"},
+			{
+				ID: "git-push-force-with-lease",
+				Match: func(command string) bool {
+					return hasAll(command, "git", "push") &&
+						hasAny(command, "--force-with-lease", "--force-if-includes")
+				},
+			},
 		},
 		Destructive: []Rule{
 			{
@@ -30,7 +37,8 @@ func coreGitPack() Pack {
 				Remediation: "Use --force-with-lease or coordinate with collaborators",
 				Match: func(command string) bool {
 					return hasAll(command, "git", "push") &&
-						hasAny(command, "--force", " -f ", " --mirror", " --delete ")
+						hasAny(command, "--force", " -f ", " --mirror", " --delete ") &&
+						!hasAny(command, "--force-with-lease", "--force-if-includes")
 				},
 			},
 		},
