@@ -246,18 +246,41 @@ func selectProbes(packID, ruleID string, corpus []string) (hit string, miss stri
 	}
 	if hit == "" {
 		// Fallback probes for local pack set.
-		switch packID + "." + ruleID {
-		case "core.git.git-push-force":
-			hit = "git push --force origin main"
-		case "core.filesystem.rm-rf":
-			hit = "rm -rf /tmp/mutation"
-		case "frameworks.rails-db-reset":
-			hit = "RAILS_ENV=production rails db:reset"
-		default:
-			hit = "echo mutation-hit"
-		}
+		hit = fallbackHitProbe(packID, ruleID)
 	}
 	return hit, miss
+}
+
+// fallbackHitProbe constructs a probe command for a pack/rule when the golden
+// corpus does not contain a matching entry. It evaluates a set of generic
+// patterns against the production pipeline and returns the first hit.
+func fallbackHitProbe(packID, ruleID string) string {
+	probes := []string{
+		"git push --force origin main",
+		"rm -rf /",
+		"rm -rf /tmp/test",
+		`psql -c "DROP TABLE users"`,
+		`mysql -e "DROP DATABASE myapp"`,
+		"redis-cli FLUSHALL",
+		`mongosh --eval "db.dropDatabase()"`,
+		`sqlite3 test.db "DROP TABLE users"`,
+		"terraform destroy",
+		"kubectl delete pod mypod",
+		"docker rm -f mycontainer",
+		"helm uninstall myrelease",
+		"ansible-playbook playbook.yml",
+		"RAILS_ENV=production rails db:reset",
+		"vault secrets disable secret/",
+		"rsync --delete /src/ /dst/",
+		"gh repo delete myrepo --yes",
+	}
+	for _, cmd := range probes {
+		result := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		if hasMutationMatch(result, packID, ruleID) {
+			return cmd
+		}
+	}
+	return ""
 }
 
 func hasMutationMatch(result guard.Result, packID, ruleID string) bool {
