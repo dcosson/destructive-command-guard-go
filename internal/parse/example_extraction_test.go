@@ -222,12 +222,15 @@ var extractionTests = []extractionTestCase{
 		wantCmds: 3,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			assertEqual(t, "cmd[0].Name", cmds[0].Name, "cat")
-			// NOTE: cmd[1] and cmd[2] names may have byte-offset issues in
-			// multi-stage pipelines (known implementation gap). We verify
-			// pipeline membership and command count.
+			// BUG(pipeline-offset): commands after first in multi-stage pipelines
+			// have incorrect byte offsets causing name truncation (e.g. "grep" →
+			// "ep"). Tracked for fix in extractor. First command is reliable.
 			for _, cmd := range cmds {
 				assertTrue(t, "InPipeline", cmd.InPipeline)
+				assertFalse(t, "Negated", cmd.Negated)
 			}
+			// Verify first command is fully correct
+			assertContainsArg(t, cmds[0].Args, "log")
 		},
 	},
 	{
@@ -290,8 +293,12 @@ var extractionTests = []extractionTestCase{
 		wantCmds: 3,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			assertEqual(t, "cmd[0].Name", cmds[0].Name, "cd")
-			// NOTE: Later commands in semicolon chains may have byte-offset
-			// issues similar to pipelines. Verify count is correct.
+			assertContainsArg(t, cmds[0].Args, "/tmp")
+			// BUG(pipeline-offset): byte-offset issue affects later commands
+			// in semicolon chains similarly to pipelines. First command is reliable.
+			for _, cmd := range cmds {
+				assertFalse(t, "InPipeline", cmd.InPipeline)
+			}
 		},
 	},
 

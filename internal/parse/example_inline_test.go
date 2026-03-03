@@ -7,9 +7,9 @@ import (
 
 // E3: Inline Script Detection Examples
 // Tests that inline script patterns (python -c, bash -c, ruby -e, etc.)
-// are properly handled. Currently tests surface-level extraction only;
-// when InlineDetector is implemented, nested command extraction should be
-// added to these checks.
+// are properly handled. Active tests verify current surface-level behavior.
+// Pending tests (at bottom) define the InlineDetector contract for nested
+// command extraction — activate once InlineDetector lands.
 
 type inlineTestCase struct {
 	name           string
@@ -141,6 +141,101 @@ func TestInlineScriptDetection(t *testing.T) {
 			if matchIdx < len(tc.expectCommands) {
 				t.Errorf("expected commands %v in order, got %v (matched %d/%d)",
 					tc.expectCommands, gotNames, matchIdx, len(tc.expectCommands))
+			}
+		})
+	}
+}
+
+// --- Pending: Nested Inline Extraction (InlineDetector contract) ---
+// These tests define the expected behavior once InlineDetector is implemented.
+// They are skipped until the feature lands. Each test specifies the full set
+// of commands that should be extracted including nested ones.
+
+type pendingInlineTestCase struct {
+	name           string
+	input          string
+	expectCommands []string // All commands including nested
+}
+
+var pendingInlineTests = []pendingInlineTestCase{
+	{
+		name:           "python os.system extracts nested rm",
+		input:          `python -c "import os; os.system('rm -rf /')"`,
+		expectCommands: []string{"python", "rm"},
+	},
+	{
+		name:           "bash -c extracts nested command",
+		input:          `bash -c "rm -rf /tmp/foo"`,
+		expectCommands: []string{"bash", "rm"},
+	},
+	{
+		name:           "ruby system extracts nested git",
+		input:          `ruby -e "system('git push --force')"`,
+		expectCommands: []string{"ruby", "git"},
+	},
+	{
+		name:           "node execSync extracts nested rm",
+		input:          `node -e "require('child_process').execSync('rm -rf /')"`,
+		expectCommands: []string{"node", "rm"},
+	},
+	{
+		name:           "perl system extracts nested rm",
+		input:          `perl -e 'system("rm -rf /")'`,
+		expectCommands: []string{"perl", "rm"},
+	},
+	{
+		name:           "eval extracts inner commands",
+		input:          `eval "rm -rf /"`,
+		expectCommands: []string{"eval", "rm"},
+	},
+	{
+		name:           "heredoc to bash extracts nested",
+		input:          "bash <<'EOF'\nrm -rf /\nEOF",
+		expectCommands: []string{"bash", "rm"},
+	},
+	{
+		name:           "nested bash -c at depth 3",
+		input:          `bash -c "bash -c \"bash -c \\\"rm -rf /\\\"\""`,
+		expectCommands: []string{"bash", "bash", "bash", "rm"},
+	},
+}
+
+func TestPendingInlineNestedExtraction(t *testing.T) {
+	t.Parallel()
+	bp := NewBashParser()
+
+	// Check if InlineDetector is active by testing a simple case
+	result := bp.ParseAndExtract(context.Background(), `bash -c "echo hello"`, 0)
+	inlineActive := false
+	for _, cmd := range result.Commands {
+		if cmd.Name == "echo" {
+			inlineActive = true
+		}
+	}
+	if !inlineActive {
+		t.Skip("InlineDetector not yet implemented; skipping nested extraction contract tests")
+	}
+
+	for _, tc := range pendingInlineTests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result := bp.ParseAndExtract(context.Background(), tc.input, 0)
+			gotNames := commandNames(result.Commands)
+
+			if len(gotNames) != len(tc.expectCommands) {
+				t.Fatalf("expected %d commands %v, got %d: %v",
+					len(tc.expectCommands), tc.expectCommands, len(gotNames), gotNames)
+			}
+
+			for i, want := range tc.expectCommands {
+				if i >= len(gotNames) {
+					t.Errorf("missing expected command %q at index %d", want, i)
+					continue
+				}
+				if gotNames[i] != want {
+					t.Errorf("command[%d] = %q, want %q", i, gotNames[i], want)
+				}
 			}
 		})
 	}

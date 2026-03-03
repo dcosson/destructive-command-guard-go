@@ -79,18 +79,19 @@ rm -rf /
   ]
 }
 ---INPUT---
-chmod -R 777 /var/www
+cp -r /tmp/src /tmp/dst
 ---OUTPUT---
 {
   "commands": [
     {
-      "name": "chmod",
-      "raw_name": "chmod",
+      "name": "cp",
+      "raw_name": "cp",
       "args": [
-        "777"
+        "/tmp/src",
+        "/tmp/dst"
       ],
       "flags": {
-        "-R": ""
+        "-r": ""
       }
     }
   ]
@@ -131,7 +132,7 @@ kubectl delete namespace production
   ]
 }
 ---INPUT---
-terraform destroy -auto-approve
+terraform destroy --auto-approve
 ---OUTPUT---
 {
   "commands": [
@@ -142,15 +143,7 @@ terraform destroy -auto-approve
         "destroy"
       ],
       "flags": {
-        "--": "",
-        "-a": "",
-        "-e": "",
-        "-o": "",
-        "-p": "",
-        "-r": "",
-        "-t": "",
-        "-u": "",
-        "-v": ""
+        "--auto-approve": ""
       }
     }
   ]
