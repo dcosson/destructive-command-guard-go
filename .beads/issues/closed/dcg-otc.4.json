@@ -28,8 +28,28 @@
     "project=dcg"
   ],
   "assignee": "dcg-coder-1",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Progress update on otc.4: added inline detection edge-case coverage (eval quoted/unquoted, gcc -c negative, python -c missing arg, ruby -e empty body, heredoc cases). Commit: b6a5021. Inline-focused and full parse test suites pass.",
+      "created_at": "2026-03-02T16:26:27.658189-08:00"
+    },
+    {
+      "id": 2,
+      "author": "Danny Cosson",
+      "text": "Implementation complete and ready for review. Inline detector + ParseAndExtract wiring is in (rules for bash/sh/zsh -c, eval, python/ruby/perl/node/lua; heredoc detection paths; recursion depth warning). Validation: go test ./... and go test -race ./internal/parse passed. Latest code commit: b6a5021.",
+      "created_at": "2026-03-02T16:31:35.770044-08:00"
+    },
+    {
+      "id": 3,
+      "author": "Danny Cosson",
+      "text": "Reviewer approved otc.4 (b6a5021/a2d110f). Closing bead as complete.",
+      "created_at": "2026-03-02T16:33:34.02054-08:00"
+    }
+  ],
   "created_at": "2026-03-02T14:24:42.709177-08:00",
-  "updated_at": "2026-03-02T16:33:52.183157-08:00",
-  "closed_at": "2026-03-02T16:33:52.183157-08:00",
-  "close_reason": "Closed"
+  "updated_at": "2026-03-02T16:33:34.020728-08:00",
+  "closed_at": "2026-03-02T16:33:33.996303-08:00",
+  "close_reason": "Completed"
 }

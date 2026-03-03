@@ -17,9 +17,22 @@
   "labels": [
     "project=dcg"
   ],
-  "assignee": "dcg-coder-1",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Implemented n21.4 in commit 7ac608c: expanded B1-B6 benchmarks, added S1 concurrent stress test, added opt-in S2 memory soak test (DCG_RUN_SOAK=1). Validation run: go test -run TestConcurrentParsingStress ./internal/parse (pass), go test -race -run TestConcurrentParsingStress ./internal/parse (pass), go test -run '^$' -bench 'Benchmark(ParseLatency|ExtractLatency|DataflowResolution|FullPipeline|ParsePoolEffectiveness|InlineDetectionOverhead)$' -benchtime=1x ./internal/parse (pass). Full go test ./internal/parse currently has pre-existing non-n21.4 failures in golden/extraction inline suites after branch merge.",
+      "created_at": "2026-03-02T16:46:26.134914-08:00"
+    },
+    {
+      "id": 2,
+      "author": "Danny Cosson",
+      "text": "Approved by dcg-reviewer for commit 7ac608c. Closing task.",
+      "created_at": "2026-03-02T16:47:59.133698-08:00"
+    }
+  ],
   "created_at": "2026-03-02T14:29:02.792043-08:00",
-  "updated_at": "2026-03-02T16:47:49.152384-08:00",
-  "closed_at": "2026-03-02T16:47:49.152384-08:00",
+  "updated_at": "2026-03-02T16:47:59.133925-08:00",
+  "closed_at": "2026-03-02T16:47:59.099952-08:00",
   "close_reason": "Closed"
 }

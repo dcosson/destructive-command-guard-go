@@ -1,0 +1,164 @@
+---INPUT---
+ls
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "ls",
+      "raw_name": "ls"
+    }
+  ]
+}
+---INPUT---
+echo hello
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "echo",
+      "raw_name": "echo",
+      "args": [
+        "hello"
+      ]
+    }
+  ]
+}
+---INPUT---
+git push --force origin main
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "git",
+      "raw_name": "git",
+      "args": [
+        "push",
+        "origin",
+        "main"
+      ],
+      "flags": {
+        "--force": ""
+      }
+    }
+  ]
+}
+---INPUT---
+/usr/bin/rm -rf /tmp/foo
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "rm",
+      "raw_name": "/usr/bin/rm",
+      "args": [
+        "/tmp/foo"
+      ],
+      "flags": {
+        "-f": "",
+        "-r": ""
+      }
+    }
+  ]
+}
+---INPUT---
+rm -rf /
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "rm",
+      "raw_name": "rm",
+      "args": [
+        "/"
+      ],
+      "flags": {
+        "-f": "",
+        "-r": ""
+      }
+    }
+  ]
+}
+---INPUT---
+cp -r /tmp/src /tmp/dst
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "cp",
+      "raw_name": "cp",
+      "args": [
+        "/tmp/src",
+        "/tmp/dst"
+      ],
+      "flags": {
+        "-r": ""
+      }
+    }
+  ]
+}
+---INPUT---
+docker system prune -af
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "docker",
+      "raw_name": "docker",
+      "args": [
+        "system",
+        "prune"
+      ],
+      "flags": {
+        "-a": "",
+        "-f": ""
+      }
+    }
+  ]
+}
+---INPUT---
+kubectl delete namespace production
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "kubectl",
+      "raw_name": "kubectl",
+      "args": [
+        "delete",
+        "namespace",
+        "production"
+      ]
+    }
+  ]
+}
+---INPUT---
+terraform destroy --auto-approve
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "terraform",
+      "raw_name": "terraform",
+      "args": [
+        "destroy"
+      ],
+      "flags": {
+        "--auto-approve": ""
+      }
+    }
+  ]
+}
+---INPUT---
+redis-cli FLUSHALL
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "redis-cli",
+      "raw_name": "redis-cli",
+      "args": [
+        "FLUSHALL"
+      ]
+    }
+  ]
+}

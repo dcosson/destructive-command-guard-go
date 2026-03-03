@@ -1,0 +1,132 @@
+---INPUT---
+echo a && echo b
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "echo",
+      "raw_name": "echo",
+      "args": [
+        "a"
+      ]
+    },
+    {
+      "name": "echo",
+      "raw_name": "echo",
+      "args": [
+        "b"
+      ]
+    }
+  ]
+}
+---INPUT---
+test -d /tmp || mkdir /tmp
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "test",
+      "raw_name": "test",
+      "args": [
+        "/tmp"
+      ],
+      "flags": {
+        "-d": ""
+      }
+    },
+    {
+      "name": "mkdir",
+      "raw_name": "mkdir",
+      "args": [
+        "/tmp"
+      ]
+    }
+  ]
+}
+---INPUT---
+echo a; echo b
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "echo",
+      "raw_name": "echo",
+      "args": [
+        "a"
+      ]
+    },
+    {
+      "name": "echo",
+      "raw_name": "echo",
+      "args": [
+        "b"
+      ]
+    }
+  ]
+}
+---INPUT---
+cat file | grep pattern
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "cat",
+      "raw_name": "cat",
+      "args": [
+        "file"
+      ],
+      "in_pipeline": true
+    },
+    {
+      "name": "grep",
+      "raw_name": "grep",
+      "args": [
+        "pattern"
+      ],
+      "in_pipeline": true
+    }
+  ]
+}
+---INPUT---
+! git diff --quiet
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "git",
+      "raw_name": "git",
+      "args": [
+        "diff"
+      ],
+      "flags": {
+        "--quiet": ""
+      },
+      "negated": true
+    }
+  ]
+}
+---INPUT---
+cd /tmp && rm -rf *
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "cd",
+      "raw_name": "cd",
+      "args": [
+        "/tmp"
+      ]
+    },
+    {
+      "name": "rm",
+      "raw_name": "rm",
+      "args": [
+        "*"
+      ],
+      "flags": {
+        "-f": "",
+        "-r": ""
+      }
+    }
+  ]
+}
