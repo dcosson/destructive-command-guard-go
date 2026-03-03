@@ -2,7 +2,7 @@
   "id": "dcg-fdp.3",
   "title": "Implement golden file corpus expansion and coverage analysis",
   "description": "Expand golden files from ~500 to 750+ entries: structural variants (~100), false-positive traps (~50), cross-pack interactions (~30), dataflow (~30), edge cases (~40). TestGoldenCoverageAllPatterns (3+ per pattern), TestGoldenCoverageStructuralContexts.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-fdp",
@@ -33,5 +33,7 @@
   ],
   "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:28:39.698579-08:00",
-  "updated_at": "2026-03-02T22:30:42.094285-08:00"
+  "updated_at": "2026-03-03T08:58:27.145901-08:00",
+  "closed_at": "2026-03-03T08:58:27.145901-08:00",
+  "close_reason": "Closed"
 }

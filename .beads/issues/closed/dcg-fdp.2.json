@@ -2,7 +2,7 @@
   "id": "dcg-fdp.2",
   "title": "Implement fuzz testing subsystem",
   "description": "5 fuzzers: FuzzEvaluate (seeds from golden files), FuzzEvaluateWithAllowlist (INV-A1/A2/B1), FuzzConfigParse, FuzzHookInput, FuzzHookProcess. verifyInvariants function (8 invariants). LoadFuzzSeeds from golden files + templates. Allowlist fuzzer helpers.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-fdp",
@@ -23,5 +23,7 @@
   ],
   "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:28:39.639871-08:00",
-  "updated_at": "2026-03-02T22:30:31.927161-08:00"
+  "updated_at": "2026-03-03T08:56:58.485766-08:00",
+  "closed_at": "2026-03-03T08:56:58.485765-08:00",
+  "close_reason": "Closed"
 }
