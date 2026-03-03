@@ -2,7 +2,7 @@
   "id": "dcg-6bg.3",
   "title": "Build pipeline fault injection, comparison oracles, and security tests",
   "description": "Fault injection F1-F5 (matcher panic, registry freeze, malformed Aho-Corasick, concurrent stress, nil/zero inputs). Comparison oracles O1-O3 (policy exhaustive, glob reference, env upstream). Security SEC1-SEC3 (glob injection, allowlist bypass, regex DoS).",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
   "parent": "dcg-6bg",
@@ -21,6 +21,7 @@
   "labels": [
     "project=dcg"
   ],
+  "assignee": "dcg-coder-2",
   "created_at": "2026-03-02T14:29:24.065909-08:00",
-  "updated_at": "2026-03-02T14:29:24.065909-08:00"
+  "updated_at": "2026-03-02T20:51:45.76863-08:00"
 }

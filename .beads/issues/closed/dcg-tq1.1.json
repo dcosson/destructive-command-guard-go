@@ -2,7 +2,7 @@
   "id": "dcg-tq1.1",
   "title": "Implement infrastructure.terraform and infrastructure.pulumi packs",
   "description": "Create internal/packs/infrastructure/terraform.go (4 safe, 9 destructive) and pulumi.go (3 safe, 7 destructive). Auto-approve severity escalation pattern. All env-sensitive. Unit tests covering auto-approve dual patterns, safe pattern S4 exclusions. Golden files.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-tq1",
@@ -23,6 +23,9 @@
   "labels": [
     "project=dcg"
   ],
+  "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:26:41.233563-08:00",
-  "updated_at": "2026-03-02T14:26:41.233563-08:00"
+  "updated_at": "2026-03-02T20:44:46.180321-08:00",
+  "closed_at": "2026-03-02T20:44:46.180321-08:00",
+  "close_reason": "Closed"
 }
