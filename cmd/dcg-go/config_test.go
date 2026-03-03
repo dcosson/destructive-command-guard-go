@@ -53,7 +53,7 @@ func TestConfigMissingExplicit(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(stderr.(*bytes.Buffer).String(), "config not found") {
+	if !strings.Contains(stderr.(*bytes.Buffer).String(), "cannot stat config") {
 		t.Fatalf("stderr = %q", stderr.(*bytes.Buffer).String())
 	}
 }
@@ -141,6 +141,35 @@ func TestConfigToOptionsInvalidPolicyWarns(t *testing.T) {
 		t.Fatalf("opts len = %d, want 0", len(opts))
 	}
 	if !strings.Contains(stderr.(*bytes.Buffer).String(), "warning: unknown policy") {
+		t.Fatalf("stderr = %q", stderr.(*bytes.Buffer).String())
+	}
+}
+
+func TestConfigDefaultStatFailureIsFatal(t *testing.T) {
+	reset := withIO(t)
+	defer reset()
+
+	home := t.TempDir()
+	cfgDir := filepath.Join(home, ".config")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatalf("mkdir .config: %v", err)
+	}
+	if err := os.Chmod(cfgDir, 0o000); err != nil {
+		t.Fatalf("chmod .config: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(cfgDir, 0o755)
+	})
+
+	code := 0
+	exitFn = func(c int) { code = c }
+	t.Setenv("HOME", home)
+	t.Setenv("DCG_CONFIG", "")
+	_ = loadConfig()
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.(*bytes.Buffer).String(), "cannot stat config") {
 		t.Fatalf("stderr = %q", stderr.(*bytes.Buffer).String())
 	}
 }

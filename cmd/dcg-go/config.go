@@ -39,8 +39,8 @@ func loadConfig() Config {
 
 	fi, err := os.Stat(path)
 	if err != nil {
-		if explicit {
-			fmt.Fprintf(stderr, "error: config not found at %s: %v\n", path, err)
+		if explicit || !os.IsNotExist(err) {
+			fmt.Fprintf(stderr, "error: cannot stat config at %s: %v\n", path, err)
 			exitFn(1)
 		}
 		return Config{}
