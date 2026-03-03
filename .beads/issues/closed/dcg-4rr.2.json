@@ -2,7 +2,7 @@
   "id": "dcg-4rr.2",
   "title": "Build fault injection, config robustness, and security tests for API/CLI",
   "description": "Fault injection F1-F3 (malformed hook 8 scenarios, adversarial config files, nil/invalid options). Security SEC1-SEC3 (blocklist separator bypass, hook output no leakage, config size limit).",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-4rr",
@@ -23,5 +23,7 @@
   ],
   "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:30:49.282163-08:00",
-  "updated_at": "2026-03-03T09:36:34.112334-08:00"
+  "updated_at": "2026-03-03T09:41:21.671234-08:00",
+  "closed_at": "2026-03-03T09:41:21.671234-08:00",
+  "close_reason": "Closed"
 }
