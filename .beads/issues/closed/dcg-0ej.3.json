@@ -2,7 +2,7 @@
   "id": "dcg-0ej.3",
   "title": "Build stress tests, security tests, and CI tier configuration",
   "description": "Stress S1 (100K evaluations, 100 goroutines, memory monitoring, race). S2 (mutation under 5-min pressure). Security SEC1-SEC2 (no sensitive fuzz data, golden commands not executed). CI tier mapping for all 4 tiers.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-0ej",
@@ -23,5 +23,7 @@
   ],
   "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:30:49.66973-08:00",
-  "updated_at": "2026-03-03T09:51:25.520315-08:00"
+  "updated_at": "2026-03-03T09:57:02.042632-08:00",
+  "closed_at": "2026-03-03T09:57:02.042632-08:00",
+  "close_reason": "Closed"
 }
