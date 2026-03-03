@@ -13,11 +13,14 @@ func TestPropertyParseNeverPanics(t *testing.T) {
 	p := NewBashParser()
 	cfg := &quick.Config{MaxCount: 200}
 	prop := func(in string) bool {
+		panicked := false
 		defer func() {
-			_ = recover()
+			if recover() != nil {
+				panicked = true
+			}
 		}()
 		_, _ = p.Parse(context.Background(), in)
-		return true
+		return !panicked
 	}
 	if err := quick.Check(prop, cfg); err != nil {
 		t.Fatalf("property failed: %v", err)
@@ -74,10 +77,20 @@ func TestPropertyExtractRawTextBounds(t *testing.T) {
 			if int(cmd.EndByte) > len(in) {
 				return false
 			}
-			if cmd.RawText == "" {
+			start := int(cmd.StartByte)
+			end := int(cmd.EndByte)
+			if start < 0 || end < start || end > len(in) {
+				return false
+			}
+			if cmd.RawText == "" && end > start {
 				continue
 			}
-			if !strings.Contains(in, cmd.RawText) {
+			expected := in[start:end]
+			if cmd.RawText != "" && cmd.RawText != expected {
+				return false
+			}
+			// Keep containment check as a weak fallback invariant.
+			if cmd.RawText != "" && !strings.Contains(in, cmd.RawText) {
 				return false
 			}
 		}
