@@ -1,0 +1,59 @@
+---INPUT---
+
+---OUTPUT---
+{
+  "commands": []
+}
+---INPUT---
+   
+---OUTPUT---
+{
+  "commands": []
+}
+---INPUT---
+git push "
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "git",
+      "raw_name": "git",
+      "args": [
+        "push"
+      ]
+    }
+  ]
+}
+---INPUT---
+git push &&& rm -rf /
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "git",
+      "raw_name": "git",
+      "args": [
+        "push"
+      ]
+    },
+    {
+      "name": "rm",
+      "raw_name": "rm",
+      "args": [
+        "/"
+      ],
+      "flags": {
+        "-f": "",
+        "-r": ""
+      }
+    }
+  ],
+  "has_error": true
+}
+---INPUT---
+|
+---OUTPUT---
+{
+  "commands": [],
+  "has_error": true
+}
