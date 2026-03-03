@@ -1,0 +1,121 @@
+---INPUT---
+DIR=/; rm -rf $DIR
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "rm",
+      "raw_name": "rm",
+      "args": [
+        "/"
+      ],
+      "flags": {
+        "-f": "",
+        "-r": ""
+      },
+      "dataflow_resolved": true
+    }
+  ]
+}
+---INPUT---
+DIR=/tmp || DIR=/; rm -rf $DIR
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "rm",
+      "raw_name": "rm",
+      "args": [
+        "/tmp"
+      ],
+      "flags": {
+        "-f": "",
+        "-r": ""
+      },
+      "dataflow_resolved": true
+    },
+    {
+      "name": "rm",
+      "raw_name": "rm",
+      "args": [
+        "/"
+      ],
+      "flags": {
+        "-f": "",
+        "-r": ""
+      },
+      "dataflow_resolved": true
+    }
+  ]
+}
+---INPUT---
+DIR=/tmp; DIR=/; rm -rf $DIR
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "rm",
+      "raw_name": "rm",
+      "args": [
+        "/"
+      ],
+      "flags": {
+        "-f": "",
+        "-r": ""
+      },
+      "dataflow_resolved": true
+    }
+  ]
+}
+---INPUT---
+RAILS_ENV=production rails db:reset
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "rails",
+      "raw_name": "rails",
+      "args": [
+        "db:reset"
+      ],
+      "inline_env": {
+        "RAILS_ENV": "production"
+      }
+    }
+  ]
+}
+---INPUT---
+FOO=bar BAZ=qux echo test
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "echo",
+      "raw_name": "echo",
+      "args": [
+        "test"
+      ],
+      "inline_env": {
+        "BAZ": "qux",
+        "FOO": "bar"
+      }
+    }
+  ]
+}
+---INPUT---
+env NODE_ENV=production node server.js
+---OUTPUT---
+{
+  "commands": [
+    {
+      "name": "node",
+      "raw_name": "node",
+      "args": [
+        "server.js"
+      ],
+      "inline_env": {
+        "NODE_ENV": "production"
+      }
+    }
+  ]
+}
