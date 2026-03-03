@@ -2,7 +2,7 @@
   "id": "dcg-otc.6",
   "title": "Add property-based tests, benchmarks, and concurrent safety hardening",
   "description": "Property-based tests: Parse never panics on arbitrary input, Extract RawText is substring, Normalize is idempotent, ResolveString bounded at 16. Benchmarks: BenchmarkParse/Extract/Dataflow/FullPipeline. Concurrent stress test: 100+ goroutines with -race. String interning and early termination optimization.",
-  "status": "open",
+  "status": "hooked",
   "priority": 2,
   "type": "task",
   "parent": "dcg-otc",
@@ -21,6 +21,15 @@
   "labels": [
     "project=dcg"
   ],
+  "assignee": "dcg-coder-1",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Implementation complete for otc.6. Added property tests (panic safety, Normalize idempotence, ResolveString bounded, RawText bounds), benchmark suite (Parse/Extract/Dataflow/FullPipeline), and high-concurrency stress test (128 goroutines). Added string interning optimization in Normalize and gated debug AST test behind DCG_DEBUG_AST env. Commit: 68bb0b2. Validation: go test ./..., go test -race ./internal/parse, and benchmark run all pass.",
+      "created_at": "2026-03-02T16:37:31.793374-08:00"
+    }
+  ],
   "created_at": "2026-03-02T14:24:42.790921-08:00",
-  "updated_at": "2026-03-02T14:24:42.790921-08:00"
+  "updated_at": "2026-03-02T16:37:31.854717-08:00"
 }

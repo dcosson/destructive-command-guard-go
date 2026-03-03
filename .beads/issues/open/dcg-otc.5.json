@@ -28,6 +28,20 @@
     "project=dcg"
   ],
   "assignee": "dcg-coder-1",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Progress on otc.5 in 3072119: non-bash inline handling now attempts tree-sitter AST traversal (with reconstructed child text) and extracts shell invocations before regex fallback. Added inline tests for python subprocess.run, perl -E system, and lua os.execute. Validation: go test ./... and go test -race ./internal/parse pass.",
+      "created_at": "2026-03-02T16:34:43.211915-08:00"
+    },
+    {
+      "id": 2,
+      "author": "Danny Cosson",
+      "text": "Reviewer approved commit 3072119 for otc.5. Moving forward to otc.6.",
+      "created_at": "2026-03-02T16:36:10.891872-08:00"
+    }
+  ],
   "created_at": "2026-03-02T14:24:42.747475-08:00",
-  "updated_at": "2026-03-02T16:32:42.621467-08:00"
+  "updated_at": "2026-03-02T16:36:10.895717-08:00"
 }
