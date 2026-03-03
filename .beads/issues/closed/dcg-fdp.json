@@ -2,7 +2,7 @@
   "id": "dcg-fdp",
   "title": "05: Testing \u0026 Benchmarks",
   "description": "Implement plan 05: Benchmark suite, comparison tests against upstream Rust version, fuzz testing, mutation testing harness, golden file corpus expansion to 500+, grammar-derived coverage analysis, end-to-end tests, performance profiling and optimization. Plan doc: docs/plans/05-testing-and-benchmarks.md",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "epic",
   "dependencies": [
@@ -76,5 +76,7 @@
     "batch=5"
   ],
   "created_at": "2026-03-02T14:13:21.034707-08:00",
-  "updated_at": "2026-03-02T14:13:21.034707-08:00"
+  "updated_at": "2026-03-03T09:11:13.748796-08:00",
+  "closed_at": "2026-03-03T09:11:13.748796-08:00",
+  "close_reason": "Closed"
 }
