@@ -7,25 +7,32 @@ import (
 	ts "github.com/dcosson/treesitter-go"
 )
 
+// CommandExtractor walks a tree-sitter bash AST to discover command structure
+// (pipelines, lists, commands, declarations, bare assignments) and produces
+// ExtractedCommand values.
+//
+// ARCHITECTURE NOTE — treesitter-go v0.1.0 byte-offset bug workaround:
+//
+// treesitter-go v0.1.0 has a bug where child node StartByte/EndByte positions
+// are progressively shifted from their correct values. Parent node positions
+// and child node SIZES (EndByte−StartByte) are correct, but child absolute
+// positions accumulate error with depth and sibling index.
+//
+// To work around this, the AST walk passes each node's CORRECT text (computed
+// from its parent) rather than using nodeText(source, child) directly.
+// The root node's text is always correct (it spans the entire source).
+// reconstructChildTexts() scans a parent's correct text using child node
+// sizes to reconstruct each child's text without relying on child offsets.
+//
+// Within a single command's text, tokenizeCommand() splits tokens respecting
+// quotes. This is safe because the command text comes from the parent-corrected
+// pipeline, not from the (potentially broken) command node offsets.
+//
+// When treesitter-go fixes the byte offset bug, reconstructChildTexts can be
+// removed and nodeText(source, child) can be used directly.
 type CommandExtractor struct {
 	bashParser *BashParser
 	dataflow   *DataflowAnalyzer
-}
-
-type commandNodeInfo struct {
-	node       ts.Node
-	inPipeline bool
-	negated    bool
-}
-
-type sourceCommand struct {
-	tokens    []string
-	sepBefore string
-}
-
-type lexToken struct {
-	kind string // word|op
-	text string
 }
 
 func NewCommandExtractor(bp *BashParser) *CommandExtractor {
@@ -50,225 +57,249 @@ func (ce *CommandExtractor) Extract(tree *Tree, source string) (result ParseResu
 		}
 	}()
 
-	nodes := collectASTCommandNodes(tree.RootNode(), false, false)
-	fallback := splitSourceCommands(source)
-	nodeIdx := 0
-	for _, fb := range fallback {
-		if isBareAssignmentCommand(fb.tokens) {
-			ws := ce.applyBareAssignment(fb)
-			result.Warnings = append(result.Warnings, ws...)
-			continue
-		}
-		if nodeIdx >= len(nodes) {
-			continue
-		}
-		cmds, warnings := ce.extractFromASTCommand(nodes[nodeIdx], source, fb)
-		result.Commands = append(result.Commands, cmds...)
-		result.Warnings = append(result.Warnings, warnings...)
-		nodeIdx++
-	}
+	// Root node's text is always the full source (correct offsets).
+	ce.walkNodeWithText(tree.RootNode(), source, &result, false, false, false)
 	result.ExportedVars = ce.dataflow.ExportedVars()
 	return result
 }
 
-func collectASTCommandNodes(node ts.Node, inPipeline bool, negated bool) []commandNodeInfo {
-	if node.IsNull() {
-		return nil
+// ---------------------------------------------------------------------------
+// AST WALK — determines command boundaries, pipelines, lists, nesting.
+//
+// Every walk function receives the node's CORRECT text (computed from its
+// parent via reconstructChildTexts). This avoids relying on potentially
+// broken child byte offsets in treesitter-go v0.1.0.
+// ---------------------------------------------------------------------------
+
+func (ce *CommandExtractor) walkNodeWithText(node ts.Node, text string, result *ParseResult, inPipeline, negated, mergeMode bool) {
+	if node.IsNull() || text == "" {
+		return
 	}
 
 	switch node.Type() {
+	case "command":
+		cmds, warnings := ce.extractCommand(text, inPipeline, negated, mergeMode, false)
+		result.Commands = append(result.Commands, cmds...)
+		result.Warnings = append(result.Warnings, warnings...)
+	case "declaration_command":
+		cmds, warnings := ce.extractCommand(text, inPipeline, negated, mergeMode, true)
+		result.Commands = append(result.Commands, cmds...)
+		result.Warnings = append(result.Warnings, warnings...)
+	case "variable_assignment":
+		ce.handleBareAssignment(text, mergeMode, result)
 	case "pipeline":
-		var out []commandNodeInfo
-		for i := 0; i < int(node.ChildCount()); i++ {
-			out = append(out, collectASTCommandNodes(node.Child(i), true, negated)...)
-		}
-		return out
+		ce.walkChildrenWithText(node, text, result, true, negated, false)
 	case "negated_command":
-		var out []commandNodeInfo
-		for i := 0; i < int(node.ChildCount()); i++ {
-			out = append(out, collectASTCommandNodes(node.Child(i), inPipeline, true)...)
-		}
-		return out
-	case "command", "declaration_command":
-		return []commandNodeInfo{{node: node, inPipeline: inPipeline, negated: negated}}
+		ce.walkChildrenWithText(node, text, result, inPipeline, true, mergeMode)
+	case "list":
+		ce.walkListWithText(node, text, result, inPipeline, negated)
+	default:
+		ce.walkChildrenWithText(node, text, result, inPipeline, negated, false)
 	}
+}
 
-	var out []commandNodeInfo
+// walkChildrenWithText reconstructs correct child texts from the parent's
+// (correct) text, then walks each named child with its corrected text.
+func (ce *CommandExtractor) walkChildrenWithText(parent ts.Node, parentText string, result *ParseResult, inPipeline, negated, mergeMode bool) {
+	texts := reconstructChildTexts(parentText, parent)
+	for i := 0; i < int(parent.ChildCount()); i++ {
+		child := parent.Child(i)
+		if !child.IsNamed() {
+			continue
+		}
+		ce.walkNodeWithText(child, texts[i], result, inPipeline, negated, mergeMode)
+	}
+}
+
+// walkListWithText handles a list node (&&, ||, ; chains). Uses ALL children
+// (including anonymous connector nodes) to determine merge mode.
+func (ce *CommandExtractor) walkListWithText(node ts.Node, text string, result *ParseResult, inPipeline, negated bool) {
+	texts := reconstructChildTexts(text, node)
+	prevConnector := ""
 	for i := 0; i < int(node.ChildCount()); i++ {
-		out = append(out, collectASTCommandNodes(node.Child(i), inPipeline, negated)...)
+		child := node.Child(i)
+		if !child.IsNamed() {
+			prevConnector = strings.TrimSpace(texts[i])
+			continue
+		}
+		merge := prevConnector == "&&" || prevConnector == "||"
+		ce.walkNodeWithText(child, texts[i], result, inPipeline, negated, merge)
 	}
-	return out
 }
 
-func isBareAssignmentCommand(tokens []string) bool {
+// reconstructChildTexts takes a parent's correct text and reconstructs the
+// text for each child by scanning forward using child node sizes (which are
+// correct in treesitter-go v0.1.0 even when absolute offsets are wrong).
+// Inter-child gaps (whitespace not modeled as tree-sitter nodes) are skipped.
+func reconstructChildTexts(parentText string, parent ts.Node) []string {
+	n := int(parent.ChildCount())
+	texts := make([]string, n)
+	pos := 0
+
+	for i := 0; i < n; i++ {
+		child := parent.Child(i)
+		size := int(child.EndByte()) - int(child.StartByte())
+		if size <= 0 {
+			continue
+		}
+
+		// Skip whitespace between children (tree-sitter does not model
+		// inter-token whitespace as nodes).
+		for pos < len(parentText) && isInterTokenWhitespace(parentText[pos]) {
+			pos++
+		}
+
+		end := pos + size
+		if end <= len(parentText) {
+			texts[i] = parentText[pos:end]
+			pos = end
+		}
+	}
+	return texts
+}
+
+func isInterTokenWhitespace(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
+}
+
+// ---------------------------------------------------------------------------
+// TEXT EXTRACTION — tokenizes a single command's text to extract name, args,
+// flags, inline env. The command text is always correct (passed from the
+// parent-corrected AST walk, not from broken child offsets).
+// ---------------------------------------------------------------------------
+
+// extractCommand extracts commands from a command/declaration_command's text.
+func (ce *CommandExtractor) extractCommand(cmdText string, inPipeline, negated, mergeMode, isDeclaration bool) ([]ExtractedCommand, []guard.Warning) {
+	tokens := tokenizeCommand(cmdText)
 	if len(tokens) == 0 {
-		return false
+		return nil, nil
 	}
-	for _, tok := range tokens {
-		if !isInlineAssignment(tok) {
-			return false
-		}
-	}
-	return true
-}
 
-func (ce *CommandExtractor) applyBareAssignment(fb sourceCommand) []guard.Warning {
-	var warnings []guard.Warning
-	mergeMode := fb.sepBefore == "&&" || fb.sepBefore == "||" || fb.sepBefore == "|"
-	for _, tok := range fb.tokens {
-		k, v, ok := extractAssignment(tok)
-		if !ok {
-			continue
-		}
-		if containsCommandSubstitution(v) {
-			ce.defineIndeterminate(k, false, mergeMode)
-			warnings = append(warnings, guard.Warning{
-				Code:    guard.WarnCommandSubstitution,
-				Message: "variable assigned via command substitution",
-			})
-			continue
-		}
-		ce.defineVar(k, v, false, mergeMode)
-	}
-	return warnings
-}
-
-func (ce *CommandExtractor) extractFromASTCommand(info commandNodeInfo, source string, fb sourceCommand) ([]ExtractedCommand, []guard.Warning) {
 	base := ExtractedCommand{
 		Flags:      map[string]string{},
 		InlineEnv:  map[string]string{},
-		InPipeline: info.inPipeline,
-		Negated:    info.negated,
-		StartByte:  info.node.StartByte(),
-		EndByte:    info.node.EndByte(),
-		RawText:    nodeText(source, info.node),
+		InPipeline: inPipeline,
+		Negated:    negated,
+		RawText:    cmdText,
 	}
 	var warnings []guard.Warning
-	fallback := append([]string{}, fb.tokens...)
-	declKeyword := declarationKeyword(base.RawText)
-	if info.node.Type() == "declaration_command" {
-		for len(fallback) > 0 {
-			switch fallback[0] {
-			case "export", "declare", "local", "typeset":
-				fallback = fallback[1:]
-			default:
-				goto doneDeclStrip
-			}
+
+	// For declaration commands, skip the keyword (export, declare, etc.)
+	pos := 0
+	if isDeclaration {
+		switch tokens[0] {
+		case "export", "declare", "local", "typeset":
+			base.RawName = tokens[0]
+			base.Name = tokens[0]
+			pos = 1
 		}
-	}
-doneDeclStrip:
-	fallbackPos := 0
-	peekFallback := func() (string, bool) {
-		if fallbackPos >= len(fallback) {
-			return "", false
-		}
-		return fallback[fallbackPos], true
-	}
-	nextFallback := func() (string, bool) {
-		if fallbackPos >= len(fallback) {
-			return "", false
-		}
-		t := fallback[fallbackPos]
-		fallbackPos++
-		return t, true
-	}
-	childText := func(child ts.Node) (string, bool) {
-		text := normalizeCommandText(nodeText(source, child))
-		if text != "" {
-			// Prefer AST span text, but if it diverges from lexical fallback token
-			// (known treesitter-go offset issue), consume fallback token instead.
-			if fb, ok := peekFallback(); ok {
-				if text == fb {
-					fallbackPos++
-					return text, true
-				}
-				return nextFallback()
-			}
-			return text, true
-		}
-		return nextFallback()
 	}
 
-	variants := []ExtractedCommand{base}
-	sepBefore := fb.sepBefore
-	for i := 0; i < int(info.node.NamedChildCount()); i++ {
-		child := info.node.NamedChild(i)
-		switch child.Type() {
-		case "variable_assignment":
-			tok, ok := childText(child)
-			if !ok {
-				continue
+	// Separate inline env assignments from command name and args.
+	// For declarations, all tokens after the keyword are declaration arguments
+	// (variable assignments handled in the declaration-specific loop below),
+	// so skip inline env detection.
+	if !isDeclaration {
+		for pos < len(tokens) && isInlineAssignment(tokens[pos]) {
+			k, v, ok := extractAssignment(tokens[pos])
+			if ok {
+				base.InlineEnv[k] = v
 			}
-			k, v, ok := extractAssignment(tok)
-			if !ok {
-				continue
-			}
-			for idx := range variants {
-				variants[idx].InlineEnv[k] = v
-			}
-		case "command_name":
-			tok, ok := childText(child)
-			if !ok {
-				continue
-			}
-			for idx := range variants {
-				variants[idx].RawName = tok
-				variants[idx].Name = Normalize(tok)
-				if variants[idx].Name == "" {
-					variants[idx].Name = tok
-				}
-			}
-		default:
-			if !isArgumentNodeType(child.Type()) {
-				continue
-			}
-			tok, ok := childText(child)
-			if !ok {
-				continue
-			}
-			exps, capped := ce.dataflow.ResolveString(tok)
-			if capped {
-				warnings = append(warnings, guard.Warning{
-					Code:    guard.WarnExpansionCapped,
-					Message: "dataflow expansion capped at 16",
-				})
-			}
-			if len(exps) == 0 {
-				exps = []string{tok}
-			}
-			next := make([]ExtractedCommand, 0, len(variants)*len(exps))
-			for _, v := range variants {
-				for _, e := range exps {
-					nv := cloneCommand(v)
-					nv.RawArgs = append(nv.RawArgs, e)
-					classifyArg(e, &nv)
-					if len(exps) > 1 || e != tok {
-						nv.DataflowResolved = true
+			pos++
+		}
+	}
+
+	// For declaration commands, remaining tokens may be variable assignments.
+	if isDeclaration {
+		for ; pos < len(tokens); pos++ {
+			tok := tokens[pos]
+			if isInlineAssignment(tok) {
+				k, v, ok := extractAssignment(tok)
+				if ok {
+					exported := base.Name == "export"
+					if containsCommandSubstitution(v) {
+						ce.defineIndeterminate(k, exported, mergeMode)
+						warnings = append(warnings, guard.Warning{
+							Code:    guard.WarnCommandSubstitution,
+							Message: "variable assigned via command substitution",
+						})
+					} else {
+						ce.defineVar(k, v, exported, mergeMode)
 					}
-					next = append(next, nv)
 				}
 			}
-			variants = next
+			base.RawArgs = append(base.RawArgs, tok)
+			classifyArg(tok, &base)
 		}
+
+		if base.Name == "" {
+			// Bare assignment block — track in dataflow, don't emit.
+			for k, v := range base.InlineEnv {
+				if containsCommandSubstitution(v) {
+					ce.defineIndeterminate(k, false, mergeMode)
+				} else {
+					ce.defineVar(k, v, false, mergeMode)
+				}
+			}
+			return nil, warnings
+		}
+		return []ExtractedCommand{base}, warnings
 	}
 
-	mergeMode := sepBefore == "&&" || sepBefore == "||" || sepBefore == "|"
-	if variants[0].Name == "" {
-		exportedDecl := info.node.Type() == "declaration_command" && declKeyword == "export"
-		for k, v := range variants[0].InlineEnv {
+	// Command name is the next token after inline env assignments.
+	if pos >= len(tokens) {
+		// Only inline assignments, no command — track in dataflow.
+		for k, v := range base.InlineEnv {
 			if containsCommandSubstitution(v) {
-				ce.defineIndeterminate(k, exportedDecl, mergeMode)
+				ce.defineIndeterminate(k, false, mergeMode)
 				warnings = append(warnings, guard.Warning{
 					Code:    guard.WarnCommandSubstitution,
 					Message: "variable assigned via command substitution",
 				})
 			} else {
-				ce.defineVar(k, v, exportedDecl, mergeMode)
+				ce.defineVar(k, v, false, mergeMode)
 			}
 		}
 		return nil, warnings
 	}
 
+	base.RawName = tokens[pos]
+	base.Name = Normalize(tokens[pos])
+	if base.Name == "" {
+		base.Name = tokens[pos]
+	}
+	pos++
+
+	// Remaining tokens are arguments — run through dataflow expansion.
+	variants := []ExtractedCommand{base}
+	for ; pos < len(tokens); pos++ {
+		tok := tokens[pos]
+		exps, capped := ce.dataflow.ResolveString(tok)
+		if capped {
+			warnings = append(warnings, guard.Warning{
+				Code:    guard.WarnExpansionCapped,
+				Message: "dataflow expansion capped at 16",
+			})
+		}
+		if len(exps) == 0 {
+			exps = []string{tok}
+		}
+		next := make([]ExtractedCommand, 0, len(variants)*len(exps))
+		for _, v := range variants {
+			for _, e := range exps {
+				nv := cloneCommand(v)
+				nv.RawArgs = append(nv.RawArgs, e)
+				classifyArg(e, &nv)
+				if len(exps) > 1 || e != tok {
+					nv.DataflowResolved = true
+				}
+				next = append(next, nv)
+			}
+		}
+		variants = next
+	}
+
+	// Handle export commands — track assignments in dataflow.
 	if variants[0].Name == "export" {
 		for _, arg := range variants[0].Args {
 			k, v, ok := extractAssignment(arg)
@@ -287,100 +318,62 @@ doneDeclStrip:
 		}
 	}
 
-	// Inline env vars are command-scoped only.
+	// Inline env vars are command-scoped; unwrap env prefix if applicable.
 	for i := range variants {
 		unwrapEnvPrefix(&variants[i])
 	}
 	return variants, warnings
 }
 
-func isArgumentNodeType(nodeType string) bool {
-	switch nodeType {
-	case "word", "string", "raw_string", "concatenation", "expansion", "simple_expansion", "command_substitution":
-		return true
-	default:
-		return false
+// handleBareAssignment processes a standalone variable_assignment node's text.
+func (ce *CommandExtractor) handleBareAssignment(text string, mergeMode bool, result *ParseResult) {
+	k, v, ok := extractAssignment(text)
+	if !ok {
+		return
+	}
+	if containsCommandSubstitution(v) {
+		ce.defineIndeterminate(k, false, mergeMode)
+		result.Warnings = append(result.Warnings, guard.Warning{
+			Code:    guard.WarnCommandSubstitution,
+			Message: "variable assigned via command substitution",
+		})
+	} else {
+		ce.defineVar(k, v, false, mergeMode)
 	}
 }
 
-func wordTokens(raw string) []string {
-	toks := lexSourceTokens(raw)
-	out := make([]string, 0, len(toks))
-	for _, tok := range toks {
-		if tok.kind == "word" {
-			out = append(out, tok.text)
-		}
-	}
-	return out
-}
+// ---------------------------------------------------------------------------
+// TOKENIZER — splits a single command's text into tokens, respecting quotes.
+// Used only within a single command node's text, NOT the entire source.
+// ---------------------------------------------------------------------------
 
-func declarationKeyword(raw string) string {
-	parts := wordTokens(raw)
-	if len(parts) == 0 {
-		return ""
-	}
-	return parts[0]
-}
-
-func splitSourceCommands(source string) []sourceCommand {
-	var out []sourceCommand
-	toks := lexSourceTokens(source)
-	var current []string
-	sepBefore := ""
-
-	flush := func(nextSep string) {
-		if len(current) > 0 {
-			out = append(out, sourceCommand{
-				tokens:    append([]string{}, current...),
-				sepBefore: sepBefore,
-			})
-			current = nil
-		}
-		sepBefore = nextSep
-	}
-
-	for _, tok := range toks {
-		if tok.kind == "op" {
-			flush(tok.text)
-			continue
-		}
-		current = append(current, tok.text)
-	}
-	flush("")
-	return out
-}
-
-func lexSourceTokens(source string) []lexToken {
+func tokenizeCommand(text string) []string {
 	var (
-		out        []lexToken
-		buf        strings.Builder
-		inSingle   bool
-		inDouble   bool
-		escaped    bool
-		appendWord = func() {
-			if buf.Len() == 0 {
-				return
-			}
-			out = append(out, lexToken{kind: "word", text: buf.String()})
-			buf.Reset()
-		}
-		appendOp = func(op string) {
-			out = append(out, lexToken{kind: "op", text: op})
-		}
+		tokens   []string
+		buf      strings.Builder
+		inSingle bool
+		inDouble bool
+		escaped  bool
 	)
 
-	for i := 0; i < len(source); i++ {
-		ch := source[i]
+	flush := func() {
+		if buf.Len() > 0 {
+			tokens = append(tokens, buf.String())
+			buf.Reset()
+		}
+	}
+
+	for i := 0; i < len(text); i++ {
+		ch := text[i]
 		if escaped {
 			buf.WriteByte(ch)
 			escaped = false
 			continue
 		}
-		if ch == '\\' {
+		if ch == '\\' && !inSingle {
 			escaped = true
 			continue
 		}
-
 		if inSingle {
 			if ch == '\'' {
 				inSingle = false
@@ -397,40 +390,24 @@ func lexSourceTokens(source string) []lexToken {
 			}
 			continue
 		}
-
 		switch ch {
 		case '\'':
 			inSingle = true
 		case '"':
 			inDouble = true
-		case ' ', '\t', '\r':
-			appendWord()
-		case '\n', ';':
-			appendWord()
-			appendOp(";")
-		case '|':
-			appendWord()
-			if i+1 < len(source) && source[i+1] == '|' {
-				appendOp("||")
-				i++
-			} else {
-				appendOp("|")
-			}
-		case '&':
-			appendWord()
-			if i+1 < len(source) && source[i+1] == '&' {
-				appendOp("&&")
-				i++
-			} else {
-				buf.WriteByte(ch)
-			}
+		case ' ', '\t':
+			flush()
 		default:
 			buf.WriteByte(ch)
 		}
 	}
-	appendWord()
-	return out
+	flush()
+	return tokens
 }
+
+// ---------------------------------------------------------------------------
+// HELPERS
+// ---------------------------------------------------------------------------
 
 func cloneCommand(in ExtractedCommand) ExtractedCommand {
 	out := in
