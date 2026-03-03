@@ -2,7 +2,7 @@
   "id": "dcg-otc.4",
   "title": "Implement inline script detection",
   "description": "Implement InlineDetector with lazy parser init, inlineRules table (bash/sh/zsh -c, eval, python -c, ruby -e, perl -e/-E, node -e/--eval, lua -e), flag-based body extraction, eval handling, heredoc detection from AST, pipeline-aware heredoc, recursive bash parsing with MaxInlineDepth=3, WarnInlineDepthExceeded. Wire into extractor. Unit tests for all inline rules, heredoc, recursion depth, negative cases.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
   "parent": "dcg-otc",
@@ -27,6 +27,7 @@
   "labels": [
     "project=dcg"
   ],
+  "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:24:42.709177-08:00",
-  "updated_at": "2026-03-02T14:24:42.709177-08:00"
+  "updated_at": "2026-03-02T16:12:49.281339-08:00"
 }

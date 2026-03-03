@@ -68,7 +68,7 @@ func (bp *BashParser) Parse(ctx context.Context, input string) (tree *Tree, warn
 	return tree, warnings
 }
 
-func (bp *BashParser) ParseAndExtract(ctx context.Context, input string, _ int) ParseResult {
+func (bp *BashParser) ParseAndExtract(ctx context.Context, input string, depth int) ParseResult {
 	tree, warnings := bp.Parse(ctx, input)
 	if tree == nil {
 		return ParseResult{
@@ -81,6 +81,19 @@ func (bp *BashParser) ParseAndExtract(ctx context.Context, input string, _ int) 
 
 	extractor := NewCommandExtractor(bp)
 	result := extractor.Extract(tree, input)
+	inline := NewInlineDetector(bp)
+	var nested []ExtractedCommand
+	var inlineWarnings []guard.Warning
+	for _, cmd := range result.Commands {
+		cmds, warns := inline.Detect(cmd, depth)
+		nested = append(nested, cmds...)
+		inlineWarnings = append(inlineWarnings, warns...)
+	}
+	heredocCmds, heredocWarns := inline.DetectHeredocs(input, depth)
+	nested = append(nested, heredocCmds...)
+	inlineWarnings = append(inlineWarnings, heredocWarns...)
+	result.Commands = append(result.Commands, nested...)
+	result.Warnings = append(result.Warnings, inlineWarnings...)
 	result.Warnings = append(warnings, result.Warnings...)
 	result.HasError = hasWarning(result.Warnings, guard.WarnPartialParse)
 	return result
