@@ -2,7 +2,7 @@
   "id": "dcg-o5w.3",
   "title": "Implement CLI binary with hook, test, and packs modes",
   "description": "Implement cmd/dcg-go/main.go (subcommand routing), hook.go (Claude Code PreToolUse JSON protocol, LimitReader, input parsing, Bash-only filter, decision mapping, buildReason, writeHookOutput), test.go (flags, human/JSON output, exit codes), packs.go (listing). CLI unit tests.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-o5w",
@@ -27,6 +27,9 @@
   "labels": [
     "project=dcg"
   ],
+  "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:28:05.364352-08:00",
-  "updated_at": "2026-03-02T14:28:05.364352-08:00"
+  "updated_at": "2026-03-02T22:21:22.593992-08:00",
+  "closed_at": "2026-03-02T22:21:22.593992-08:00",
+  "close_reason": "Closed"
 }

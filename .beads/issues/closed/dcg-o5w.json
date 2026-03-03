@@ -2,7 +2,7 @@
   "id": "dcg-o5w",
   "title": "04: Public API \u0026 CLI",
   "description": "Implement plan 04: guard package public API (Evaluate, Result, Option types). CLI binary: hook mode (Claude Code JSON protocol), test mode, packs mode. Config file loading (YAML). Integration tests. Plan doc: docs/plans/04-api-and-cli.md",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "epic",
   "dependencies": [
@@ -48,5 +48,7 @@
     "batch=4"
   ],
   "created_at": "2026-03-02T14:13:13.799818-08:00",
-  "updated_at": "2026-03-02T14:13:13.799818-08:00"
+  "updated_at": "2026-03-02T22:24:17.419534-08:00",
+  "closed_at": "2026-03-02T22:24:17.419534-08:00",
+  "close_reason": "Auto-closed: all children completed"
 }
