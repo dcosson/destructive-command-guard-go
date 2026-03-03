@@ -8,9 +8,7 @@ import (
 )
 
 func BenchmarkPreFilter(b *testing.B) {
-	keywords := []string{
-		"git", "push", "force", "rm", "docker", "kubectl", "drop", "terraform", "delete", "truncate",
-	}
+	pf := NewPreFilter(packs.DefaultRegistry)
 	commands := []struct {
 		name string
 		cmd  string
@@ -28,7 +26,7 @@ func BenchmarkPreFilter(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				_ = mayContainKeywords(tc.cmd, keywords)
+				_ = pf.MayContainDestructive(tc.cmd)
 			}
 		})
 	}
@@ -58,14 +56,4 @@ func BenchmarkMatchCommand(b *testing.B) {
 			}
 		})
 	}
-}
-
-func mayContainKeywords(command string, keywords []string) bool {
-	cmd := strings.ToLower(command)
-	for _, k := range keywords {
-		if strings.Contains(cmd, k) {
-			return true
-		}
-	}
-	return false
 }

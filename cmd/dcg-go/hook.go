@@ -45,19 +45,38 @@ func runHookMode() error {
 	if err := json.Unmarshal(input, &hookInput); err != nil {
 		return fmt.Errorf("parsing hook input: %w", err)
 	}
+	output := processHookInput(hookInput)
+	return writeHookOutput(output.HookSpecificOutput.PermissionDecision, output.HookSpecificOutput.PermissionDecisionReason)
+}
 
+func processHookInput(hookInput HookInput) HookOutput {
 	if hookInput.HookEventName != "" && hookInput.HookEventName != "PreToolUse" {
 		fmt.Fprintf(stderr, "warning: unsupported hook event: %s\n", hookInput.HookEventName)
-		return writeHookOutput("allow", "")
+		return HookOutput{
+			HookSpecificOutput: HookSpecificOutput{
+				HookEventName:      "PreToolUse",
+				PermissionDecision: "allow",
+			},
+		}
 	}
 
 	if hookInput.ToolName != "Bash" {
-		return writeHookOutput("allow", "")
+		return HookOutput{
+			HookSpecificOutput: HookSpecificOutput{
+				HookEventName:      "PreToolUse",
+				PermissionDecision: "allow",
+			},
+		}
 	}
 
 	command := hookInput.ToolInput.Command
 	if command == "" {
-		return writeHookOutput("allow", "")
+		return HookOutput{
+			HookSpecificOutput: HookSpecificOutput{
+				HookEventName:      "PreToolUse",
+				PermissionDecision: "allow",
+			},
+		}
 	}
 
 	cfg := loadConfig()
@@ -67,7 +86,13 @@ func runHookMode() error {
 	result := guard.Evaluate(command, opts...)
 	decision := decisionToHookDecision(result.Decision)
 	reason := buildReason(result)
-	return writeHookOutput(decision, reason)
+	return HookOutput{
+		HookSpecificOutput: HookSpecificOutput{
+			HookEventName:            "PreToolUse",
+			PermissionDecision:       decision,
+			PermissionDecisionReason: reason,
+		},
+	}
 }
 
 func decisionToHookDecision(d guard.Decision) string {

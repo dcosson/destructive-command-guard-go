@@ -58,13 +58,13 @@ func loadConfig() Config {
 		return Config{}
 	}
 
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	cfg, err := parseConfig(data)
+	if err != nil {
 		fmt.Fprintf(stderr, "error: invalid config at %s: %v\n", path, err)
 		exitFn(1)
 		return Config{}
 	}
-	return cfg
+	return *cfg
 }
 
 func (c Config) toOptions() []guard.Option {
@@ -91,4 +91,15 @@ func (c Config) toOptions() []guard.Option {
 		opts = append(opts, guard.WithDisabledPacks(c.DisabledPacks...))
 	}
 	return opts
+}
+
+func parseConfig(data []byte) (*Config, error) {
+	if len(data) > maxConfigFileSize {
+		return nil, fmt.Errorf("config too large (%d bytes, max %d)", len(data), maxConfigFileSize)
+	}
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
 }
