@@ -2,7 +2,7 @@
   "id": "dcg-otc.4",
   "title": "Implement inline script detection",
   "description": "Implement InlineDetector with lazy parser init, inlineRules table (bash/sh/zsh -c, eval, python -c, ruby -e, perl -e/-E, node -e/--eval, lua -e), flag-based body extraction, eval handling, heredoc detection from AST, pipeline-aware heredoc, recursive bash parsing with MaxInlineDepth=3, WarnInlineDepthExceeded. Wire into extractor. Unit tests for all inline rules, heredoc, recursion depth, negative cases.",
-  "status": "in_progress",
+  "status": "hooked",
   "priority": 2,
   "type": "task",
   "parent": "dcg-otc",
@@ -28,6 +28,20 @@
     "project=dcg"
   ],
   "assignee": "dcg-coder-1",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Progress update on otc.4: added inline detection edge-case coverage (eval quoted/unquoted, gcc -c negative, python -c missing arg, ruby -e empty body, heredoc cases). Commit: b6a5021. Inline-focused and full parse test suites pass.",
+      "created_at": "2026-03-02T16:26:27.658189-08:00"
+    },
+    {
+      "id": 2,
+      "author": "Danny Cosson",
+      "text": "Implementation complete and ready for review. Inline detector + ParseAndExtract wiring is in (rules for bash/sh/zsh -c, eval, python/ruby/perl/node/lua; heredoc detection paths; recursion depth warning). Validation: go test ./... and go test -race ./internal/parse passed. Latest code commit: b6a5021.",
+      "created_at": "2026-03-02T16:31:35.770044-08:00"
+    }
+  ],
   "created_at": "2026-03-02T14:24:42.709177-08:00",
-  "updated_at": "2026-03-02T16:12:49.281339-08:00"
+  "updated_at": "2026-03-02T16:31:35.770508-08:00"
 }
