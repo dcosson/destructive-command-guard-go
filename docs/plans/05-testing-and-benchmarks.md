@@ -2265,3 +2265,20 @@ Implementation of 05 (testing & benchmarks) is complete when:
 ## Round 3 Review Disposition
 
 No new findings.
+
+---
+
+## Completion Signoff
+
+- **Status**: Partial
+- **Date**: 2026-03-03
+- **Branch**: main
+- **Verified by**: dcg-coder-1
+- **Completed items**:
+  - Large hardening/test infrastructure exists in `internal/testharness` (comparison harness, mutation harness, grammar coverage, E2E, stress/security/property suites).
+  - Expanded golden corpus asset exists and exceeds the planned minimum (`internal/testharness/testdata/golden/expanded_corpus.tsv` has 1000+ lines).
+  - Verification commands passed: `make test`; `make test-e2e`; `go test ./internal/testharness -run 'Test(Golden|Comparison|Mutation|GrammarCoverage|Stress|Security|E2E)' -count=1`.
+- **Outstanding gaps**:
+  - This plan assumes completion across the full planned pack set (notably batch-3 pack docs including personal/macos), but those pack implementations are not all present; corresponding "all packs" hardening claims are therefore not fully satisfiable yet. Severity: P1 (dependency completeness gap).
+  - Upstream Rust comparison execution is optional via `UPSTREAM_BINARY`; this signoff pass did not provide evidence of fully pinned, continuously-run upstream parity checks. Severity: P2 (verification completeness gap).
+  - Some benchmark wiring differs from plan examples (for example Makefile `bench` targets currently emphasize `guard`/`cmd` only), so per-stage benchmark execution is only partially aligned with the doc narrative. Severity: P2 (plan/automation drift).
