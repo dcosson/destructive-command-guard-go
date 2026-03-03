@@ -2,7 +2,7 @@
   "id": "dcg-qz6.2",
   "title": "Build infra/cloud pack fault injection, oracles, benchmarks, and security tests",
   "description": "Fault injection (ArgAt out-of-bounds, nil, keyword overlap). Comparison oracles and cross-tool severity consistency. Benchmarks for all 7 tools. Stress and security (auto-approve bypass, env escalation verification for 58 patterns).",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-qz6",
@@ -23,5 +23,7 @@
   ],
   "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:30:19.427869-08:00",
-  "updated_at": "2026-03-03T09:21:28.687323-08:00"
+  "updated_at": "2026-03-03T09:25:21.206674-08:00",
+  "closed_at": "2026-03-03T09:25:21.206674-08:00",
+  "close_reason": "Closed"
 }
