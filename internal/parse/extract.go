@@ -78,11 +78,11 @@ func (ce *CommandExtractor) walkNodeWithText(node ts.Node, text string, result *
 
 	switch node.Type() {
 	case "command":
-		cmds, warnings := ce.extractCommand(text, inPipeline, negated, mergeMode, false)
+		cmds, warnings := ce.extractCommandFromChildren(node, text, inPipeline, negated, mergeMode, false)
 		result.Commands = append(result.Commands, cmds...)
 		result.Warnings = append(result.Warnings, warnings...)
 	case "declaration_command":
-		cmds, warnings := ce.extractCommand(text, inPipeline, negated, mergeMode, true)
+		cmds, warnings := ce.extractCommandFromChildren(node, text, inPipeline, negated, mergeMode, true)
 		result.Commands = append(result.Commands, cmds...)
 		result.Warnings = append(result.Warnings, warnings...)
 	case "variable_assignment":
@@ -162,94 +162,134 @@ func isInterTokenWhitespace(b byte) bool {
 	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
 }
 
-// ---------------------------------------------------------------------------
-// TEXT EXTRACTION — tokenizes a single command's text to extract name, args,
-// flags, inline env. The command text is always correct (passed from the
-// parent-corrected AST walk, not from broken child offsets).
-// ---------------------------------------------------------------------------
-
-// extractCommand extracts commands from a command/declaration_command's text.
-func (ce *CommandExtractor) extractCommand(cmdText string, inPipeline, negated, mergeMode, isDeclaration bool) ([]ExtractedCommand, []guard.Warning) {
-	tokens := tokenizeCommand(cmdText)
-	if len(tokens) == 0 {
-		return nil, nil
-	}
-
+// extractCommandFromChildren extracts command data from AST child node texts.
+func (ce *CommandExtractor) extractCommandFromChildren(node ts.Node, cmdText string, inPipeline, negated, mergeMode, isDeclaration bool) ([]ExtractedCommand, []guard.Warning) {
 	base := ExtractedCommand{
 		Flags:      map[string]string{},
 		InlineEnv:  map[string]string{},
 		InPipeline: inPipeline,
 		Negated:    negated,
 		RawText:    cmdText,
+		StartByte:  node.StartByte(),
+		EndByte:    node.EndByte(),
 	}
 	var warnings []guard.Warning
 
-	// For declaration commands, skip the keyword (export, declare, etc.)
-	pos := 0
-	if isDeclaration {
-		switch tokens[0] {
-		case "export", "declare", "local", "typeset":
-			base.RawName = tokens[0]
-			base.Name = tokens[0]
-			pos = 1
-		}
+	childTexts := reconstructChildTexts(cmdText, node)
+	var fallback []string
+	if len(childTexts) == 0 {
+		fallback = tokenizeCommand(cmdText) // last-resort recovery only
 	}
-
-	// Separate inline env assignments from command name and args.
-	// For declarations, all tokens after the keyword are declaration arguments
-	// (variable assignments handled in the declaration-specific loop below),
-	// so skip inline env detection.
-	if !isDeclaration {
-		for pos < len(tokens) && isInlineAssignment(tokens[pos]) {
-			k, v, ok := extractAssignment(tokens[pos])
-			if ok {
-				base.InlineEnv[k] = v
+	fallbackPos := 0
+	nextFallback := func() (string, bool) {
+		if fallbackPos >= len(fallback) {
+			return "", false
+		}
+		t := fallback[fallbackPos]
+		fallbackPos++
+		return t, true
+	}
+	childText := func(i int) (string, bool) {
+		if i < len(childTexts) {
+			if t := normalizeCommandText(childTexts[i]); t != "" {
+				return t, true
 			}
-			pos++
+		}
+		return nextFallback()
+	}
+
+	var declarationName string
+	if isDeclaration {
+		declarationName = firstToken(cmdText)
+		if declarationName != "" {
+			base.RawName = declarationName
+			base.Name = declarationName
 		}
 	}
 
-	// For declaration commands, remaining tokens may be variable assignments.
-	if isDeclaration {
-		for ; pos < len(tokens); pos++ {
-			tok := tokens[pos]
-			if isInlineAssignment(tok) {
-				k, v, ok := extractAssignment(tok)
-				if ok {
-					exported := base.Name == "export"
-					if containsCommandSubstitution(v) {
-						ce.defineIndeterminate(k, exported, mergeMode)
-						warnings = append(warnings, guard.Warning{
-							Code:    guard.WarnCommandSubstitution,
-							Message: "variable assigned via command substitution",
-						})
-					} else {
-						ce.defineVar(k, v, exported, mergeMode)
+	variants := []ExtractedCommand{base}
+	seenCommandName := false
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if !child.IsNamed() {
+			continue
+		}
+		text, ok := childText(i)
+		if !ok {
+			continue
+		}
+		switch child.Type() {
+		case "variable_assignment":
+			k, v, ok := extractAssignment(text)
+			if !ok {
+				continue
+			}
+			if !isDeclaration && !seenCommandName {
+				for idx := range variants {
+					variants[idx].InlineEnv[k] = v
+				}
+				continue
+			}
+			exported := isDeclaration && declarationName == "export"
+			if containsCommandSubstitution(v) {
+				ce.defineIndeterminate(k, exported, mergeMode)
+				warnings = append(warnings, guard.Warning{
+					Code:    guard.WarnCommandSubstitution,
+					Message: "variable assigned via command substitution",
+				})
+			} else {
+				ce.defineVar(k, v, exported, mergeMode)
+			}
+			for idx := range variants {
+				variants[idx].RawArgs = append(variants[idx].RawArgs, text)
+				classifyArg(text, &variants[idx])
+			}
+		case "command_name":
+			seenCommandName = true
+			for idx := range variants {
+				variants[idx].RawName = text
+				variants[idx].Name = Normalize(text)
+				if variants[idx].Name == "" {
+					variants[idx].Name = text
+				}
+			}
+		default:
+			if !isArgumentNodeType(child.Type()) {
+				continue
+			}
+			exps, capped := ce.dataflow.ResolveString(text)
+			if capped {
+				warnings = append(warnings, guard.Warning{
+					Code:    guard.WarnExpansionCapped,
+					Message: "dataflow expansion capped at 16",
+				})
+			}
+			if len(exps) == 0 {
+				exps = []string{text}
+			}
+			next := make([]ExtractedCommand, 0, len(variants)*len(exps))
+			for _, v := range variants {
+				for _, e := range exps {
+					nv := cloneCommand(v)
+					nv.RawArgs = append(nv.RawArgs, e)
+					classifyArg(e, &nv)
+					if len(exps) > 1 || e != text {
+						nv.DataflowResolved = true
 					}
+					next = append(next, nv)
 				}
 			}
-			base.RawArgs = append(base.RawArgs, tok)
-			classifyArg(tok, &base)
+			variants = next
 		}
-
-		if base.Name == "" {
-			// Bare assignment block — track in dataflow, don't emit.
-			for k, v := range base.InlineEnv {
-				if containsCommandSubstitution(v) {
-					ce.defineIndeterminate(k, false, mergeMode)
-				} else {
-					ce.defineVar(k, v, false, mergeMode)
-				}
-			}
-			return nil, warnings
-		}
-		return []ExtractedCommand{base}, warnings
 	}
 
-	// Command name is the next token after inline env assignments.
-	if pos >= len(tokens) {
+	if isDeclaration {
+		return variants, warnings
+	}
+
+	if variants[0].Name == "" {
 		// Only inline assignments, no command — track in dataflow.
-		for k, v := range base.InlineEnv {
+		for k, v := range variants[0].InlineEnv {
 			if containsCommandSubstitution(v) {
 				ce.defineIndeterminate(k, false, mergeMode)
 				warnings = append(warnings, guard.Warning{
@@ -261,42 +301,6 @@ func (ce *CommandExtractor) extractCommand(cmdText string, inPipeline, negated, 
 			}
 		}
 		return nil, warnings
-	}
-
-	base.RawName = tokens[pos]
-	base.Name = Normalize(tokens[pos])
-	if base.Name == "" {
-		base.Name = tokens[pos]
-	}
-	pos++
-
-	// Remaining tokens are arguments — run through dataflow expansion.
-	variants := []ExtractedCommand{base}
-	for ; pos < len(tokens); pos++ {
-		tok := tokens[pos]
-		exps, capped := ce.dataflow.ResolveString(tok)
-		if capped {
-			warnings = append(warnings, guard.Warning{
-				Code:    guard.WarnExpansionCapped,
-				Message: "dataflow expansion capped at 16",
-			})
-		}
-		if len(exps) == 0 {
-			exps = []string{tok}
-		}
-		next := make([]ExtractedCommand, 0, len(variants)*len(exps))
-		for _, v := range variants {
-			for _, e := range exps {
-				nv := cloneCommand(v)
-				nv.RawArgs = append(nv.RawArgs, e)
-				classifyArg(e, &nv)
-				if len(exps) > 1 || e != tok {
-					nv.DataflowResolved = true
-				}
-				next = append(next, nv)
-			}
-		}
-		variants = next
 	}
 
 	// Handle export commands — track assignments in dataflow.
@@ -405,6 +409,14 @@ func tokenizeCommand(text string) []string {
 	return tokens
 }
 
+func firstToken(text string) string {
+	toks := tokenizeCommand(text)
+	if len(toks) == 0 {
+		return ""
+	}
+	return toks[0]
+}
+
 // ---------------------------------------------------------------------------
 // HELPERS
 // ---------------------------------------------------------------------------
@@ -464,6 +476,15 @@ func classifyArg(text string, cmd *ExtractedCommand) {
 		return
 	}
 	cmd.Args = append(cmd.Args, text)
+}
+
+func isArgumentNodeType(nodeType string) bool {
+	switch nodeType {
+	case "word", "string", "raw_string", "concatenation", "expansion", "simple_expansion", "command_substitution":
+		return true
+	default:
+		return false
+	}
 }
 
 func extractAssignment(text string) (string, string, bool) {
