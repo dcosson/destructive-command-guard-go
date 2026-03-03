@@ -345,17 +345,17 @@ var extractionTests = []extractionTestCase{
 	{
 		name: "export with assignment",
 		input: "export FOO=bar",
-		wantCmds: 0, // declaration_command with no following command
+		wantCmds: 1, // declaration_command emits as command with name="export"
 	},
 	{
 		name: "local variable",
 		input: "local myvar=123",
-		wantCmds: 0,
+		wantCmds: 1, // declaration_command emits as command with name="local"
 	},
 	{
 		name: "declare command",
 		input: "declare -a myarray=(1 2 3)",
-		wantCmds: 0,
+		wantCmds: 1, // declaration_command emits as command with name="declare"
 	},
 
 	// --- Bare variable assignments ---

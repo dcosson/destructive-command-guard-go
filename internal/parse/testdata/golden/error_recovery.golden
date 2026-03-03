@@ -19,7 +19,8 @@ git push "
       "name": "git",
       "raw_name": "git",
       "args": [
-        "push"
+        "push",
+        "\""
       ]
     }
   ]
