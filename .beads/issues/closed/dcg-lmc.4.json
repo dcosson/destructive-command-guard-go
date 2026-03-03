@@ -1,0 +1,33 @@
+{
+  "id": "dcg-lmc.4",
+  "title": "Signoff: Specialized packs + API + testing (03f, 03g, 04, 05)",
+  "description": "Run /plan-work-completion-signoff on these docs:\n- docs/plans/03f-packs-personal-files.md → internal/packs/ (personal files rules)\n- docs/plans/03g-packs-macos.md → internal/packs/ (macOS system rules)\n- docs/plans/04-api-and-cli.md → guard/, cmd/dcg-go/\n- docs/plans/04-api-and-cli-test-harness.md → guard/ tests, cmd/dcg-go/ tests, internal/testharness/ e2e\n- docs/plans/05-testing-and-benchmarks.md → internal/testharness/\n- docs/plans/05-testing-and-benchmarks-test-harness.md → internal/testharness/ tests\n\nFor each doc: read the plan thoroughly, compare every specified type/interface/function/algorithm against the actual code, run tests, then add a Completion Signoff section. Report gaps to dcg-scheduler.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-lmc",
+  "dependencies": [
+    {
+      "id": "dcg-lmc",
+      "type": "parent-child"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "assignee": "dcg-coder-1",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Completed plan-work-completion-signoff pass. Docs updated with Completion Signoff sections and test verification. Commit: ca4cb85b110e29682600254b72fae3c36de13cf6. Reported gaps to scheduler (03f/03g pack implementations missing; 05 remains partial pending full pack set + upstream comparison evidence).",
+      "created_at": "2026-03-03T11:53:08.185074-08:00"
+    }
+  ],
+  "created_at": "2026-03-03T11:40:37.766324-08:00",
+  "updated_at": "2026-03-03T11:53:08.195331-08:00",
+  "closed_at": "2026-03-03T11:53:08.195331-08:00",
+  "close_reason": "Closed"
+}
