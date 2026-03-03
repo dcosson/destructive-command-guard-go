@@ -3,6 +3,7 @@ package parse
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -10,6 +11,10 @@ import (
 )
 
 func TestDebugASTStructure(t *testing.T) {
+	if os.Getenv("DCG_DEBUG_AST") != "1" {
+		t.Skip("set DCG_DEBUG_AST=1 to run debug AST dump")
+	}
+
 	parser := NewBashParser()
 	inputs := []string{
 		"ls",

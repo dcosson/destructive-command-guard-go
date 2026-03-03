@@ -2,14 +2,34 @@ package parse
 
 import (
 	"strings"
+	"sync"
 	"unicode"
 )
 
+var normalizeIntern sync.Map
+
 func Normalize(name string) string {
-	if idx := strings.LastIndexByte(name, '/'); idx >= 0 {
-		return name[idx+1:]
+	if name == "" {
+		return ""
 	}
-	return name
+	if v, ok := normalizeIntern.Load(name); ok {
+		return v.(string)
+	}
+
+	normalized := name
+	if idx := strings.LastIndexByte(name, '/'); idx >= 0 {
+		normalized = name[idx+1:]
+	}
+	if normalized == "" {
+		return ""
+	}
+
+	// Use the normalized value as the canonical key to increase cache hits.
+	if v, ok := normalizeIntern.Load(normalized); ok {
+		return v.(string)
+	}
+	normalizeIntern.Store(normalized, normalized)
+	return normalized
 }
 
 func normalizeCommandText(text string) string {
