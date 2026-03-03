@@ -2,7 +2,7 @@
   "id": "dcg-fdp.6",
   "title": "Implement comparison testing against upstream Rust",
   "description": "Create comparison.go with ComparisonEntry, UpstreamResult, classifyDivergence (5 rules + known-divergences). TestComparisonAgainstUpstream with UPSTREAM_BINARY gating. Corpus from 4 sources. comparison_corpus.json, comparison_divergences.json. CI runner script.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-fdp",
@@ -23,5 +23,7 @@
   ],
   "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:28:39.871566-08:00",
-  "updated_at": "2026-03-03T09:02:27.249645-08:00"
+  "updated_at": "2026-03-03T09:08:09.973782-08:00",
+  "closed_at": "2026-03-03T09:08:09.973782-08:00",
+  "close_reason": "Closed"
 }
