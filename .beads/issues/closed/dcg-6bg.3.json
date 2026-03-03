@@ -2,7 +2,7 @@
   "id": "dcg-6bg.3",
   "title": "Build pipeline fault injection, comparison oracles, and security tests",
   "description": "Fault injection F1-F5 (matcher panic, registry freeze, malformed Aho-Corasick, concurrent stress, nil/zero inputs). Comparison oracles O1-O3 (policy exhaustive, glob reference, env upstream). Security SEC1-SEC3 (glob injection, allowlist bypass, regex DoS).",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-6bg",
@@ -22,6 +22,16 @@
     "project=dcg"
   ],
   "assignee": "dcg-coder-2",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Implementation complete: commit 6a8d390. Oracles O2-O3 and security SEC1-SEC3. Note: F1-F5 already exist in pipeline_test.go, registry_test.go, and prefilter_test.go from qck.3/qck.7/qck.8. O1 already exists in policy_test.go. All pass with -race.",
+      "created_at": "2026-03-02T20:58:06.586713-08:00"
+    }
+  ],
   "created_at": "2026-03-02T14:29:24.065909-08:00",
-  "updated_at": "2026-03-02T20:51:45.76863-08:00"
+  "updated_at": "2026-03-02T20:59:34.586653-08:00",
+  "closed_at": "2026-03-02T20:59:34.586653-08:00",
+  "close_reason": "Closed"
 }
