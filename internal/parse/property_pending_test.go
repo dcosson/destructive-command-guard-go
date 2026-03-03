@@ -32,8 +32,28 @@ func TestPropertyExtractOutputConsistency(t *testing.T) {
 			if int(cmd.EndByte) > len(input) {
 				return false
 			}
+			// StartByte must not exceed EndByte
+			if cmd.StartByte > cmd.EndByte {
+				return false
+			}
+			// RawText must correspond to the source span [StartByte:EndByte]
+			// when the span is valid (non-zero-length and within bounds)
+			if cmd.StartByte < cmd.EndByte && int(cmd.EndByte) <= len(input) {
+				span := input[cmd.StartByte:cmd.EndByte]
+				if cmd.RawText != "" && cmd.RawText != span {
+					// RawText should match the source span when both are non-empty
+					return false
+				}
+			}
+			// Flags must have dash prefix
 			for k := range cmd.Flags {
 				if !strings.HasPrefix(k, "-") {
+					return false
+				}
+			}
+			// InlineEnv keys must be valid identifiers (non-empty, no =)
+			for k := range cmd.InlineEnv {
+				if k == "" || strings.Contains(k, "=") {
 					return false
 				}
 			}
@@ -152,19 +172,46 @@ func TestPropertyFullPipelineStructured(t *testing.T) {
 }
 
 // P6: Inline Detection Depth Bounded
+// Verifies that nested inline scripts (bash -c "bash -c ...") produce a
+// bounded number of extracted commands or emit WarnInlineDepthExceeded.
 func TestPropertyInlineDetectionDepthBounded(t *testing.T) {
 	t.Parallel()
 	bp := NewBashParser()
 
+	// maxReasonableCommands bounds how many commands we expect from any
+	// depth of nesting. When inline detection is implemented, deeply
+	// nested chains should be capped and produce a warning.
+	const maxReasonableCommands = 20
+
 	// Create deeply nested bash -c chains
 	for depth := 1; depth <= 10; depth++ {
+		depth := depth
 		input := buildNestedBashC(depth)
-		assertNoPanic(t, fmt.Sprintf("inline-depth-%d", depth), func() {
-			result := bp.ParseAndExtract(context.Background(), input, 0)
-			// Should never have more than MaxInlineDepth levels of extracted commands
-			// from inline detection. The exact count depends on implementation but
-			// should be bounded.
-			_ = result
+		t.Run(fmt.Sprintf("depth-%d", depth), func(t *testing.T) {
+			assertNoPanic(t, fmt.Sprintf("inline-depth-%d", depth), func() {
+				result := bp.ParseAndExtract(context.Background(), input, 0)
+
+				// Command count must be bounded regardless of nesting depth
+				if len(result.Commands) > maxReasonableCommands {
+					t.Errorf("depth %d produced %d commands (max %d); inline depth should be bounded",
+						depth, len(result.Commands), maxReasonableCommands)
+				}
+
+				// For deep nesting (>3), if inline detection is active, we expect
+				// either a bounded command count or a depth-exceeded warning
+				if depth > 3 && len(result.Commands) > depth {
+					found := false
+					for _, w := range result.Warnings {
+						if w.Code == guard.WarnInlineDepthExceeded {
+							found = true
+						}
+					}
+					if !found && len(result.Commands) > maxReasonableCommands {
+						t.Errorf("deep nesting at depth %d: %d commands without WarnInlineDepthExceeded",
+							depth, len(result.Commands))
+					}
+				}
+			})
 		})
 	}
 }

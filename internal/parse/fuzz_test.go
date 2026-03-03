@@ -201,8 +201,23 @@ func FuzzDataflow(f *testing.F) {
 		}
 		result := NewCommandExtractor(bp).Extract(tree, input)
 
-		// Verify expansion cap invariant: no more than 16 command variants
-		// from a single dataflow expansion
-		_ = result
+		// Verify expansion cap invariant: no more than maxExpansions (16)
+		// command variants should be produced for any single command name.
+		// Group extracted commands by (Name, StartByte) to count variants.
+		type cmdKey struct {
+			name      string
+			startByte uint32
+		}
+		variants := map[cmdKey]int{}
+		for _, cmd := range result.Commands {
+			k := cmdKey{cmd.Name, cmd.StartByte}
+			variants[k]++
+		}
+		for k, count := range variants {
+			if count > maxExpansions {
+				t.Errorf("command %q at byte %d produced %d variants, exceeds cap %d",
+					k.name, k.startByte, count, maxExpansions)
+			}
+		}
 	})
 }
