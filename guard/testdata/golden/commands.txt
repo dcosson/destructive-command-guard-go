@@ -1,0 +1,6 @@
+# decision|command
+Allow|git status
+Deny|git push --force origin main
+Deny|rm -rf /
+Deny|RAILS_ENV=production rails db:reset
+Allow|echo hello world
