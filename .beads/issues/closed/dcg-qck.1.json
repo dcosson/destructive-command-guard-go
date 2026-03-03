@@ -2,7 +2,7 @@
   "id": "dcg-qck.1",
   "title": "Implement shared types and pack type definitions",
   "description": "Create guard/types.go with Severity, Confidence, Decision, Assessment, Match, Warning, WarningCode, Result. Create internal/packs/pack.go with Pack, SafePattern, DestructivePattern structs. Unit tests for Stringer/enum behavior.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-qck",
@@ -31,6 +31,9 @@
   "labels": [
     "project=dcg"
   ],
+  "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:25:25.54259-08:00",
-  "updated_at": "2026-03-02T14:25:25.54259-08:00"
+  "updated_at": "2026-03-02T17:00:08.266122-08:00",
+  "closed_at": "2026-03-02T17:00:08.266122-08:00",
+  "close_reason": "Closed"
 }

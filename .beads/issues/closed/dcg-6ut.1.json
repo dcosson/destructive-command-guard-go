@@ -2,7 +2,7 @@
   "id": "dcg-6ut.1",
   "title": "Implement database.postgresql and database.mysql packs",
   "description": "Create internal/packs/database/postgresql.go (5 safe, 10 destructive) and mysql.go (4 safe, 8 destructive). SQL content matching via SQLContent for DROP TABLE/DATABASE, TRUNCATE, DELETE/UPDATE without WHERE. Both env-sensitive. Unit tests for case-insensitive SQL, flag-value extraction, interactive vs command modes. Golden files.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-6ut",
@@ -27,6 +27,9 @@
   "labels": [
     "project=dcg"
   ],
+  "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:26:23.1115-08:00",
-  "updated_at": "2026-03-02T14:26:23.1115-08:00"
+  "updated_at": "2026-03-02T20:34:16.167526-08:00",
+  "closed_at": "2026-03-02T20:34:16.167526-08:00",
+  "close_reason": "Closed"
 }

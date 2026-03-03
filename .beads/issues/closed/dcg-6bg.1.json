@@ -2,7 +2,7 @@
   "id": "dcg-6bg.1",
   "title": "Build property-based tests for the evaluation pipeline",
   "description": "Property tests P1-P10 (pipeline never panics, valid decision, assessment consistency, blocklist always denies, allowlist never denied, blocklist precedence, empty allows, policy monotonicity, glob idempotent, safe short-circuit). setupTestPipeline helper.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-6bg",
@@ -27,6 +27,17 @@
   "labels": [
     "project=dcg"
   ],
+  "assignee": "dcg-coder-2",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Implementation complete: commit 1bb9c72. All 11 property tests pass with -race. Ready for review.",
+      "created_at": "2026-03-02T20:36:29.080953-08:00"
+    }
+  ],
   "created_at": "2026-03-02T14:29:23.93913-08:00",
-  "updated_at": "2026-03-02T14:29:23.93913-08:00"
+  "updated_at": "2026-03-02T20:40:13.997691-08:00",
+  "closed_at": "2026-03-02T20:40:13.997691-08:00",
+  "close_reason": "Closed"
 }

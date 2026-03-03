@@ -2,7 +2,7 @@
   "id": "dcg-1jl.3",
   "title": "Add ArgPrefix matcher and cross-plan builder updates",
   "description": "Implement ArgPrefix(prefix) matcher for dd of= syntax. Add SQLContent, SQLContentRegex, ArgAtFold, CheckFlagValues extension to ArgContentMatcher as needed by 03b-03e packs. Unit tests for each new matcher. Must be complete before 03b-03e can start.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-1jl",
@@ -21,6 +21,9 @@
   "labels": [
     "project=dcg"
   ],
+  "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:26:04.309048-08:00",
-  "updated_at": "2026-03-02T14:26:04.309048-08:00"
+  "updated_at": "2026-03-02T20:27:29.648927-08:00",
+  "closed_at": "2026-03-02T20:27:29.648927-08:00",
+  "close_reason": "Closed"
 }

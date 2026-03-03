@@ -2,7 +2,7 @@
   "id": "dcg-6ut.2",
   "title": "Implement database.sqlite pack",
   "description": "Create internal/packs/database/sqlite.go (2 safe, 5 destructive). Not env-sensitive. Covers DROP TABLE, dot-commands (.drop), DELETE/UPDATE without WHERE. sqlite3-specific dot-command regex. Unit tests and golden files.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-6ut",
@@ -21,6 +21,9 @@
   "labels": [
     "project=dcg"
   ],
+  "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:26:23.171205-08:00",
-  "updated_at": "2026-03-02T14:26:23.171205-08:00"
+  "updated_at": "2026-03-02T20:35:53.84051-08:00",
+  "closed_at": "2026-03-02T20:35:53.84051-08:00",
+  "close_reason": "Closed"
 }

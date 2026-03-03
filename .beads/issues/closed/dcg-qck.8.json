@@ -2,7 +2,7 @@
   "id": "dcg-qck.8",
   "title": "Implement evaluation pipeline and golden file infrastructure",
   "description": "Create internal/eval/pipeline.go with Pipeline and Run() implementing full 12-step evaluation. Create config.go. Build golden file infrastructure in testdata/golden/: format parser, LoadCorpus, RunCorpus, seed ~30-40 entries. Pipeline integration tests: safe push, force push, reset hard, env escalation, allowlist/blocklist precedence, disabled packs, expansion cap.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-qck",
@@ -37,6 +37,9 @@
   "labels": [
     "project=dcg"
   ],
+  "assignee": "dcg-coder-2",
   "created_at": "2026-03-02T14:25:25.907106-08:00",
-  "updated_at": "2026-03-02T14:25:25.907106-08:00"
+  "updated_at": "2026-03-02T20:25:52.216582-08:00",
+  "closed_at": "2026-03-02T20:25:45.451579-08:00",
+  "close_reason": "Closed"
 }

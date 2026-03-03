@@ -2,7 +2,7 @@
   "id": "dcg-qck",
   "title": "02: Matching Framework",
   "description": "Implement plan 02: Pack type definitions, CommandMatcher interface, built-in matchers (Name, SubCommand, Flag, ArgContent, ArgContentRegex, AnyName, RawArgContent, Not, And, Or), pack registry, keyword pre-filter, evaluation pipeline, policy engine (Strict/Interactive/Permissive), allowlist/blocklist, environment detection, golden file infrastructure. Plan doc: docs/plans/02-matching-framework.md",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "epic",
   "dependencies": [
@@ -64,5 +64,7 @@
     "batch=2"
   ],
   "created_at": "2026-03-02T14:12:13.783285-08:00",
-  "updated_at": "2026-03-02T14:12:13.783285-08:00"
+  "updated_at": "2026-03-02T20:25:45.481287-08:00",
+  "closed_at": "2026-03-02T20:25:45.46896-08:00",
+  "close_reason": "Auto-closed: all children completed"
 }
