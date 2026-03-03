@@ -2,7 +2,7 @@
   "id": "dcg-otc",
   "title": "01: Tree-sitter Integration",
   "description": "Implement plan 01: Import tree-sitter-go (github.com/dcosson/treesitter-go v0.1.0). Bash parsing wrapper. AST command extraction. Command normalization. Inline script detection. Multi-language parsing. Plan doc: docs/plans/01-treesitter-integration.md",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "epic",
   "dependents": [
@@ -45,6 +45,9 @@
     "project=dcg",
     "batch=1"
   ],
+  "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:12:03.229958-08:00",
-  "updated_at": "2026-03-02T15:02:47.906624-08:00"
+  "updated_at": "2026-03-02T16:39:54.774359-08:00",
+  "closed_at": "2026-03-02T16:39:54.76156-08:00",
+  "close_reason": "Auto-closed: all children completed"
 }
