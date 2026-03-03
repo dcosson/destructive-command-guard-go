@@ -1,0 +1,49 @@
+# Golden file: database cross-pack non-interference (E6)
+# Verify that database packs from different systems don't interfere.
+format: v1
+---
+# E6: PostgreSQL command matches postgresql pack only
+command: psql -c "DROP TABLE users"
+decision: Deny
+severity: High
+confidence: High
+pack: database.postgresql
+rule: psql-drop-table
+---
+# E6: MySQL command matches mysql pack only
+command: mysql -e "DROP TABLE users"
+decision: Deny
+severity: High
+confidence: High
+pack: database.mysql
+rule: mysql-drop-table
+---
+# E6: MongoDB command matches mongodb pack only
+command: mongosh --eval "db.dropDatabase()"
+decision: Deny
+severity: High
+confidence: High
+pack: database.mongodb
+rule: mongo-drop-database
+---
+# E6: Redis command matches redis pack only
+command: redis-cli FLUSHALL
+decision: Deny
+severity: High
+confidence: High
+pack: database.redis
+rule: redis-flushall
+---
+# E6: SQLite matches sqlite pack only
+command: sqlite3 test.db "DROP TABLE users"
+decision: Deny
+severity: High
+confidence: High
+pack: database.sqlite
+rule: sqlite3-drop-table
+---
+# E6: Compound psql+mysql both match independently
+command: psql -c "DROP DATABASE test" && mysql -e "DROP DATABASE test"
+decision: Deny
+severity: High
+confidence: High

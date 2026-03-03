@@ -1,0 +1,113 @@
+# Golden file: database.redis pack (E5)
+# 16 cases: 5 destructive-high, 6 destructive-medium, 5 safe/edge
+format: v1
+---
+# D1: FLUSHALL (High)
+command: redis-cli FLUSHALL
+decision: Deny
+severity: High
+confidence: High
+pack: database.redis
+rule: redis-flushall
+---
+# D1: flushall lowercase
+command: redis-cli flushall
+decision: Deny
+severity: High
+confidence: High
+pack: database.redis
+rule: redis-flushall
+---
+# D1: FlushAll mixed case
+command: redis-cli FlushAll
+decision: Deny
+severity: High
+confidence: High
+pack: database.redis
+rule: redis-flushall
+---
+# D1: FLUSHALL with host flag — raw string matching catches this.
+# "prod" in hostname triggers env escalation: High → Critical.
+command: redis-cli -h prod.redis.example.com FLUSHALL
+decision: Deny
+severity: Critical
+confidence: High
+pack: database.redis
+rule: redis-flushall
+env_escalated: true
+---
+# D2: FLUSHDB (High)
+command: redis-cli FLUSHDB
+decision: Deny
+severity: High
+confidence: High
+pack: database.redis
+rule: redis-flushdb
+---
+# D3: DEL key (Medium)
+command: redis-cli DEL mykey
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: database.redis
+rule: redis-key-delete
+---
+# D3: UNLINK key (Medium)
+command: redis-cli UNLINK session:12345
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: database.redis
+rule: redis-key-delete
+---
+# D4: CONFIG SET (Medium)
+command: redis-cli CONFIG SET maxmemory 100mb
+decision: Ask
+severity: Medium
+confidence: High
+pack: database.redis
+rule: redis-config-set
+---
+# D5: SHUTDOWN (Medium)
+command: redis-cli SHUTDOWN
+decision: Ask
+severity: Medium
+confidence: High
+pack: database.redis
+rule: redis-shutdown
+---
+# D6: DEBUG SEGFAULT (Medium)
+command: redis-cli DEBUG SEGFAULT
+decision: Ask
+severity: Medium
+confidence: High
+pack: database.redis
+rule: redis-debug
+---
+# D6: DEBUG SLEEP (Medium)
+command: redis-cli DEBUG SLEEP 9999
+decision: Ask
+severity: Medium
+confidence: High
+pack: database.redis
+rule: redis-debug
+---
+# S1: GET is safe
+command: redis-cli GET mykey
+decision: Allow
+---
+# S2: INFO is safe
+command: redis-cli INFO
+decision: Allow
+---
+# S3: KEYS is safe
+command: redis-cli KEYS "user:*"
+decision: Allow
+---
+# S4: interactive mode is safe
+command: redis-cli -h localhost
+decision: Allow
+---
+# S5: PING is safe
+command: redis-cli PING
+decision: Allow

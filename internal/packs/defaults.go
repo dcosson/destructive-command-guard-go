@@ -5,6 +5,11 @@ var DefaultRegistry = NewRegistry(
 	coreGitPack(),
 	coreFilesystemPack(),
 	frameworksPack(),
+	postgresqlPack(),
+	mysqlPack(),
+	sqlitePack(),
+	mongodbPack(),
+	redisPack(),
 )
 
 func coreGitPack() Pack {

@@ -1,0 +1,75 @@
+# Golden file: database.mongodb pack (E4)
+# 11 cases: 3 destructive-high, 4 destructive-medium, 4 safe/edge
+format: v1
+---
+# D1: dropDatabase (High)
+command: mongosh --eval "db.dropDatabase()"
+decision: Deny
+severity: High
+confidence: High
+pack: database.mongodb
+rule: mongo-drop-database
+---
+# D1: dropDatabase with legacy mongo binary
+command: mongo --eval "db.dropDatabase()"
+decision: Deny
+severity: High
+confidence: High
+pack: database.mongodb
+rule: mongo-drop-database
+---
+# D2: collection.drop (High)
+command: mongosh --eval "db.users.drop()"
+decision: Deny
+severity: High
+confidence: High
+pack: database.mongodb
+rule: mongo-collection-drop
+---
+# D3: deleteMany empty filter (Medium)
+command: mongosh --eval "db.users.deleteMany({})"
+decision: Ask
+severity: Medium
+confidence: High
+pack: database.mongodb
+rule: mongo-delete-many-all
+---
+# D4: remove empty filter (Medium)
+command: mongosh --eval "db.users.remove({})"
+decision: Ask
+severity: Medium
+confidence: High
+pack: database.mongodb
+rule: mongo-remove-all
+---
+# D5: mongorestore --drop (Medium)
+command: mongorestore --drop dump/
+decision: Ask
+severity: Medium
+confidence: High
+pack: database.mongodb
+rule: mongorestore-drop
+---
+# D6: deleteMany with filter (Medium)
+command: mongosh --eval "db.users.deleteMany({status: 'inactive'})"
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: database.mongodb
+rule: mongo-delete-many
+---
+# S1: mongodump is safe
+command: mongodump --out /backup/
+decision: Allow
+---
+# S2: find is safe
+command: mongosh --eval "db.users.find()"
+decision: Allow
+---
+# S3: interactive mode is safe
+command: mongosh mongodb://localhost:27017/mydb
+decision: Allow
+---
+# S4: show dbs is safe
+command: mongosh --eval "show dbs"
+decision: Allow

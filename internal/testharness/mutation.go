@@ -148,6 +148,13 @@ func generateMutations() []mutation {
 					c = strings.ReplaceAll(c, "--delete", "")
 					c = strings.ReplaceAll(c, "db:reset", "")
 					c = strings.ReplaceAll(c, "db:drop", "")
+					// Database CLI flags that trigger destructive mode
+					c = strings.ReplaceAll(c, "--clean", "")
+					c = strings.ReplaceAll(c, " --drop", "")
+					c = strings.ReplaceAll(c, "flush-hosts", "")
+					c = strings.ReplaceAll(c, "flush-logs", "")
+					c = strings.ReplaceAll(c, "flush-privileges", "")
+					c = strings.ReplaceAll(c, "flush-tables", "")
 					return safeMatch(orig, c)
 				}
 				return r
@@ -256,20 +263,57 @@ func selectProbes(packID, ruleID string, corpus []string) (hit string, miss stri
 // patterns against the production pipeline and returns the first hit.
 func fallbackHitProbe(packID, ruleID string) string {
 	probes := []string{
+		// core packs
 		"git push --force origin main",
 		"rm -rf /",
 		"rm -rf /tmp/test",
+		"RAILS_ENV=production rails db:reset",
+		// PostgreSQL
+		`psql -c "DROP DATABASE myapp"`,
+		`dropdb myapp`,
 		`psql -c "DROP TABLE users"`,
+		`psql -c "TRUNCATE users"`,
+		`psql -c "DELETE FROM users"`,
+		`pg_dump --clean mydb`,
+		`pg_restore --clean mydb`,
+		`psql -c "ALTER TABLE users DROP COLUMN name"`,
+		`psql -c "UPDATE users SET active=false"`,
+		`psql -c "DROP SCHEMA public"`,
+		// MySQL
 		`mysql -e "DROP DATABASE myapp"`,
-		"redis-cli FLUSHALL",
-		`mongosh --eval "db.dropDatabase()"`,
+		`mysqladmin drop myapp`,
+		`mysql -e "DROP TABLE users"`,
+		`mysql -e "TRUNCATE users"`,
+		`mysql -e "DELETE FROM users"`,
+		`mysql -e "ALTER TABLE users DROP COLUMN name"`,
+		`mysqladmin flush-tables`,
+		`mysql -e "UPDATE users SET active=false"`,
+		// SQLite
 		`sqlite3 test.db "DROP TABLE users"`,
+		`sqlite3 test.db ".drop trigger mytrigger"`,
+		`sqlite3 test.db "DELETE FROM users"`,
+		`sqlite3 test.db "TRUNCATE users"`,
+		`sqlite3 test.db "UPDATE users SET active=false"`,
+		// MongoDB
+		`mongosh --eval "db.dropDatabase()"`,
+		`mongosh --eval "db.users.drop()"`,
+		`mongosh --eval "db.users.deleteMany({})"`,
+		`mongosh --eval "db.users.remove({})"`,
+		`mongorestore --drop /backup/`,
+		`mongosh --eval "db.users.deleteMany({active: false})"`,
+		// Redis
+		"redis-cli FLUSHALL",
+		"redis-cli FLUSHDB",
+		"redis-cli DEL mykey",
+		"redis-cli config set maxmemory 100mb",
+		"redis-cli shutdown",
+		"redis-cli debug segfault",
+		// Other packs (placeholder for future expansion)
 		"terraform destroy",
 		"kubectl delete pod mypod",
 		"docker rm -f mycontainer",
 		"helm uninstall myrelease",
 		"ansible-playbook playbook.yml",
-		"RAILS_ENV=production rails db:reset",
 		"vault secrets disable secret/",
 		"rsync --delete /src/ /dst/",
 		"gh repo delete myrepo --yes",

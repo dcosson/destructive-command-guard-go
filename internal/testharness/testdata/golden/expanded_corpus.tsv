@@ -899,3 +899,116 @@ compound	-	-	echo safe-39 && ls -la /tmp
 simple	-	-	git status
 simple	-	-	echo "do not run rm -rf /tmp/fdp3-40"
 compound	-	-	echo safe-40 && ls -la /tmp
+# Database packs — PostgreSQL
+simple	database.postgresql	psql-drop-database	psql -c "DROP DATABASE myapp"
+compound	database.postgresql	psql-drop-database	echo backup && psql -c "DROP DATABASE myapp"
+subshell	database.postgresql	psql-drop-database	(psql -c "DROP DATABASE myapp")
+pipeline	database.postgresql	psql-drop-database	echo yes | psql -c "DROP DATABASE staging"
+simple	database.postgresql	dropdb	dropdb myapp
+compound	database.postgresql	dropdb	pg_dump myapp > backup.sql && dropdb myapp
+subshell	database.postgresql	dropdb	(dropdb testdb)
+pipeline	database.postgresql	dropdb	echo y | dropdb myapp
+simple	database.postgresql	psql-drop-table	psql -c "DROP TABLE users"
+compound	database.postgresql	psql-drop-table	echo backup && psql -c "DROP TABLE orders"
+subshell	database.postgresql	psql-drop-table	(psql -c "DROP TABLE sessions")
+pipeline	database.postgresql	psql-drop-table	echo yes | psql -c "DROP TABLE IF EXISTS temp_data"
+simple	database.postgresql	psql-truncate	psql -c "TRUNCATE users"
+compound	database.postgresql	psql-truncate	echo truncating && psql -c "TRUNCATE orders"
+subshell	database.postgresql	psql-truncate	(psql -c "TRUNCATE sessions")
+simple	database.postgresql	psql-delete-no-where	psql -c "DELETE FROM users"
+compound	database.postgresql	psql-delete-no-where	echo deleting && psql -c "DELETE FROM orders"
+subshell	database.postgresql	psql-delete-no-where	(psql -c "DELETE FROM sessions")
+simple	database.postgresql	pg-dump-clean	pg_dump --clean mydb
+compound	database.postgresql	pg-dump-clean	echo dumping && pg_dump --clean mydb > backup.sql
+subshell	database.postgresql	pg-dump-clean	(pg_dump --clean mydb)
+simple	database.postgresql	pg-restore-clean	pg_restore --clean mydb.dump
+compound	database.postgresql	pg-restore-clean	echo restoring && pg_restore --clean mydb.dump
+subshell	database.postgresql	pg-restore-clean	(pg_restore --clean mydb.dump)
+simple	database.postgresql	psql-alter-drop	psql -c "ALTER TABLE users DROP COLUMN email"
+compound	database.postgresql	psql-alter-drop	echo altering && psql -c "ALTER TABLE users DROP COLUMN phone"
+subshell	database.postgresql	psql-alter-drop	(psql -c "ALTER TABLE orders DROP COLUMN notes")
+simple	database.postgresql	psql-update-no-where	psql -c "UPDATE users SET active=false"
+compound	database.postgresql	psql-update-no-where	echo updating && psql -c "UPDATE orders SET status='cancelled'"
+subshell	database.postgresql	psql-update-no-where	(psql -c "UPDATE sessions SET expired=true")
+simple	database.postgresql	psql-drop-schema	psql -c "DROP SCHEMA public"
+compound	database.postgresql	psql-drop-schema	echo dropping && psql -c "DROP SCHEMA staging CASCADE"
+subshell	database.postgresql	psql-drop-schema	(psql -c "DROP SCHEMA test")
+# Database packs — MySQL
+simple	database.mysql	mysql-drop-database	mysql -e "DROP DATABASE myapp"
+compound	database.mysql	mysql-drop-database	echo backup && mysql -e "DROP DATABASE staging"
+subshell	database.mysql	mysql-drop-database	(mysql -e "DROP DATABASE testdb")
+simple	database.mysql	mysqladmin-drop	mysqladmin drop myapp
+compound	database.mysql	mysqladmin-drop	echo confirm && mysqladmin drop staging
+subshell	database.mysql	mysqladmin-drop	(mysqladmin drop testdb)
+simple	database.mysql	mysql-drop-table	mysql -e "DROP TABLE users"
+compound	database.mysql	mysql-drop-table	echo backup && mysql -e "DROP TABLE orders"
+subshell	database.mysql	mysql-drop-table	(mysql -e "DROP TABLE sessions")
+simple	database.mysql	mysql-truncate	mysql -e "TRUNCATE users"
+compound	database.mysql	mysql-truncate	echo truncating && mysql -e "TRUNCATE orders"
+subshell	database.mysql	mysql-truncate	(mysql -e "TRUNCATE sessions")
+simple	database.mysql	mysql-delete-no-where	mysql -e "DELETE FROM users"
+compound	database.mysql	mysql-delete-no-where	echo deleting && mysql -e "DELETE FROM orders"
+subshell	database.mysql	mysql-delete-no-where	(mysql -e "DELETE FROM sessions")
+simple	database.mysql	mysql-alter-drop	mysql -e "ALTER TABLE users DROP COLUMN email"
+compound	database.mysql	mysql-alter-drop	echo altering && mysql -e "ALTER TABLE users DROP COLUMN phone"
+subshell	database.mysql	mysql-alter-drop	(mysql -e "ALTER TABLE orders DROP COLUMN notes")
+simple	database.mysql	mysqladmin-flush	mysqladmin flush-tables
+compound	database.mysql	mysqladmin-flush	echo flushing && mysqladmin flush-hosts
+subshell	database.mysql	mysqladmin-flush	(mysqladmin flush-privileges)
+simple	database.mysql	mysql-update-no-where	mysql -e "UPDATE users SET active=false"
+compound	database.mysql	mysql-update-no-where	echo updating && mysql -e "UPDATE orders SET status='cancelled'"
+subshell	database.mysql	mysql-update-no-where	(mysql -e "UPDATE sessions SET expired=true")
+# Database packs — SQLite
+simple	database.sqlite	sqlite3-drop-table	sqlite3 test.db "DROP TABLE users"
+compound	database.sqlite	sqlite3-drop-table	echo backup && sqlite3 app.db "DROP TABLE orders"
+subshell	database.sqlite	sqlite3-drop-table	(sqlite3 data.db "DROP TABLE sessions")
+simple	database.sqlite	sqlite3-dot-drop	sqlite3 test.db ".drop trigger update_ts"
+compound	database.sqlite	sqlite3-dot-drop	echo dropping && sqlite3 app.db ".drop view user_summary"
+subshell	database.sqlite	sqlite3-dot-drop	(sqlite3 data.db ".drop trigger notify")
+simple	database.sqlite	sqlite3-delete-no-where	sqlite3 test.db "DELETE FROM users"
+compound	database.sqlite	sqlite3-delete-no-where	echo deleting && sqlite3 app.db "DELETE FROM orders"
+subshell	database.sqlite	sqlite3-delete-no-where	(sqlite3 data.db "DELETE FROM sessions")
+simple	database.sqlite	sqlite3-truncate	sqlite3 test.db "TRUNCATE users"
+compound	database.sqlite	sqlite3-truncate	echo truncating && sqlite3 app.db "TRUNCATE orders"
+subshell	database.sqlite	sqlite3-truncate	(sqlite3 data.db "TRUNCATE sessions")
+simple	database.sqlite	sqlite3-update-no-where	sqlite3 test.db "UPDATE users SET active=0"
+compound	database.sqlite	sqlite3-update-no-where	echo updating && sqlite3 app.db "UPDATE orders SET status='done'"
+subshell	database.sqlite	sqlite3-update-no-where	(sqlite3 data.db "UPDATE sessions SET expired=1")
+# Database packs — MongoDB
+simple	database.mongodb	mongo-drop-database	mongosh --eval "db.dropDatabase()"
+compound	database.mongodb	mongo-drop-database	echo backing-up && mongosh --eval "db.dropDatabase()"
+subshell	database.mongodb	mongo-drop-database	(mongosh --eval "db.dropDatabase()")
+simple	database.mongodb	mongo-collection-drop	mongosh --eval "db.users.drop()"
+compound	database.mongodb	mongo-collection-drop	echo dropping && mongosh --eval "db.orders.drop()"
+subshell	database.mongodb	mongo-collection-drop	(mongosh --eval "db.sessions.drop()")
+simple	database.mongodb	mongo-delete-many-all	mongosh --eval "db.users.deleteMany({})"
+compound	database.mongodb	mongo-delete-many-all	echo deleting && mongosh --eval "db.orders.deleteMany({})"
+subshell	database.mongodb	mongo-delete-many-all	(mongosh --eval "db.sessions.deleteMany({})")
+simple	database.mongodb	mongo-remove-all	mongosh --eval "db.users.remove({})"
+compound	database.mongodb	mongo-remove-all	echo removing && mongosh --eval "db.orders.remove({})"
+subshell	database.mongodb	mongo-remove-all	(mongosh --eval "db.sessions.remove({})")
+simple	database.mongodb	mongorestore-drop	mongorestore --drop /backup/
+compound	database.mongodb	mongorestore-drop	echo restoring && mongorestore --drop /backup/mydb
+subshell	database.mongodb	mongorestore-drop	(mongorestore --drop /backup/staging)
+simple	database.mongodb	mongo-delete-many	mongosh --eval "db.users.deleteMany({active: false})"
+compound	database.mongodb	mongo-delete-many	echo deleting && mongosh --eval "db.orders.deleteMany({status: 'old'})"
+subshell	database.mongodb	mongo-delete-many	(mongosh --eval "db.sessions.deleteMany({expired: true})")
+# Database packs — Redis
+simple	database.redis	redis-flushall	redis-cli FLUSHALL
+compound	database.redis	redis-flushall	echo flushing && redis-cli FLUSHALL
+subshell	database.redis	redis-flushall	(redis-cli FLUSHALL)
+simple	database.redis	redis-flushdb	redis-cli FLUSHDB
+compound	database.redis	redis-flushdb	echo flushing && redis-cli FLUSHDB
+subshell	database.redis	redis-flushdb	(redis-cli FLUSHDB)
+simple	database.redis	redis-key-delete	redis-cli DEL mykey
+compound	database.redis	redis-key-delete	echo deleting && redis-cli DEL session:123
+subshell	database.redis	redis-key-delete	(redis-cli DEL cache:user:1)
+simple	database.redis	redis-config-set	redis-cli config set maxmemory 100mb
+compound	database.redis	redis-config-set	echo configuring && redis-cli config set timeout 300
+subshell	database.redis	redis-config-set	(redis-cli config set hz 100)
+simple	database.redis	redis-shutdown	redis-cli shutdown
+compound	database.redis	redis-shutdown	echo stopping && redis-cli shutdown nosave
+subshell	database.redis	redis-shutdown	(redis-cli shutdown save)
+simple	database.redis	redis-debug	redis-cli debug segfault
+compound	database.redis	redis-debug	echo testing && redis-cli debug sleep 10
+subshell	database.redis	redis-debug	(redis-cli debug set-active-expire 0)

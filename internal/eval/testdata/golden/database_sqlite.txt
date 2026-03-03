@@ -1,0 +1,59 @@
+# Golden file: database.sqlite pack (E3)
+# 9 cases: 2 destructive-high, 3 destructive-medium, 4 safe/edge
+format: v1
+---
+# D1: DROP TABLE (High)
+command: sqlite3 test.db "DROP TABLE users"
+decision: Deny
+severity: High
+confidence: High
+pack: database.sqlite
+rule: sqlite3-drop-table
+---
+# D2: .drop trigger (High)
+command: sqlite3 test.db ".drop trigger update_timestamp"
+decision: Deny
+severity: High
+confidence: Medium
+pack: database.sqlite
+rule: sqlite3-dot-drop
+---
+# D3: DELETE FROM without WHERE (Medium)
+command: sqlite3 test.db "DELETE FROM users"
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: database.sqlite
+rule: sqlite3-delete-no-where
+---
+# D4: UPDATE without WHERE (Medium)
+command: sqlite3 test.db "UPDATE config SET value='x'"
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: database.sqlite
+rule: sqlite3-update-no-where
+---
+# D5: TRUNCATE (Medium, ConfidenceLow — not valid SQLite SQL)
+command: sqlite3 test.db "TRUNCATE TABLE users"
+decision: Ask
+severity: Medium
+confidence: Low
+pack: database.sqlite
+rule: sqlite3-truncate
+---
+# S1: SELECT is safe
+command: sqlite3 test.db "SELECT * FROM users"
+decision: Allow
+---
+# S2: .tables is safe
+command: sqlite3 test.db ".tables"
+decision: Allow
+---
+# S3: interactive mode is safe
+command: sqlite3 test.db
+decision: Allow
+---
+# S4: DELETE with WHERE is safe
+command: sqlite3 test.db "DELETE FROM users WHERE id = 1"
+decision: Allow

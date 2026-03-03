@@ -1,0 +1,161 @@
+# Golden file: database.postgresql pack (E1)
+# 25 cases: 8 destructive-high, 6 destructive-medium, 11 safe/edge
+format: v1
+---
+# D1: DROP DATABASE (High)
+command: psql -c "DROP DATABASE myapp"
+decision: Deny
+severity: High
+confidence: High
+pack: database.postgresql
+rule: psql-drop-database
+---
+# D1: DROP DATABASE with host flag ("production" in command triggers env escalation)
+command: psql -h localhost -c "DROP DATABASE production"
+decision: Deny
+severity: Critical
+confidence: High
+pack: database.postgresql
+rule: psql-drop-database
+env_escalated: true
+---
+# D1: dropdb utility (no env escalation — "production" in "myapp_production"
+# has no word boundary due to underscore)
+command: dropdb myapp_production
+decision: Deny
+severity: High
+confidence: High
+pack: database.postgresql
+rule: dropdb
+---
+# D2: DROP TABLE
+command: psql -c "DROP TABLE users"
+decision: Deny
+severity: High
+confidence: High
+pack: database.postgresql
+rule: psql-drop-table
+---
+# D2: DROP TABLE IF EXISTS
+command: psql -c "DROP TABLE IF EXISTS sessions"
+decision: Deny
+severity: High
+confidence: High
+pack: database.postgresql
+rule: psql-drop-table
+---
+# D3: TRUNCATE
+command: psql -c "TRUNCATE TABLE orders"
+decision: Deny
+severity: High
+confidence: High
+pack: database.postgresql
+rule: psql-truncate
+---
+# D4: DROP TABLE case insensitive
+command: psql -c "drop table users"
+decision: Deny
+severity: High
+confidence: High
+pack: database.postgresql
+rule: psql-drop-table
+---
+# D5: DROP SCHEMA
+command: psql -c "DROP SCHEMA public CASCADE"
+decision: Deny
+severity: High
+confidence: High
+pack: database.postgresql
+rule: psql-drop-schema
+---
+# D6: DELETE FROM without WHERE (Medium)
+command: psql -c "DELETE FROM users"
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: database.postgresql
+rule: psql-delete-no-where
+---
+# D7: UPDATE without WHERE (Medium)
+command: psql -c "UPDATE users SET active=false"
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: database.postgresql
+rule: psql-update-no-where
+---
+# D8: pg_dump --clean
+command: pg_dump --clean mydb > backup.sql
+decision: Ask
+severity: Medium
+confidence: High
+pack: database.postgresql
+rule: pg-dump-clean
+---
+# D8: pg_dump -c short flag
+command: pg_dump -c mydb > backup.sql
+decision: Ask
+severity: Medium
+confidence: High
+pack: database.postgresql
+rule: pg-dump-clean
+---
+# D9: pg_restore --clean
+command: pg_restore --clean backup.dump
+decision: Ask
+severity: Medium
+confidence: High
+pack: database.postgresql
+rule: pg-restore-clean
+---
+# D10: ALTER TABLE ... DROP
+command: psql -c "ALTER TABLE users DROP COLUMN email"
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: database.postgresql
+rule: psql-alter-drop
+---
+# S1: SELECT is safe
+command: psql -c "SELECT * FROM users"
+decision: Allow
+---
+# S2: meta-command \dt is safe
+command: psql -c "\dt"
+decision: Allow
+---
+# S3: meta-command \d+ is safe
+command: psql -c "\d+ users"
+decision: Allow
+---
+# S4: pg_dump without --clean is safe
+command: pg_dump mydb > backup.sql
+decision: Allow
+---
+# S5: createdb is safe
+command: createdb myapp_test
+decision: Allow
+---
+# S6: psql interactive is safe
+command: psql -h localhost mydb
+decision: Allow
+---
+# S7: pg_restore without --clean is safe
+command: pg_restore backup.dump
+decision: Allow
+---
+# S8: DELETE FROM with WHERE is safe (no destructive match)
+command: psql -c "DELETE FROM users WHERE id = 1"
+decision: Allow
+---
+# S9: UPDATE with WHERE is safe (no destructive match)
+command: psql -c "UPDATE users SET active=false WHERE id=1"
+decision: Allow
+---
+# S10: psql -f file execution (no match — file content not inspected)
+command: psql -f migrate.sql
+decision: Allow
+---
+# S11: EXPLAIN is safe
+command: psql -c "EXPLAIN SELECT * FROM users"
+decision: Allow

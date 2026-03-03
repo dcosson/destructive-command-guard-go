@@ -1,0 +1,92 @@
+# Golden file: database.mysql pack (E2)
+# 14 cases: 4 destructive-high, 4 destructive-medium, 6 safe/edge
+format: v1
+---
+# D1: DROP DATABASE
+command: mysql -e "DROP DATABASE myapp"
+decision: Deny
+severity: High
+confidence: High
+pack: database.mysql
+rule: mysql-drop-database
+---
+# D2: mysqladmin drop (no env escalation — "production" in "myapp_production"
+# has no word boundary due to underscore)
+command: mysqladmin drop myapp_production
+decision: Deny
+severity: High
+confidence: High
+pack: database.mysql
+rule: mysqladmin-drop
+---
+# D3: DROP TABLE
+command: mysql -e "DROP TABLE users"
+decision: Deny
+severity: High
+confidence: High
+pack: database.mysql
+rule: mysql-drop-table
+---
+# D4: TRUNCATE
+command: mysql -e "TRUNCATE TABLE orders"
+decision: Deny
+severity: High
+confidence: High
+pack: database.mysql
+rule: mysql-truncate
+---
+# D5: DELETE FROM without WHERE (Medium)
+command: mysql -e "DELETE FROM users"
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: database.mysql
+rule: mysql-delete-no-where
+---
+# D6: UPDATE without WHERE (Medium)
+command: mysql -e "UPDATE users SET active=false"
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: database.mysql
+rule: mysql-update-no-where
+---
+# D7: ALTER TABLE ... DROP (Medium)
+command: mysql -e "ALTER TABLE users DROP COLUMN email"
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: database.mysql
+rule: mysql-alter-drop
+---
+# D8: mysqladmin flush-tables (Medium)
+command: mysqladmin flush-tables
+decision: Ask
+severity: Medium
+confidence: High
+pack: database.mysql
+rule: mysqladmin-flush
+---
+# S1: SELECT is safe
+command: mysql -e "SELECT * FROM users"
+decision: Allow
+---
+# S2: mysqldump is safe
+command: mysqldump mydb > backup.sql
+decision: Allow
+---
+# S3: mysql interactive is safe
+command: mysql -h localhost mydb
+decision: Allow
+---
+# S4: mysqladmin status is safe
+command: mysqladmin status
+decision: Allow
+---
+# S5: DELETE with WHERE is safe
+command: mysql -e "DELETE FROM users WHERE id = 1"
+decision: Allow
+---
+# S6: UPDATE with WHERE is safe
+command: mysql -e "UPDATE users SET active=false WHERE id=1"
+decision: Allow
