@@ -2,7 +2,7 @@
   "id": "dcg-93g.2",
   "title": "Implement secrets.vault pack",
   "description": "Create internal/packs/secrets/vault.go (3 safe, 11 destructive). Covers secrets disable, kv destroy/delete, lease revoke, auth disable, token revoke, policy delete, audit disable. Complex S2 safe pattern with Not clauses. All env-sensitive. Unit tests and golden files.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-93g",
@@ -17,6 +17,9 @@
   "labels": [
     "project=dcg"
   ],
+  "assignee": "dcg-coder-1",
   "created_at": "2026-03-02T14:27:20.864168-08:00",
-  "updated_at": "2026-03-02T14:27:20.864168-08:00"
+  "updated_at": "2026-03-02T21:12:55.968393-08:00",
+  "closed_at": "2026-03-02T21:12:55.968393-08:00",
+  "close_reason": "Closed"
 }
