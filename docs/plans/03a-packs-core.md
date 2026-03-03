@@ -2896,3 +2896,20 @@ Steps 1 and 2 can be parallelized. Steps 3–5 depend on 1 and 2.
 ## Round 3 Review Disposition
 
 No new findings.
+
+---
+
+## Completion Signoff
+
+- **Status**: Partial
+- **Date**: 2026-03-03
+- **Branch**: main
+- **Verified by**: dcg-reviewer
+- **Completed items**:
+  - `core.git` and `core.filesystem` are present in the default registry and produce destructive matches for key commands (`git push --force`, `rm -rf`).
+  - Basic integration coverage exists in `guard` package tests for core pack behavior.
+- **Outstanding gaps**:
+  - **P0**: Safe-pattern architecture from the plan is not implemented. `Safe` rules are not evaluated by the pipeline (destructive-only evaluation in `internal/eval/pipeline.go`), so planned safe short-circuit semantics do not exist.
+  - **P0**: Planned rule inventory is not implemented (plan specifies 11 safe + 20 destructive git patterns and 4 safe + 12 destructive filesystem patterns; implementation currently has 2 safe/1 destructive for git and 1 safe/1 destructive for filesystem in `internal/packs/defaults.go`).
+  - **P1**: Planned package/file structure and DSL-based matcher model are not implemented (`internal/packs/core/git.go`, `internal/packs/core/filesystem.go`, per-pattern matcher DSL over `ExtractedCommand` are absent).
+  - **P1**: Planned core golden corpus artifacts (`internal/eval/testdata/golden/core_git.txt`, `core_filesystem.txt`) and per-pattern unit/reachability suite described in §7 are not present.
