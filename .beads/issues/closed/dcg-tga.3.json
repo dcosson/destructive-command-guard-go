@@ -2,7 +2,7 @@
   "id": "dcg-tga.3",
   "title": "Build comparison oracles, benchmarks, and stress tests for core packs",
   "description": "Comparison oracle O1 (upstream Rust) and O2 (policy consistency). Benchmarks B1-B2 (per-pack, golden corpus throughput). Stress S1-S2 (concurrent matching, registry freeze). Corpus preparation.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "parent": "dcg-tga",
@@ -21,6 +21,9 @@
   "labels": [
     "project=dcg"
   ],
+  "assignee": "dcg-coder-2",
   "created_at": "2026-03-02T14:29:47.544248-08:00",
-  "updated_at": "2026-03-02T14:29:47.544248-08:00"
+  "updated_at": "2026-03-03T08:50:02.593345-08:00",
+  "closed_at": "2026-03-03T08:50:02.593345-08:00",
+  "close_reason": "Closed"
 }
