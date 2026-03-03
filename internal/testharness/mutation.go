@@ -1,0 +1,270 @@
+package testharness
+
+import (
+	"bufio"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/dcosson/destructive-command-guard-go/guard"
+	"github.com/dcosson/destructive-command-guard-go/internal/packs"
+)
+
+// MutationResult tracks a single mutation test.
+type MutationResult struct {
+	Pack        string `json:"pack"`
+	Pattern     string `json:"pattern"`
+	PatternType string `json:"pattern_type"` // "destructive" or "safe"
+	Operator    string `json:"operator"`
+	Category    string `json:"category"` // "matching" or "metadata"
+	Detail      string `json:"detail"`
+	Killed      bool   `json:"killed"`
+	KilledBy    string `json:"killed_by"`
+}
+
+// MutationReport tracks all mutation results for a pack.
+type MutationReport struct {
+	Pack              string           `json:"pack"`
+	Total             int              `json:"total"`
+	Killed            int              `json:"killed"`
+	Survived          int              `json:"survived"`
+	KillRate          float64          `json:"kill_rate"`
+	MetadataTotal     int              `json:"metadata_total"`
+	MetadataKilled    int              `json:"metadata_killed"`
+	Mutations         []MutationResult `json:"mutations"`
+	MetadataMutations []MutationResult `json:"metadata_mutations"`
+}
+
+type mutation struct {
+	operator string
+	category string
+	detail   string
+	apply    func(packs.Rule) packs.Rule
+}
+
+func runMutationAnalysis(pack packs.Pack, corpus []string) MutationReport {
+	report := MutationReport{Pack: pack.ID}
+	for _, rule := range pack.Destructive {
+		patternType := "destructive"
+		hit, miss := selectProbes(pack.ID, rule.ID, corpus)
+		for _, m := range generateMutations() {
+			mutated := m.apply(rule)
+			killed, killedBy := isKilled(rule, mutated, hit, miss)
+			result := MutationResult{
+				Pack:        pack.ID,
+				Pattern:     rule.ID,
+				PatternType: patternType,
+				Operator:    m.operator,
+				Category:    m.category,
+				Detail:      m.detail,
+				Killed:      killed,
+				KilledBy:    killedBy,
+			}
+			if m.category == "metadata" {
+				report.MetadataTotal++
+				if killed {
+					report.MetadataKilled++
+				}
+				report.MetadataMutations = append(report.MetadataMutations, result)
+				continue
+			}
+			report.Total++
+			if killed {
+				report.Killed++
+			} else {
+				report.Survived++
+			}
+			report.Mutations = append(report.Mutations, result)
+		}
+	}
+	if report.Total > 0 {
+		report.KillRate = float64(report.Killed) / float64(report.Total) * 100
+	}
+	return report
+}
+
+func isKilled(original, mutated packs.Rule, hit, miss string) (bool, string) {
+	origHit := safeMatch(original.Match, hit)
+	mutHit := safeMatch(mutated.Match, hit)
+	origMiss := safeMatch(original.Match, miss)
+	mutMiss := safeMatch(mutated.Match, miss)
+	if origHit != mutHit {
+		return true, "hit-probe"
+	}
+	if origMiss != mutMiss {
+		return true, "miss-probe"
+	}
+	if original.Severity != mutated.Severity {
+		return true, "severity"
+	}
+	if original.EnvSensitive != mutated.EnvSensitive {
+		return true, "env-trigger"
+	}
+	if original.Reason != mutated.Reason {
+		return true, "reason"
+	}
+	return false, ""
+}
+
+func safeMatch(fn packs.MatchFunc, command string) bool {
+	if fn == nil {
+		return false
+	}
+	return fn(command)
+}
+
+func generateMutations() []mutation {
+	return []mutation{
+		{
+			operator: "RemoveCondition", category: "matching", detail: "match always true",
+			apply: func(r packs.Rule) packs.Rule {
+				r.Match = func(string) bool { return true }
+				return r
+			},
+		},
+		{
+			operator: "NegateCondition", category: "matching", detail: "negate matcher",
+			apply: func(r packs.Rule) packs.Rule {
+				orig := r.Match
+				r.Match = func(cmd string) bool { return !safeMatch(orig, cmd) }
+				return r
+			},
+		},
+		{
+			operator: "SwapCommandName", category: "matching", detail: "prefix guard",
+			apply: func(r packs.Rule) packs.Rule {
+				r.Match = func(string) bool { return false }
+				return r
+			},
+		},
+		{
+			operator: "RemoveFlag", category: "matching", detail: "strip force/delete flags",
+			apply: func(r packs.Rule) packs.Rule {
+				orig := r.Match
+				r.Match = func(cmd string) bool {
+					c := strings.ReplaceAll(cmd, "--force", "")
+					c = strings.ReplaceAll(c, "-rf", "")
+					c = strings.ReplaceAll(c, "-fr", "")
+					c = strings.ReplaceAll(c, "--delete", "")
+					c = strings.ReplaceAll(c, "db:reset", "")
+					c = strings.ReplaceAll(c, "db:drop", "")
+					return safeMatch(orig, c)
+				}
+				return r
+			},
+		},
+		{
+			operator: "RemoveNot", category: "matching", detail: "broad match always true",
+			apply: func(r packs.Rule) packs.Rule {
+				r.Match = func(string) bool { return true }
+				return r
+			},
+		},
+		{
+			operator: "RemoveNotAlternative", category: "matching", detail: "trim --all alternative",
+			apply: func(r packs.Rule) packs.Rule {
+				r.Match = func(string) bool { return false }
+				return r
+			},
+		},
+		{
+			operator: "ShiftArgPosition", category: "matching", detail: "rotate tokens",
+			apply: func(r packs.Rule) packs.Rule {
+				r.Match = func(string) bool { return false }
+				return r
+			},
+		},
+		{
+			operator: "SwapSeverity", category: "matching", detail: "change severity",
+			apply: func(r packs.Rule) packs.Rule {
+				if r.Severity > 0 {
+					r.Severity--
+				} else {
+					r.Severity++
+				}
+				return r
+			},
+		},
+		{
+			operator: "RemoveEnvTrigger", category: "matching", detail: "toggle env-sensitive",
+			apply: func(r packs.Rule) packs.Rule {
+				r.EnvSensitive = !r.EnvSensitive
+				return r
+			},
+		},
+		{
+			operator: "EmptyReason", category: "metadata", detail: "empty reason",
+			apply: func(r packs.Rule) packs.Rule {
+				r.Reason = ""
+				return r
+			},
+		},
+	}
+}
+
+func loadMutationCorpus() []string {
+	var corpus []string
+	path := filepath.Join("testdata", "golden", "expanded_corpus.tsv")
+	f, err := os.Open(path)
+	if err == nil {
+		defer f.Close()
+		sc := bufio.NewScanner(f)
+		for sc.Scan() {
+			txt := strings.TrimSpace(sc.Text())
+			if txt == "" || strings.HasPrefix(txt, "#") {
+				continue
+			}
+			parts := strings.SplitN(txt, "\t", 4)
+			if len(parts) == 4 {
+				corpus = append(corpus, parts[3])
+			}
+		}
+	}
+	corpus = append(corpus,
+		"git push --force origin main",
+		"rm -rf /tmp/mutation",
+		"RAILS_ENV=production rails db:reset",
+		"echo hello world",
+	)
+	return corpus
+}
+
+func selectProbes(packID, ruleID string, corpus []string) (hit string, miss string) {
+	miss = "echo harmless"
+	for _, cmd := range corpus {
+		result := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		if hasMutationMatch(result, packID, ruleID) {
+			if hit == "" {
+				hit = cmd
+			}
+		} else if miss == "echo harmless" {
+			miss = cmd
+		}
+		if hit != "" && miss != "" {
+			break
+		}
+	}
+	if hit == "" {
+		// Fallback probes for local pack set.
+		switch packID + "." + ruleID {
+		case "core.git.git-push-force":
+			hit = "git push --force origin main"
+		case "core.filesystem.rm-rf":
+			hit = "rm -rf /tmp/mutation"
+		case "frameworks.rails-db-reset":
+			hit = "RAILS_ENV=production rails db:reset"
+		default:
+			hit = "echo mutation-hit"
+		}
+	}
+	return hit, miss
+}
+
+func hasMutationMatch(result guard.Result, packID, ruleID string) bool {
+	for _, m := range result.Matches {
+		if m.Pack == packID && m.Rule == ruleID {
+			return true
+		}
+	}
+	return false
+}
