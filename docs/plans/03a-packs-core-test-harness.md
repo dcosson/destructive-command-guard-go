@@ -779,3 +779,14 @@ No new findings.
   - **P1**: Planned core-specific matrices and corpus targets (E1/E2/E3, 84-core-entry expectation) are not implemented as specified; no core-specific golden files exist under `internal/eval/testdata/golden/`.
   - **P1**: CI tier mapping in this doc does not match actual tier scripts (`scripts/ci_tier1.sh`, `scripts/ci_tier2.sh`, `scripts/ci_tier3.sh`), which target `internal/testharness` subsets unrelated to this document's exact P/E/F/SEC/O mapping.
   - **P1**: `make test` currently fails in this repo due to benchmark instability in `internal/testharness` (`TestBenchmarkStability`), so full-suite pass criteria in this plan are not currently met.
+
+---
+## Completion Signoff
+- **Status**: Complete
+- **Date**: 2026-03-04
+- **Branch**: main
+- **Commit**: f8621ae
+- **Verified by**: dcg-reviewer
+- **Test verification**: `go test ./e2etest -run 'Test(GrammarCoverage|GrammarCoverageAllPacks|OracleGoldenCrossValidation|AllocationsEvaluate|HasRegisteredPack)$' -count=1` — PASS
+- **Deviations from plan**: Test harness package moved from `internal/testharness` to `e2etest`.
+- **Additions beyond plan**: CI tier scripts and Make targets now explicitly separate unit vs integration/e2e suites.

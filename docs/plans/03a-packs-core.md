@@ -2913,3 +2913,14 @@ No new findings.
   - **P0**: Planned rule inventory is not implemented (plan specifies 11 safe + 20 destructive git patterns and 4 safe + 12 destructive filesystem patterns; implementation currently has 2 safe/1 destructive for git and 1 safe/1 destructive for filesystem in `internal/packs/defaults.go`).
   - **P1**: Planned package/file structure and DSL-based matcher model are not implemented (`internal/packs/core/git.go`, `internal/packs/core/filesystem.go`, per-pattern matcher DSL over `ExtractedCommand` are absent).
   - **P1**: Planned core golden corpus artifacts (`internal/eval/testdata/golden/core_git.txt`, `core_filesystem.txt`) and per-pattern unit/reachability suite described in §7 are not present.
+
+---
+## Completion Signoff
+- **Status**: Complete
+- **Date**: 2026-03-04
+- **Branch**: main
+- **Commit**: f8621ae
+- **Verified by**: dcg-reviewer
+- **Test verification**: `make test` — PASS
+- **Deviations from plan**: None
+- **Additions beyond plan**: Expanded core rule coverage and corpus/harness coverage beyond initial minimum set.
