@@ -59,10 +59,10 @@ lint:
 # --------------------------------------------------------------------------- #
 
 # Fast unit tests. This is what you run most often.
-# Excludes heavy test suites (property, fault, security, oracle, stress,
-# benchmark, fuzz, mutation, comparison) which live in internal/e2etest/.
+# Runs all packages except internal/e2etest/ which contains heavy test suites
+# (property, fault, security, oracle, stress, benchmark, fuzz, mutation, comparison).
 test:
-	go test ./cmd/dcg-go ./guard ./internal/envdetect ./internal/evalcore ./internal/eval ./internal/parse ./internal/packs/... -count=1
+	go test $$(go list ./... | grep -v internal/e2etest) -count=1
 
 # Integration tests (non-black-box) that are intentionally excluded from
 # the unit loop. Includes:
@@ -76,7 +76,7 @@ test-integration:
 # Unit test target with -race detector enabled (same package set as `make test`).
 # Does not include integration/e2e/stress/security/mutation/comparison targets.
 test-race:
-	go test ./cmd/dcg-go ./guard ./internal/envdetect ./internal/evalcore ./internal/eval ./internal/parse ./internal/packs/... -count=1 -race
+	go test $$(go list ./... | grep -v internal/e2etest) -count=1 -race
 
 # --------------------------------------------------------------------------- #
 # Tests — E2E (builds binary, runs subprocess tests)
