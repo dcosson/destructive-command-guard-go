@@ -1,0 +1,39 @@
+{
+  "id": "dcg-vy2.1",
+  "title": "dcg-vy2.1",
+  "description": "Fix the subcommand evasion detection for infra/cloud commands with global flags before the subcommand:\n- aws --profile prod terminate-instances --instance-ids i-abc123 (global flag --profile before subcommand)\n- gcloud --project prod-project projects delete my-project (global flag --project before subcommand)\n\nThe parser/matcher needs to handle these patterns where flags appear before the destructive subcommand. Fix in internal/packs/cloud/ or internal/parse/ as appropriate. Add test cases and update golden files.\n\nAfter fixing, run: go test ./e2etest -run TestSecuritySubcommandEvasion -count=1",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-vy2",
+  "dependencies": [
+    {
+      "id": "dcg-vy2",
+      "type": "parent-child"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-vy2.3",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "assignee": "dcg-coder-1",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Completed in commit 4e1b85f. TestSecuritySubcommandEvasion passes.",
+      "created_at": "2026-03-04T09:17:43.946374-08:00"
+    }
+  ],
+  "created_at": "2026-03-04T09:14:09.031332-08:00",
+  "updated_at": "2026-03-04T09:17:43.990451-08:00",
+  "closed_at": "2026-03-04T09:17:43.990451-08:00",
+  "close_reason": "Closed"
+}

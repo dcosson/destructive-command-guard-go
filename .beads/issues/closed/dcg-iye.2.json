@@ -1,0 +1,33 @@
+{
+  "id": "dcg-iye.2",
+  "title": "dcg-iye.2",
+  "description": "Verify and signoff 4 docs against actual code:\n- docs/plans/03a-packs-core.md (partial) → internal/packs/core/\n- docs/plans/03a-packs-core-test-harness.md (partial) → internal/packs/core/, e2etest/\n- docs/plans/03b-packs-database.md (partial) → internal/packs/database/\n- docs/plans/03b-packs-database-test-harness.md (partial) → internal/packs/database/, e2etest/\n\nFor each doc: read thoroughly, compare every type/function/test category against code, run tests, add Completion Signoff section (Complete or Partial with gaps). Report gaps via h2 send to dcg-scheduler. Commit updated docs.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-iye",
+  "dependencies": [
+    {
+      "id": "dcg-iye",
+      "type": "parent-child"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "assignee": "dcg-reviewer",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Completed in commit 0831f04. All 4 docs signed off with deviations documented.",
+      "created_at": "2026-03-04T08:29:46.210663-08:00"
+    }
+  ],
+  "created_at": "2026-03-04T08:23:36.753377-08:00",
+  "updated_at": "2026-03-04T08:29:46.221667-08:00",
+  "closed_at": "2026-03-04T08:29:46.221667-08:00",
+  "close_reason": "Closed"
+}
