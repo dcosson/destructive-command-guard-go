@@ -1,3 +1,5 @@
+//go:build e2e
+
 package eval
 
 // Database pack property tests (P3-P7) from test harness plan 03b.

@@ -1,0 +1,38 @@
+# Golden file: infrastructure.terraform pack
+format: v1
+---
+# D1: destroy auto approve
+command: terraform destroy -auto-approve
+decision: Deny
+severity: Critical
+confidence: High
+pack: infrastructure.terraform
+rule: terraform-destroy-auto-approve
+---
+# D2: destroy interactive
+command: terraform destroy
+decision: Deny
+severity: High
+confidence: High
+pack: infrastructure.terraform
+rule: terraform-destroy
+---
+# D3: apply auto approve
+command: terraform apply -auto-approve
+decision: Deny
+severity: High
+confidence: High
+pack: infrastructure.terraform
+rule: terraform-apply-auto-approve
+---
+# D4: apply interactive
+command: terraform apply
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: infrastructure.terraform
+rule: terraform-apply
+---
+# Safe: plan
+command: terraform plan
+decision: Allow

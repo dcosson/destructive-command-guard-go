@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dcosson/destructive-command-guard-go/e2etest"
 	"github.com/dcosson/destructive-command-guard-go/guard"
 	"github.com/dcosson/destructive-command-guard-go/internal/parse"
-	"github.com/dcosson/destructive-command-guard-go/internal/testharness"
 )
 
 func FuzzEvaluate(f *testing.F) {
-	for _, seed := range testharness.LoadFuzzSeeds("testdata/golden") {
+	for _, seed := range e2etest.LoadFuzzSeeds("testdata/golden") {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, command string) {
@@ -21,7 +21,7 @@ func FuzzEvaluate(f *testing.F) {
 }
 
 func FuzzEvaluateWithAllowlist(f *testing.F) {
-	for _, seed := range testharness.LoadFuzzSeeds("testdata/golden") {
+	for _, seed := range e2etest.LoadFuzzSeeds("testdata/golden") {
 		f.Add(seed, "git *", "rm *")
 	}
 	f.Fuzz(func(t *testing.T, command, allowPattern, blockPattern string) {

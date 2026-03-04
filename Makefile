@@ -1,4 +1,4 @@
-.PHONY: build clean deps lint test test-unit test-e2e test-stress \
+.PHONY: build clean deps lint test test-unit test-integration test-e2e test-stress \
        test-security test-mutation test-comparison \
        test-ci-tier1 test-ci-tier2 test-ci-tier3 test-all \
        bench bench-full test-race help
@@ -58,22 +58,24 @@ lint:
 # Tests — primary targets
 # --------------------------------------------------------------------------- #
 
-# Fast unit and integration tests. This is what you run most often.
-# Runs the full go test suite, which includes unit tests, property tests,
-# golden tests, fault injection, oracle checks, and in-process integration
-# tests. Excludes Stress*, E2E*, and Benchmark* prefixed tests which are
-# longer-running and may have side effects.
+# Fast unit tests. This is what you run most often.
+# Excludes e2e/stress/security/mutation/comparison suites in e2etest and
+# integration-tagged internal/eval tests.
 test:
-	go test ./... -count=1
+	$(MAKE) test-unit
 
-# Unit tests only — core logic packages without the heavyweight testharness
-# and CLI packages. Fastest feedback loop (~5s).
+# Unit tests only — core logic packages with a fast feedback loop.
 test-unit:
-	go test ./guard ./internal/eval ./internal/parse ./internal/packs -count=1
+	go test ./cmd/dcg-go ./guard ./internal/envdetect ./internal/eval ./internal/parse ./internal/packs/... -count=1
+
+# Integration tests (non-black-box) that are intentionally excluded from
+# the unit loop. Currently includes heavy internal/eval corpus/property suites.
+test-integration:
+	go test -tags=e2e ./internal/eval -count=1
 
 # Same as test but with -race detector enabled. Slower but catches data races.
 test-race:
-	go test ./... -count=1 -race
+	go test ./cmd/dcg-go ./guard ./internal/envdetect ./internal/eval ./internal/parse ./internal/packs/... -count=1 -race
 
 # --------------------------------------------------------------------------- #
 # Tests — E2E (builds binary, runs subprocess tests)
@@ -83,7 +85,7 @@ test-race:
 # subprocess. These test the full CLI surface: hook mode, test mode, packs
 # mode, and real-world scenario evaluation.
 test-e2e:
-	go test ./internal/testharness -run '^TestE2E' -count=1 -v
+	go test ./e2etest -run '^TestE2E' -count=1 -v
 
 # --------------------------------------------------------------------------- #
 # Tests — stress, security, benchmarks (longer-running)
@@ -92,18 +94,20 @@ test-e2e:
 # Stress tests: concurrent evaluation, high-volume fuzzing, memory pressure,
 # mutation timeouts. These are CPU and memory intensive.
 test-stress:
-	go test ./internal/testharness -run '^TestStress' -count=1 -v -timeout 30m
+	go test ./e2etest -run '^TestStress' -count=1 -v -timeout 30m
 	go test ./guard -run '^TestStress' -count=1 -v -timeout 10m
 	go test ./cmd/dcg-go -run '^TestStress' -count=1 -v -timeout 10m
 
 # Security tests: fuzz corpus cleanliness, golden file non-execution,
 # subprocess isolation, heap growth bounds, env sensitivity, evasion checks.
 test-security:
-	go test ./... -run '^TestSecurity' -count=1 -v -timeout 15m
+	go test ./e2etest -run '^TestSecurity' -count=1 -v -timeout 15m
+	go test ./guard -run '^TestSecurity' -count=1 -v -timeout 15m
+	go test ./cmd/dcg-go -run '^TestSecurity' -count=1 -v -timeout 15m
 
 # Mutation testing harness: verifies mutation operators and kill rates.
 test-mutation:
-	go test ./internal/testharness -run '^Test(Mutation|DeterministicKnownMutationKill)' -count=1 -v
+	go test ./e2etest -run '^Test(Mutation|DeterministicKnownMutationKill)' -count=1 -v
 
 # --------------------------------------------------------------------------- #
 # Tests — comparison (requires UPSTREAM_BINARY)
@@ -119,7 +123,7 @@ ifndef UPSTREAM_BINARY
 	@echo "UPSTREAM_BINARY is not set. Skipping comparison tests."
 	@echo "Usage: make test-comparison UPSTREAM_BINARY=/path/to/upstream-dcg"
 else
-	UPSTREAM_BINARY=$(UPSTREAM_BINARY) go test ./internal/testharness -run '^TestComparison' -count=1 -v
+	UPSTREAM_BINARY=$(UPSTREAM_BINARY) go test ./e2etest -run '^TestComparison' -count=1 -v
 	UPSTREAM_BINARY=$(UPSTREAM_BINARY) go test ./guard -run '^TestOracle.*Upstream' -count=1 -v
 endif
 
@@ -159,7 +163,7 @@ bench-full:
 
 # Run everything: unit, integration, e2e, stress, security, mutation, bench.
 # Does NOT include comparison tests (needs UPSTREAM_BINARY).
-test-all: test test-e2e test-stress test-security test-mutation bench
+test-all: test test-integration test-e2e test-stress test-security test-mutation bench
 
 # --------------------------------------------------------------------------- #
 # Help
@@ -175,8 +179,9 @@ help:
 	@echo "  make lint               Run go vet + staticcheck"
 	@echo ""
 	@echo "Test (primary):"
-	@echo "  make test               Unit + integration tests (go test ./...)"
-	@echo "  make test-unit          Core packages only (~5s)"
+	@echo "  make test               Fast unit tests"
+	@echo "  make test-unit          Core package unit tests"
+	@echo "  make test-integration   Heavy integration tests (internal/eval, tagged)"
 	@echo "  make test-race          Full tests with race detector"
 	@echo ""
 	@echo "Test (extended):"

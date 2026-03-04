@@ -1,0 +1,14 @@
+# Golden file: cloud.azure pack
+format: v1
+---
+# D1: delete resource group
+command: az group delete --name rg1
+decision: Deny
+severity: Critical
+confidence: High
+pack: cloud.azure
+rule: azure-group-delete
+---
+# Safe: vm list
+command: az vm list
+decision: Allow

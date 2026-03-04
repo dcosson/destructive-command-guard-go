@@ -6,4 +6,4 @@ set -euo pipefail
 
 go test ./guard -run 'TestPropertyFuzzInvariantsTightness$' -count=1
 
-go test ./internal/testharness -run 'Test(DeterministicBenchmarkOrdering|DeterministicKnownMutationKillCoreGit|FaultGoldenFileMissingPack|FaultComparisonNoUpstreamBinary|OracleGoldenCrossValidation|SecurityGoldenFileNotExecuted|SecurityNoSubprocessExecutionWithEmptyPath)$' -count=1
+go test ./e2etest -run 'Test(DeterministicBenchmarkOrdering|DeterministicKnownMutationKillCoreGit|FaultGoldenFileMissingPack|FaultComparisonNoUpstreamBinary|OracleGoldenCrossValidation|SecurityGoldenFileNotExecuted|SecurityNoSubprocessExecutionWithEmptyPath)$' -count=1

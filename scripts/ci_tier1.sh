@@ -4,4 +4,4 @@ set -euo pipefail
 # Tier 1 (commit): P4, P5, D4
 # Runtime target: <5s
 
-go test ./internal/testharness -run 'Test(GoldenDecisionFileSelfConsistency|PropertyComparisonClassificationDeterministicExtended|DeterministicGoldenCorpusSize)$' -count=1
+go test ./e2etest -run 'Test(GoldenDecisionFileSelfConsistency|PropertyComparisonClassificationDeterministicExtended|DeterministicGoldenCorpusSize)$' -count=1

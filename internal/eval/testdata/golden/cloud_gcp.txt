@@ -1,0 +1,14 @@
+# Golden file: cloud.gcp pack
+format: v1
+---
+# D1: delete project
+command: gcloud projects delete my-proj
+decision: Deny
+severity: Critical
+confidence: High
+pack: cloud.gcp
+rule: gcp-project-delete
+---
+# Safe: list instances
+command: gcloud compute instances list
+decision: Allow

@@ -1,3 +1,5 @@
+//go:build e2e
+
 package eval
 
 // Database pack security tests (SEC1-SEC4) from test harness plan 03b.
@@ -207,7 +209,7 @@ func TestDbSecurityEnvSensitivityPreconditions(t *testing.T) {
 		ruleID       string
 		baseSeverity int
 	}{
-		{"database.postgresql", "psql-drop-database", 3},  // High
+		{"database.postgresql", "psql-drop-database", 3}, // High
 		{"database.postgresql", "dropdb", 3},
 		{"database.postgresql", "psql-drop-table", 3},
 		{"database.postgresql", "psql-truncate", 3},

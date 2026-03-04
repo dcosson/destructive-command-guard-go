@@ -1,3 +1,5 @@
+//go:build e2e
+
 package eval
 
 // Database pack fault injection tests (F1-F3) from test harness plan 03b.

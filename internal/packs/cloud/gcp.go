@@ -1,0 +1,18 @@
+package cloud
+
+import "github.com/dcosson/destructive-command-guard-go/internal/packs"
+
+func gcpPack() packs.Pack {
+	return packs.Pack{
+		ID:          "cloud.gcp",
+		Name:        "GCP CLI",
+		Description: "Google Cloud CLI destructive operations",
+		Keywords:    []string{"gcloud", "gsutil"},
+		Safe: []packs.Rule{
+			{ID: "gcp-list-safe", Match: packs.And(packs.Name("gcloud"), packs.ArgContains("list"))},
+		},
+		Destructive: []packs.Rule{
+			{ID: "gcp-project-delete", Severity: sevCritical, Confidence: confHigh, EnvSensitive: true, Reason: "gcloud projects delete removes a cloud project", Remediation: "Verify project target and backups before deletion", Match: packs.And(packs.Name("gcloud"), packs.ArgAt(0, "projects"), packs.ArgAt(1, "delete"))},
+		},
+	}
+}

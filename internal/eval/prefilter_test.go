@@ -239,7 +239,7 @@ func TestWordBoundary(t *testing.T) {
 		{"agit", 1, 4, false},       // "git" preceded by 'a'
 		{"gito", 0, 3, false},       // "git" followed by 'o'
 		{".gitignore", 1, 4, false}, // "git" followed by 'i'
-		{"x;git;y", 2, 5, true},    // "git" bounded by semicolons
+		{"x;git;y", 2, 5, true},     // "git" bounded by semicolons
 		{"(git)", 1, 4, true},       // "git" bounded by parens
 		{"git", 0, 3, true},         // whole string
 	}

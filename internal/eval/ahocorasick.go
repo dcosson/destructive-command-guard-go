@@ -12,9 +12,9 @@ type ahoCorasick struct {
 }
 
 type acState struct {
-	goto_   [256]int // byte → next state (-1 = no transition)
-	fail    int
-	depth   int
+	goto_ [256]int // byte → next state (-1 = no transition)
+	fail  int
+	depth int
 }
 
 // newAhoCorasick builds an Aho-Corasick automaton from the given patterns.

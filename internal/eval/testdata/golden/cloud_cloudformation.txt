@@ -1,0 +1,14 @@
+# Golden file: cloud.cloudformation pack
+format: v1
+---
+# D1: delete stack
+command: aws cloudformation delete-stack --stack-name demo
+decision: Deny
+severity: Critical
+confidence: High
+pack: cloud.cloudformation
+rule: cloudformation-delete-stack
+---
+# Safe: describe stacks
+command: aws cloudformation describe-stacks
+decision: Allow

@@ -1,0 +1,38 @@
+# Golden file: infrastructure.pulumi pack
+format: v1
+---
+# D1: destroy yes
+command: pulumi destroy --yes
+decision: Deny
+severity: Critical
+confidence: High
+pack: infrastructure.pulumi
+rule: pulumi-destroy-yes
+---
+# D2: destroy interactive
+command: pulumi destroy
+decision: Deny
+severity: High
+confidence: High
+pack: infrastructure.pulumi
+rule: pulumi-destroy
+---
+# D3: up yes
+command: pulumi up --yes
+decision: Deny
+severity: High
+confidence: High
+pack: infrastructure.pulumi
+rule: pulumi-up-yes
+---
+# D4: up interactive
+command: pulumi up
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: infrastructure.pulumi
+rule: pulumi-up
+---
+# Safe: preview
+command: pulumi preview
+decision: Allow

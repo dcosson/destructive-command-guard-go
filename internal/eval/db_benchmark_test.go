@@ -1,3 +1,5 @@
+//go:build e2e
+
 package eval
 
 // Database pack benchmarks (B1-B3) and stress tests (S1-S2) from test harness

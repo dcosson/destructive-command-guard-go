@@ -1,0 +1,14 @@
+# Golden file: cloud.aws pack
+format: v1
+---
+# D1: terminate instances
+command: aws ec2 terminate-instances --instance-ids i-123
+decision: Deny
+severity: Critical
+confidence: High
+pack: cloud.aws
+rule: aws-ec2-terminate
+---
+# Safe: describe instances
+command: aws ec2 describe-instances
+decision: Allow
