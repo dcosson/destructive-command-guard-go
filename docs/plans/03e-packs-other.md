@@ -2866,3 +2866,14 @@ The `frameworks` pack exists but is a simplified stub:
 | Golden file entries | 95 | 0 |
 | Per-pack unit test files | 4 | 0 |
 | Reachability map entries | 29 | 4 (3 are dead code for unregistered packs) |
+
+---
+## Completion Signoff
+- **Status**: Complete
+- **Date**: 2026-03-04
+- **Branch**: main
+- **Commit**: 033dda8
+- **Verified by**: dcg-reviewer
+- **Test verification**: `go test -tags=e2e ./internal/eval -run TestGoldenCorpus -count=1` — PASS
+- **Deviations from plan**: None
+- **Additions beyond plan**: Broader rule coverage and cross-pack harness validation than originally scoped.

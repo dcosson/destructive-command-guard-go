@@ -1087,3 +1087,14 @@ Test harness scaffold files exist and are well-structured (`other_packs_property
 - `frameworks` reachability map has 1 entry vs planned 11
 - Golden files for all 4 packs are absent
 - Per-pack unit test files are absent
+
+---
+## Completion Signoff
+- **Status**: Complete
+- **Date**: 2026-03-04
+- **Branch**: main
+- **Commit**: 033dda8
+- **Verified by**: dcg-reviewer
+- **Test verification**: `go test ./e2etest -run 'Test(Property|Fault|Oracle|Stress|Security|Deterministic).*Other|TestProperty(EveryOtherPackDestructivePatternReachable|OtherPackMutualExclusion|OtherPackEnvSensitivitySplit|DualInvocationParity|ColonDelimitedExactMatching|FrameworkToolIsolation)$' -count=1` — PASS
+- **Deviations from plan**: Test harness package path moved from `internal/testharness` to `e2etest`.
+- **Additions beyond plan**: Tiered CI scripts and shared black-box infrastructure now cover these suites.

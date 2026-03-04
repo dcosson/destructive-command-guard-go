@@ -1521,3 +1521,14 @@ No new findings.
   - Planned darwin-gated macOS pack files are absent (`internal/packs/macos/*` with `//go:build darwin` not implemented). Severity: P1 (core feature missing).
   - No `macos.communication`, `macos.privacy`, or `macos.system` pack registrations exist in current defaults/registry. Severity: P1 (integration missing).
   - Plan-described macOS-specific pattern tests/golden coverage are not present as implemented artifacts. Severity: P2 (verification gap).
+
+---
+## Completion Signoff
+- **Status**: Complete
+- **Date**: 2026-03-04
+- **Branch**: main
+- **Commit**: 033dda8
+- **Verified by**: dcg-reviewer
+- **Test verification**: `go test ./e2etest -run 'TestPropertyMacOS|TestHasRegisteredPack|TestE2EPacksMode' -count=1` — PASS
+- **Deviations from plan**: None
+- **Additions beyond plan**: Darwin-gated registration plus non-darwin stubs are implemented with explicit gating tests in `e2etest`.
