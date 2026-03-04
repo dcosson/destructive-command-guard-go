@@ -1131,3 +1131,52 @@ subshell	kubernetes.helm	helm-uninstall	(helm uninstall release)
 simple	kubernetes.helm	helm-rollback	helm rollback release 2
 compound	kubernetes.helm	helm-rollback	echo start && helm rollback release 2
 subshell	kubernetes.helm	helm-rollback	(helm rollback release 2)
+# Other packs coverage (dcg-c9c.7)
+simple	frameworks	rails-db-drop	rails db:drop
+compound	frameworks	rails-db-drop	echo start && rails db:drop
+subshell	frameworks	rails-db-drop	(rails db:drop)
+simple	frameworks	rails-db-reset	rails db:reset
+compound	frameworks	rails-db-reset	echo start && rails db:reset
+subshell	frameworks	rails-db-reset	(rails db:reset)
+simple	frameworks	rake-db-drop-all	rake db:drop:all
+compound	frameworks	rake-db-drop-all	echo start && rake db:drop:all
+subshell	frameworks	rake-db-drop-all	(rake db:drop:all)
+simple	frameworks	managepy-flush	manage.py flush
+compound	frameworks	managepy-flush	echo start && python manage.py flush
+subshell	frameworks	managepy-flush	(python manage.py flush)
+simple	frameworks	managepy-migrate-syncdb	manage.py migrate --run-syncdb
+compound	frameworks	managepy-migrate-syncdb	echo start && python manage.py migrate --run-syncdb
+subshell	frameworks	managepy-migrate-syncdb	(python manage.py migrate --run-syncdb)
+simple	frameworks	artisan-migrate-fresh	artisan migrate:fresh
+compound	frameworks	artisan-migrate-fresh	echo start && php artisan migrate:fresh
+subshell	frameworks	artisan-migrate-fresh	(php artisan migrate:fresh)
+simple	frameworks	mix-ecto-reset	mix ecto.reset
+compound	frameworks	mix-ecto-reset	echo start && mix ecto.reset
+subshell	frameworks	mix-ecto-reset	(mix ecto.reset)
+simple	secrets.vault	vault-secrets-disable	vault secrets disable secret/
+compound	secrets.vault	vault-secrets-disable	echo start && vault secrets disable secret/
+subshell	secrets.vault	vault-secrets-disable	(vault secrets disable secret/)
+simple	secrets.vault	vault-auth-disable	vault auth disable github
+compound	secrets.vault	vault-auth-disable	echo start && vault auth disable github
+subshell	secrets.vault	vault-auth-disable	(vault auth disable github)
+simple	secrets.vault	vault-token-revoke	vault token revoke root
+compound	secrets.vault	vault-token-revoke	echo start && vault token revoke root
+subshell	secrets.vault	vault-token-revoke	(vault token revoke root)
+simple	secrets.vault	vault-policy-delete	vault policy delete prod
+compound	secrets.vault	vault-policy-delete	echo start && vault policy delete prod
+subshell	secrets.vault	vault-policy-delete	(vault policy delete prod)
+simple	secrets.vault	vault-audit-disable	vault audit disable file
+compound	secrets.vault	vault-audit-disable	echo start && vault audit disable file
+subshell	secrets.vault	vault-audit-disable	(vault audit disable file)
+simple	remote.rsync	rsync-delete	rsync --delete -a src/ dst/
+compound	remote.rsync	rsync-delete	echo start && rsync --delete -a src/ dst/
+subshell	remote.rsync	rsync-delete	(rsync --delete -a src/ dst/)
+simple	platform.github	gh-repo-delete	gh repo delete owner/repo --yes
+compound	platform.github	gh-repo-delete	echo start && gh repo delete owner/repo --yes
+subshell	platform.github	gh-repo-delete	(gh repo delete owner/repo --yes)
+simple	platform.github	gh-release-delete	gh release delete v1.0.0 --yes
+compound	platform.github	gh-release-delete	echo start && gh release delete v1.0.0 --yes
+subshell	platform.github	gh-release-delete	(gh release delete v1.0.0 --yes)
+simple	platform.github	gh-issue-pr-close	gh issue close 42 --yes
+compound	platform.github	gh-issue-pr-close	echo start && gh issue close 42 --yes
+subshell	platform.github	gh-issue-pr-close	(gh issue close 42 --yes)

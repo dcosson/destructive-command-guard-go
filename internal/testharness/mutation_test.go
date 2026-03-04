@@ -19,6 +19,9 @@ var equivalentMutationPrefixes = []string{
 	"core.filesystem",
 	"containers.",
 	"kubernetes.",
+	"frameworks",
+	"secrets.",
+	"platform.",
 }
 
 func isEquivalentMutation(packID, operator string) bool {

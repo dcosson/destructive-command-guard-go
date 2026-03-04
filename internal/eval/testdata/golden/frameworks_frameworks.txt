@@ -1,0 +1,63 @@
+# Golden file: frameworks pack
+format: v1
+---
+# D1: rails db drop
+command: rails db:drop
+decision: Deny
+severity: High
+confidence: High
+pack: frameworks
+rule: rails-db-drop
+---
+# D2: rails db reset in production env escalates to critical
+command: RAILS_ENV=production rails db:reset
+decision: Deny
+severity: Critical
+confidence: High
+pack: frameworks
+rule: rails-db-reset
+env_escalated: true
+---
+# D3: rake db:drop:all
+command: rake db:drop:all
+decision: Deny
+severity: Critical
+confidence: High
+pack: frameworks
+rule: rake-db-drop-all
+---
+# D4: manage.py flush
+command: python manage.py flush
+decision: Deny
+severity: High
+confidence: High
+pack: frameworks
+rule: managepy-flush
+---
+# D5: manage.py migrate --run-syncdb
+command: manage.py migrate --run-syncdb
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: frameworks
+rule: managepy-migrate-syncdb
+---
+# D6: artisan migrate:fresh
+command: php artisan migrate:fresh
+decision: Deny
+severity: High
+confidence: High
+pack: frameworks
+rule: artisan-migrate-fresh
+---
+# D7: mix ecto.reset
+command: mix ecto.reset
+decision: Deny
+severity: High
+confidence: High
+pack: frameworks
+rule: mix-ecto-reset
+---
+# Safe: rails routes
+command: rails routes
+decision: Allow

@@ -1,0 +1,30 @@
+# Golden file: platform.github pack
+format: v1
+---
+# D1: delete repository
+command: gh repo delete owner/repo --yes
+decision: Deny
+severity: Critical
+confidence: High
+pack: platform.github
+rule: gh-repo-delete
+---
+# D2: delete release
+command: gh release delete v1.0.0 --yes
+decision: Deny
+severity: High
+confidence: High
+pack: platform.github
+rule: gh-release-delete
+---
+# D3: close issue is low severity
+command: gh issue close 42 --yes
+decision: Allow
+severity: Low
+confidence: Medium
+pack: platform.github
+rule: gh-issue-pr-close
+---
+# Safe: list issues
+command: gh issue list
+decision: Allow
