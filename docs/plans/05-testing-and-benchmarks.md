@@ -42,7 +42,7 @@ cross-component interactions, and robustness under adversarial conditions.
    allocations, optimize hot paths.
 
 **Scope**:
-- 1 package: `internal/testharness` (shared test utilities and harness code)
+- 1 package: `e2etest` (shared test utilities and harness code)
 - ~15 test files across existing packages
 - ~500 new test cases (benchmark, fuzz, mutation, golden, e2e)
 - CI pipeline configuration for tiered test execution
@@ -261,7 +261,7 @@ func BenchmarkEvaluateFullPipeline(b *testing.B) {
 
 ### 3.3 Benchmark Infrastructure
 
-**`internal/testharness/benchutil.go`**:
+**`e2etest/benchutil.go`**:
 
 ```go
 package testharness
@@ -365,7 +365,7 @@ The comparison corpus is built from four sources:
    Commands are extracted via a script that parses the upstream test files.
 
 ```go
-// internal/testharness/comparison.go
+// e2etest/comparison.go
 package testharness
 
 // ComparisonEntry represents a single comparison test case.
@@ -387,7 +387,7 @@ type ComparisonEntry struct {
 The comparison test requires both the Go binary and the upstream Rust binary.
 
 ```go
-// internal/testharness/comparison_test.go
+// e2etest/comparison_test.go
 package testharness_test
 
 func TestComparisonAgainstUpstream(t *testing.T) {
@@ -553,7 +553,7 @@ go build -o dcg-go ./cmd/dcg-go
 export UPSTREAM_BINARY="${UPSTREAM_BINARY:-./upstream-dcg}"
 
 UPSTREAM_BINARY="$UPSTREAM_BINARY" \
-    go test -run TestComparisonAgainstUpstream ./internal/testharness/ \
+    go test -run TestComparisonAgainstUpstream ./e2etest/ \
     -v -count=1
 ```
 
@@ -827,7 +827,7 @@ The fuzz seed corpus is built from:
 5. **Crash triggers** — Commands that triggered issues during development
 
 ```go
-// internal/testharness/fuzzseeds.go
+// e2etest/fuzzseeds.go
 
 // LoadFuzzSeeds loads seed commands from golden files and edge cases.
 func LoadFuzzSeeds(goldenDir string) []string {
@@ -1011,7 +1011,7 @@ of `vault kv delete`.
 ### 6.3 Harness Architecture
 
 ```go
-// internal/testharness/mutation.go
+// e2etest/mutation.go
 package testharness
 
 // MutationResult tracks a single mutation test.
@@ -1058,7 +1058,7 @@ patterns are defined as data structures (not imperative code), so we can
 mutate the data structure and re-run matching:
 
 ```go
-// internal/testharness/mutation_test.go
+// e2etest/mutation_test.go
 package testharness_test
 
 func TestMutationKillRate(t *testing.T) {
@@ -1202,7 +1202,7 @@ Mutation testing runs in CI Tier 3 (nightly) due to execution time:
 
 ```bash
 go test -run TestMutationKillRate -v -count=1 \
-    -timeout=30m ./internal/testharness/
+    -timeout=30m ./e2etest/
 ```
 
 Results are saved as a JSON report for trend tracking.
@@ -1270,7 +1270,7 @@ Golden files use the v1 format established in plan 02:
 After expansion, verify:
 
 ```go
-// internal/testharness/golden_coverage_test.go
+// e2etest/golden_coverage_test.go
 
 func TestGoldenCoverageAllPatterns(t *testing.T) {
     entries := loadAllGoldenEntries(t)
@@ -1337,7 +1337,7 @@ The tree-sitter bash grammar defines the structural contexts where
 commands can appear. We enumerate all command-bearing node types:
 
 ```go
-// internal/testharness/grammar_coverage.go
+// e2etest/grammar_coverage.go
 package testharness
 
 // CommandBearingNodeTypes lists all bash AST node types that can
@@ -1382,7 +1382,7 @@ For each command-bearing node type, generate synthetic commands and
 verify the extractor handles them:
 
 ```go
-// internal/testharness/grammar_coverage_test.go
+// e2etest/grammar_coverage_test.go
 
 func TestGrammarCoverage(t *testing.T) {
     // Template: each context wraps "git push --force"
@@ -1505,7 +1505,7 @@ func TestGrammarCoverageAllPacks(t *testing.T) {
 ### 8.4 Coverage Tracking
 
 ```go
-// internal/testharness/grammar_coverage.go
+// e2etest/grammar_coverage.go
 
 // GrammarCoverageReport tracks which AST contexts are verified.
 type GrammarCoverageReport struct {
@@ -1528,7 +1528,7 @@ End-to-end tests exercise the full pipeline with realistic command
 sequences that an LLM agent might generate:
 
 ```go
-// internal/testharness/e2e_test.go
+// e2etest/e2e_test.go
 package testharness_test
 
 func TestE2ERealWorldScenarios(t *testing.T) {
@@ -1885,7 +1885,7 @@ func TestE2ETestMode(t *testing.T) {
 ### 9.4 Build Helper
 
 ```go
-// internal/testharness/build.go
+// e2etest/build.go
 
 // buildTestBinary builds the dcg-go binary for E2E testing.
 func buildTestBinary(t *testing.T) string {
@@ -1950,7 +1950,7 @@ Based on the architecture, the expected performance profile is:
 ### 10.3 Allocation Tracking
 
 ```go
-// internal/testharness/alloc_test.go
+// e2etest/alloc_test.go
 
 func TestAllocationsEvaluate(t *testing.T) {
     // Warm up the pipeline
@@ -2028,7 +2028,7 @@ internal/parse/
     bench_test.go          — §3.1 parse/extract benchmarks
 internal/eval/
     bench_test.go          — §3.1 pre-filter/match benchmarks
-internal/testharness/
+e2etest/
     benchutil.go           — §3.3 benchmark infrastructure
     comparison.go          — §4 comparison test types
     comparison_test.go     — §4.3 comparison execution
@@ -2048,7 +2048,7 @@ cmd/dcg-go/
 ### 11.2 Shared Utilities
 
 ```go
-// internal/testharness/testharness.go
+// e2etest/testharness.go
 package testharness
 
 // Common test utilities used across all harness tests.
@@ -2268,22 +2268,7 @@ No new findings.
 
 ---
 
-## Completion Signoff
 
-- **Status**: Partial
-- **Date**: 2026-03-03
-- **Branch**: main
-- **Verified by**: dcg-coder-1
-- **Completed items**:
-  - Large hardening/test infrastructure exists in `internal/testharness` (comparison harness, mutation harness, grammar coverage, E2E, stress/security/property suites).
-  - Expanded golden corpus asset exists and exceeds the planned minimum (`internal/testharness/testdata/golden/expanded_corpus.tsv` has 1000+ lines).
-  - Verification commands passed: `make test`; `make test-e2e`; `go test ./internal/testharness -run 'Test(Golden|Comparison|Mutation|GrammarCoverage|Stress|Security|E2E)' -count=1`.
-- **Outstanding gaps**:
-  - This plan assumes completion across the full planned pack set (notably batch-3 pack docs including personal/macos), but those pack implementations are not all present; corresponding "all packs" hardening claims are therefore not fully satisfiable yet. Severity: P1 (dependency completeness gap).
-  - Upstream Rust comparison execution is optional via `UPSTREAM_BINARY`; this signoff pass did not provide evidence of fully pinned, continuously-run upstream parity checks. Severity: P2 (verification completeness gap).
-  - Some benchmark wiring differs from plan examples (for example Makefile `bench` targets currently emphasize `guard`/`cmd` only), so per-stage benchmark execution is only partially aligned with the doc narrative. Severity: P2 (plan/automation drift).
-
----
 ## Completion Signoff
 - **Status**: Partial
 - **Date**: 2026-03-04
@@ -2293,4 +2278,5 @@ No new findings.
 - **Test verification**: `make test` — PASS
 - **Outstanding gaps**: Broad e2etest security sweep currently reproduces two subcommand-evasion failures in `TestSecuritySubcommandEvasion` (`aws --profile ... terminate-instances`, `gcloud --project ... projects delete`) indicating flag-interposition detection gaps for infra/cloud commands.
 - **Deviations from plan**: Test harness package layout has moved to root-level `e2etest` and heavy `internal/eval` suites are `e2e`-tagged, so many documented paths/examples under legacy layout no longer match verbatim.
+- **Reconciliation notes**: Planned harness module references now map to root package files (`e2etest/mutation.go`, `e2etest/comparison.go`, `e2etest/grammar_coverage_test.go`, `e2etest/e2e_test.go`, `e2etest/alloc_test.go`); planned mutation/benchmark entrypoints map to `make test-mutation`, `make bench`, and `make bench-full` (which now include `internal/eval` with `-tags=e2e` and `e2etest` benchmarks).
 - **Additions beyond plan**: `make bench` now exercises `guard`, `cmd/dcg-go`, `internal/eval` (with `-tags=e2e`), and `e2etest` benchmark suites in one target.

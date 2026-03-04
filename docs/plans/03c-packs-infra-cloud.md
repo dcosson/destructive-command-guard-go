@@ -2291,63 +2291,7 @@ establishes the auto-approve severity split pattern that Pulumi also uses.
 |---|----------|----------|---------|-------------|-------|
 | 1 | dcg-reviewer | P1 | Ansible safe-module matcher can short-circuit destructive commands via unanchored SQLContent | Incorporated | S1 safe-module patterns converted from `SQLContent(...)` to anchored `SQLContentRegex("^...$")`; §5.3.1 updated with safe-module anchoring requirement |
 
-## Completion Signoff
 
-- **Date**: 2026-03-03
-- **Signed off by**: dcg-coder-2
-- **Bead**: dcg-lmc.3
-- **Status**: NOT IMPLEMENTED (0%)
-
-### Summary
-
-The entire 03c infra/cloud plan is unimplemented. None of the 6 planned packs exist in the codebase. No pack source files, no pack registrations in `DefaultRegistry`, no golden files, and no per-pack unit tests exist.
-
-### Pack-Level Status
-
-| Pack ID | Planned File | Safe Rules | Destructive Rules | Status |
-|---------|-------------|------------|-------------------|--------|
-| `infrastructure.terraform` | `internal/packs/infrastructure/terraform.go` | 4 (S1-S4) | 9 (D1-D9) | **MISSING** |
-| `infrastructure.pulumi` | `internal/packs/infrastructure/pulumi.go` | 3 (S1-S3) | 6 (D1-D5,D7) | **MISSING** |
-| `infrastructure.ansible` | `internal/packs/infrastructure/ansible.go` | 2 (S1-S2) | 7 (D1-D7) | **MISSING** |
-| `cloud.aws` | `internal/packs/cloud/aws.go` | 3 (S1-S3) | 15 (D1-D15) | **MISSING** |
-| `cloud.gcp` | `internal/packs/cloud/gcp.go` | 3 (S1-S3) | 11 (D1-D11) | **MISSING** |
-| `cloud.azure` | `internal/packs/cloud/azure.go` | 2 (S1-S2) | 9 (D1-D9) | **MISSING** |
-
-**Totals: 0 of 17 safe rules implemented. 0 of 58 destructive rules implemented. 0 of 75 total rules.**
-
-### Blocking Gaps
-
-1. **Builder DSL does not exist** — `packs.And()`, `packs.Or()`, `packs.Name()`, `packs.ArgAt()`, `packs.Flags()`, `packs.Not()`, `packs.ArgContent()`, `packs.ArgContentRegex()`, `packs.SQLContent()`, `packs.SQLContentRegex()` are referenced throughout the plan but none exist in the codebase. Either the DSL must be implemented first (per plan 02), or pack designs must be adapted to the existing `hasAll`/`hasAny` string-matching approach.
-2. **`ExtractedCommand` struct does not exist** — the plan assumes a parsed command structure; the current code uses raw `string` matching.
-3. **`SafePattern` / `DestructivePattern` types do not exist** — the current `Pack` struct uses `[]Rule` with `ID string`, not `Name string`.
-
-### Missing Artifacts
-
-| Artifact | Planned | Actual |
-|----------|---------|--------|
-| Pack source files | 6 | 0 |
-| Pack test files | 6 | 0 |
-| Safe patterns | 17 | 0 |
-| Destructive patterns | 58 | 0 |
-| Golden file entries | 132 | 0 |
-| Pack registrations | 6 | 0 |
-| Directories (`infrastructure/`, `cloud/`) | 2 | 0 |
-
-### Test Results
-
-Tests pass (`PASS 0.327s`) but are vacuous — all pack-dependent tests skip via `SkipIfPackMissing()`. Test harness scaffolding exists in `internal/testharness/infra_cloud_property_test.go` and `infra_cloud_fault_oracle_bench_security_test.go` and will activate when packs are registered.
-
-| Category | Tests | Real Coverage |
-|----------|-------|--------------|
-| Property tests (P1-P8) | All SKIP | None |
-| Deterministic examples (E1-E7) | PASS but false-green | All evaluate to Allow with 0 matches |
-| Fault tests (F1-F2) | PASS | Vacuous — no rules to match |
-| Oracle tests (O1-O3) | O1 PASS vacuously, O2-O3 SKIP | None |
-| Security tests (SEC1-SEC3) | All SKIP | None |
-| Stress tests (S1-S2) | PASS | No-match path only |
-| Benchmarks | PASS <5µs | No pack-specific matching exercised |
-
----
 ## Completion Signoff
 - **Status**: Partial
 - **Date**: 2026-03-04
@@ -2357,4 +2301,5 @@ Tests pass (`PASS 0.327s`) but are vacuous — all pack-dependent tests skip via
 - **Test verification**: `go test ./e2etest -run 'InfraCloud' -count=1` — PASS
 - **Outstanding gaps**: Plan-level named examples/tests (for example `TestTerraformDestroyAutoApprove`, `TestAllInfraCloudPatternsEnvSensitive`) are not present verbatim as identifiers; equivalent coverage exists under current suite names, but this doc is not normalized to them.
 - **Deviations from plan**: Implementation includes a dedicated `cloud.cloudformation` pack in addition to AWS/GCP/Azure for harness compatibility and cross-pack isolation checks.
+- **Reconciliation notes**: Planned identifier intents map to current tests as: `TestTerraformDestroyAutoApprove` -> `TestPropertyInfraCloudAutoApproveSplit`; `TestAllInfraCloudPatternsEnvSensitive` -> `TestPropertyInfraCloudUniversalEnvSensitivity`; broad deterministic matrix intent -> `TestDeterministicInfraCloudExamples`; cloud delete coverage includes `cloud.cloudformation` via `cloudformation-delete-stack`.
 - **Additions beyond plan**: Infra/cloud validation now runs from root-level `e2etest` package and integrated CI tier scripts.

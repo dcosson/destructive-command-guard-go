@@ -1013,22 +1013,7 @@ No new findings.
 
 ---
 
-## Completion Signoff
 
-- **Status**: Partial
-- **Date**: 2026-03-03
-- **Branch**: main
-- **Verified by**: dcg-coder-1
-- **Completed items**:
-  - Property, deterministic, golden, fault-injection, benchmark, security, and stress-style test categories are implemented in `internal/parse/*_test.go`.
-  - Golden regression harness is implemented and passing (`internal/parse/golden_test.go` + `internal/parse/testdata/golden/*.golden`).
-  - Boundary-contract coverage is implemented (`TestPropertyParseResultBoundaryContract`) and passing.
-  - Verification commands passed: `make test`; targeted race run for parse package.
-- **Outstanding gaps**:
-  - The documented corpus text files (`internal/parse/testdata/commands.txt`, `dataflow_cases.txt`, `inline_scripts.txt`, `error_recovery.txt`) are not present; test data is currently embedded/generated in tests. Severity: P3 (documentation/traceability gap).
-  - `inline.golden` is listed in this harness doc but does not exist under `internal/parse/testdata/golden/`. Severity: P3 (documentation-vs-assets mismatch).
-
----
 ## Completion Signoff
 - **Status**: Partial
 - **Date**: 2026-03-04
@@ -1038,4 +1023,5 @@ No new findings.
 - **Test verification**: `go test ./internal/parse -count=1` — PASS
 - **Outstanding gaps**: Planned identifiers above are not implemented under the exact documented names; this doc still needs reconciliation from example-name form to actual test inventory.
 - **Deviations from plan**: Several planned test/benchmark identifiers are not present verbatim in code (`TestParseNeverPanics`, `TestParseLongInput`, `TestMemorySoak`, `TestConcurrentParsing`, `BenchmarkParseWithPool`, `BenchmarkParseWithoutPool`). Implemented equivalents exist with renamed scopes/suffixes (for example `TestConcurrentParsingStress`, `TestMemorySoakS2`, `TestPropertyExtractOutputConsistency`).
+- **Reconciliation notes**: Planned `TestParseNeverPanics` maps to `TestPropertyParseNeverPanics`; `TestParseLongInput` maps to `TestParseLongInputBoundary`/`TestParseLongInputExtraction`; `TestMemorySoak` maps to `TestMemorySoakS2`; `TestConcurrentParsing` maps to `TestConcurrentParsingStress`; planned pool benchmark split maps to `BenchmarkParsePoolEffectiveness` plus baseline parse benchmarks.
 - **Additions beyond plan**: Additional parse fuzz coverage exists (`FuzzParseAndExtract`) and parser security/fault suites are broader than the original harness examples.

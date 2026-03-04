@@ -1128,47 +1128,7 @@ Manually evaluate AWS CLI commands not covered in v1 to prioritize v2:
 |---|----------|----------|---------|-------------|-------|
 | 1 | dcg-reviewer | P2 | Missing regression test for ansible safe-pattern shadowing edge case | Incorporated | Added E3 regression cases: `-m shell -a 'rm /tmp/setup'` → Deny/Critical + `-m setup -a 'rm /tmp/data'` → Allow |
 
-## Completion Signoff
 
-- **Date**: 2026-03-03
-- **Signed off by**: dcg-coder-2
-- **Bead**: dcg-lmc.3
-- **Status**: NOT IMPLEMENTED (0% — test harness skeleton exists but all substantive tests skip)
-
-### Summary
-
-Test harness scaffold files exist and are well-structured (`infra_cloud_property_test.go`, `infra_cloud_fault_oracle_bench_security_test.go`), but all pack-dependent tests skip at runtime because none of the 6 infra/cloud packs are registered in `DefaultRegistry`.
-
-### Test Harness File Status
-
-| File | Exists | Functional |
-|------|--------|-----------|
-| `internal/testharness/infra_cloud_property_test.go` | YES | Skeleton only — all property tests SKIP |
-| `internal/testharness/infra_cloud_fault_oracle_bench_security_test.go` | YES | Skeleton only — fault/oracle/security/stress tests SKIP or pass vacuously |
-
-### Exit Criteria Assessment
-
-| # | Criterion | Status |
-|---|-----------|--------|
-| 1 | All 58 destructive patterns reachable (P1) | **FAIL** — 0 of 58 pass, all 7 pack subtests skip |
-| 2 | Safe patterns don't shadow destructive (P2) | **FAIL** — no safe patterns exist |
-| 3 | Env sensitivity verified (P3) | **FAIL** — all skip |
-| 4 | Auto-approve split validated (P4) | **FAIL** — all skip |
-| 5 | ArgAt correctness (P5) | **FAIL** — all skip |
-| 6 | 132 golden entries pass (O1) | **FAIL** — 0 golden entries exist |
-| 7 | Benchmarks <50µs | **PASS** — <5µs (vacuous) |
-| 8 | No panics on malformed input (F1-F2) | **PASS** (vacuous) |
-| 9 | Subcommand evasion tested (SEC1) | **FAIL** — all skip |
-| 10 | Ansible content injection tested (SEC2) | **FAIL** — skip |
-| 11 | Env sensitivity preconditions (SEC3) | **FAIL** — all skip |
-
-**Exit criteria met: 2 of 11 (both vacuously)**
-
-### Gaps
-
-The test harness is designed to activate automatically when packs are registered. No test code changes are needed — only the pack implementations.
-
----
 ## Completion Signoff
 - **Status**: Partial
 - **Date**: 2026-03-04
@@ -1177,5 +1137,6 @@ The test harness is designed to activate automatically when packs are registered
 - **Verified by**: dcg-coder-1
 - **Test verification**: `go test ./e2etest -run 'InfraCloud' -count=1` — PASS
 - **Outstanding gaps**: One-to-one mapping between doc-specified harness identifiers and code identifiers is incomplete (multiple names drifted during implementation/refactors).
-- **Deviations from plan**: Harness location moved from `internal/testharness` to root `e2etest`; all infra/cloud harness execution paths were updated accordingly.
+- **Deviations from plan**: Harness location moved from legacy `internal/testharness` to root `e2etest`; all infra/cloud harness execution paths were updated accordingly.
+- **Reconciliation notes**: Planned P1/P3/P4/P5/P8 property intents map directly to `TestPropertyEveryInfraCloudDestructivePatternReachable`, `TestPropertyInfraCloudUniversalEnvSensitivity`, `TestPropertyInfraCloudAutoApproveSplit`, `TestPropertyInfraCloudArgAtCorrectness`, and `TestInfraCloudReachabilityCountHint`; planned SEC/F/O/S categories map to the corresponding `TestSecurity*`, `TestFault*`, `TestOracle*`, and `TestStress*` functions in `e2etest/infra_cloud_fault_oracle_bench_security_test.go`.
 - **Additions beyond plan**: Additional policy/consistency/benchmark slices cover `cloud.cloudformation` alongside the six primary packs.

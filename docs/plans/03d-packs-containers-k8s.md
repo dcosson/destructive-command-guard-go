@@ -1909,69 +1909,7 @@ to establish the dual-syntax matching pattern.
 
 No new findings.
 
-## Completion Signoff
 
-- **Date**: 2026-03-03
-- **Signed off by**: dcg-coder-2
-- **Bead**: dcg-lmc.3
-- **Status**: NOT IMPLEMENTED (0%)
-
-### Summary
-
-The entire 03d containers/k8s plan is unimplemented. None of the 4 planned packs exist in the codebase. No pack source files, no registrations in `DefaultRegistry`, no golden files, and no per-pack unit tests exist. Beads dcg-ppb.1, dcg-ppb.2, dcg-ppb.3 were closed prematurely without code reaching main.
-
-### Pack-Level Status
-
-| Pack ID | Planned File | Safe Rules | Destructive Rules | Status |
-|---------|-------------|------------|-------------------|--------|
-| `containers.docker` | `internal/packs/containers/docker.go` | 8 (S1-S8) | 12 (D1-D11, D1b) | **MISSING** |
-| `containers.compose` | `internal/packs/containers/compose.go` | 3 (S1-S3) | 5 (D1-D5) | **MISSING** |
-| `kubernetes.kubectl` | `internal/packs/kubernetes/kubectl.go` | 4 (S1-S4) | 14 (D1-D10, D7b-D7e) | **MISSING** |
-| `kubernetes.helm` | `internal/packs/kubernetes/helm.go` | 2 (S1-S2) | 5 (D1-D5) | **MISSING** |
-
-**Totals: 0 of 17 safe rules implemented. 0 of 36 destructive rules implemented. 0 of 53 total rules.**
-
-### Blocking Gaps
-
-1. **Builder DSL does not exist** — `packs.Name()`, `packs.ArgAt()`, `packs.Flags()`, `packs.And()`, `packs.Or()`, `packs.Not()` are referenced throughout the plan but none exist. Either the DSL must be implemented first (per plan 02), or pack designs must be adapted to the existing `hasAll`/`hasAny` string-matching approach.
-2. **Pack subdirectories do not exist** — no `internal/packs/containers/` or `internal/packs/kubernetes/` directories.
-
-### Missing Artifacts
-
-| Artifact | Planned | Actual |
-|----------|---------|--------|
-| Pack source files | 4 | 0 |
-| Pack test files | 4 | 0 |
-| Safe patterns | 17 | 0 |
-| Destructive patterns | 36 | 0 |
-| Golden file entries | 116 | 0 |
-| Pack registrations | 4 | 0 |
-| Reachability map entries | 36 | 4 (stubs) |
-
-### Test Results
-
-Tests pass (`PASS 0.232s`) but are vacuous — 30+ subtests SKIP. Test harness scaffolding exists and will activate when packs are registered.
-
-| Category | Tests | Real Coverage |
-|----------|-------|--------------|
-| Property tests (P1, P2-like, P3-P8) | P4, P5, P8 SKIP; P3, P7 pass vacuously | None |
-| Deterministic examples (E1-E7) | All 7 SKIP | None |
-| Fault tests (F1-F3) | F1-F2 PASS (vacuous), F3 SKIP | None |
-| Oracle tests (O1-O3) | O1 PASS vacuously, O2-O3 SKIP | None |
-| Security tests (SEC1-SEC3) | All SKIP | None |
-| Stress tests (S1-S2) | PASS | No-match path only |
-
-### Missing Test Properties
-
-Two plan-specified test properties are absent from test code:
-- **P2** (`TestPropertyContainerK8sSafePatternsNeverBlockDestructive`)
-- **P6** (`TestPropertyContainerK8sEmptyCommandMatchesNothing`)
-
-### Bead Discrepancy
-
-Beads dcg-ppb.1, dcg-ppb.2, dcg-ppb.3 were all closed on 2026-03-02 but no corresponding pack implementation code exists on main. Work may have been done in an unmerged branch/worktree, or was never completed.
-
----
 ## Completion Signoff
 - **Status**: Partial
 - **Date**: 2026-03-04
@@ -1981,4 +1919,5 @@ Beads dcg-ppb.1, dcg-ppb.2, dcg-ppb.3 were all closed on 2026-03-02 but no corre
 - **Test verification**: `go test ./e2etest -run 'ContainerK8s' -count=1` — PASS
 - **Outstanding gaps**: Doc-level named test identifiers (for example `TestDockerSystemPruneAll`, `TestContainerK8sEnvSensitivity`) are not reflected verbatim in current suite names, despite equivalent semantic coverage.
 - **Deviations from plan**: Final rule inventory and matcher composition follow implemented pack DSL conventions and consolidated registration/import wiring used across all packs.
+- **Reconciliation notes**: Planned container/k8s rule-validation identifiers map to current tests as: `TestDockerSystemPruneAll` -> `TestPropertyEveryContainerK8sDestructivePatternReachable`/`TestDeterministicContainerK8sExamples`; env-sensitivity intent -> `TestPropertyContainerK8sSplitEnvSensitivity`; kubectl catch-all intent -> `TestPropertyKubectlDeleteCatchAllCompleteness`.
 - **Additions beyond plan**: Container/k8s coverage is integrated into shared root-level `e2etest` harness, CI tier scripts, and expanded golden corpus infrastructure.

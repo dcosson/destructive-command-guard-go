@@ -1010,49 +1010,7 @@ Manually verify kubectl delete with all significant resource types:
 
 No new findings.
 
-## Completion Signoff
 
-- **Date**: 2026-03-03
-- **Signed off by**: dcg-coder-2
-- **Bead**: dcg-lmc.3
-- **Status**: NOT IMPLEMENTED (0% — test harness skeleton exists but all substantive tests skip)
-
-### Summary
-
-Test harness scaffold files exist and are well-structured (`containers_k8s_property_test.go`, `containers_k8s_fault_oracle_bench_security_test.go`), but all pack-dependent tests skip because none of the 4 container/k8s packs are registered.
-
-### Test Harness File Status
-
-| File | Exists | Functional |
-|------|--------|-----------|
-| `internal/testharness/containers_k8s_property_test.go` | YES | Skeleton only — all property tests SKIP |
-| `internal/testharness/containers_k8s_fault_oracle_bench_security_test.go` | YES | Skeleton only — all substantive tests SKIP or pass vacuously |
-
-### Exit Criteria Assessment
-
-| # | Criterion | Status |
-|---|-----------|--------|
-| 1 | All 36 destructive patterns reachable (P1) | **FAIL** — 0 of 36 pass, all 4 pack subtests skip |
-| 2 | Safe patterns don't shadow destructive (P2) | **FAIL** — test not implemented |
-| 3 | Env sensitivity verified (P3) | **FAIL** — passes vacuously (empty loop) |
-| 4 | Docker dual-syntax parity (P4) | **FAIL** — skip |
-| 5 | Compose dual-naming parity (P5) | **FAIL** — skip |
-| 6 | Empty command matches nothing (P6) | **FAIL** — test not implemented |
-| 7 | Cross-pack isolation (P7) | **FAIL** — passes vacuously |
-| 8 | kubectl delete catch-all completeness (P8) | **FAIL** — skip |
-| 9 | 116 golden entries pass | **FAIL** — 0 golden entries exist |
-| 10 | Benchmarks <50µs | **PASS** — <5µs (vacuous) |
-| 11 | No panics on malformed input (F1-F2) | **PASS** (vacuous) |
-
-**Exit criteria met: 2 of 11 (both vacuously)**
-
-### Gaps
-
-- Reachability map has 4 entries (one per pack stub) vs planned 36 (one per destructive pattern)
-- Two test properties from the plan are not implemented in code: P2 and P6
-- The test harness will activate automatically when packs are registered; no test code changes needed for core coverage (only P2, P6, and reachability map expansion needed)
-
----
 ## Completion Signoff
 - **Status**: Partial
 - **Date**: 2026-03-04
@@ -1062,4 +1020,5 @@ Test harness scaffold files exist and are well-structured (`containers_k8s_prope
 - **Test verification**: `go test ./e2etest -run 'ContainerK8s' -count=1` — PASS
 - **Outstanding gaps**: Harness doc still references several non-verbatim test names relative to current implementation, requiring a doc normalization pass for exact identifier parity.
 - **Deviations from plan**: Harness execution/package path has moved to `e2etest` from the legacy internal location.
+- **Reconciliation notes**: Planned harness categories map to current functions as: P1/P3/P4/P5/P7/P8 -> `e2etest/containers_k8s_property_test.go`; F/O/S/SEC suites -> `e2etest/containers_k8s_fault_oracle_bench_security_test.go`; deterministic matrix intent -> `TestDeterministicContainerK8sExamples`.
 - **Additions beyond plan**: Cross-pack isolation, security, and benchmark coverage are now aligned with the unified e2etest + CI tier layout.
