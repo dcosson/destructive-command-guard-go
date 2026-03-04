@@ -4,8 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-
-	"github.com/dcosson/destructive-command-guard-go/guard"
 )
 
 // FZ1: Parse Fuzzing — Go native fuzzing target.
@@ -79,9 +77,9 @@ func FuzzParse(f *testing.F) {
 		// Warning codes must be recognized
 		for _, w := range warnings {
 			switch w.Code {
-			case guard.WarnPartialParse, guard.WarnInputTruncated, guard.WarnExtractorPanic,
-				guard.WarnInlineDepthExceeded, guard.WarnExpansionCapped,
-				guard.WarnCommandSubstitution, guard.WarnMatcherPanic, guard.WarnUnknownPackID:
+			case WarnPartialParse, WarnInputTruncated, WarnExtractorPanic,
+				WarnInlineDepthExceeded, WarnExpansionCapped,
+				WarnCommandSubstitution, WarnMatcherPanic, WarnUnknownPackID:
 				// valid
 			default:
 				t.Errorf("unrecognized warning code: %d", w.Code)
@@ -96,7 +94,7 @@ func FuzzParse(f *testing.F) {
 			if tree != nil {
 				t.Error("expected nil tree for oversized input")
 			}
-			if !hasWarning(warnings, guard.WarnInputTruncated) {
+			if !hasWarning(warnings, WarnInputTruncated) {
 				t.Error("expected WarnInputTruncated for oversized input")
 			}
 			return

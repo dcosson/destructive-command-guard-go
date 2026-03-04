@@ -1,7 +1,5 @@
 package parse
 
-import "github.com/dcosson/destructive-command-guard-go/guard"
-
 type InlineScript struct {
 	Language string
 	Content  string
@@ -28,6 +26,24 @@ type ExtractedCommand struct {
 type ParseResult struct {
 	Commands     []ExtractedCommand
 	ExportedVars map[string][]string
-	Warnings     []guard.Warning
+	Warnings     []Warning
 	HasError     bool
+}
+
+type WarningCode int
+
+const (
+	WarnPartialParse WarningCode = iota
+	WarnInlineDepthExceeded
+	WarnInputTruncated
+	WarnExpansionCapped
+	WarnExtractorPanic
+	WarnCommandSubstitution
+	WarnMatcherPanic
+	WarnUnknownPackID
+)
+
+type Warning struct {
+	Code    WarningCode
+	Message string
 }

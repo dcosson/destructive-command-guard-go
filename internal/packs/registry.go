@@ -2,11 +2,7 @@ package packs
 
 import (
 	"sort"
-	"strings"
 )
-
-// MatchFunc returns true when a rule matches a command.
-type MatchFunc func(command string) bool
 
 // Rule is a single pack rule.
 type Rule struct {
@@ -76,22 +72,10 @@ func (r *Registry) Get(id string) (Pack, bool) {
 	return p, ok
 }
 
-func hasAll(command string, terms ...string) bool {
-	s := strings.ToLower(command)
-	for _, term := range terms {
-		if !strings.Contains(s, strings.ToLower(term)) {
-			return false
-		}
+// MatchCommand preserves existing test callsites while rules are now parse-based.
+func (r Rule) MatchCommand(cmd Command) bool {
+	if r.Match == nil {
+		return false
 	}
-	return true
-}
-
-func hasAny(command string, terms ...string) bool {
-	s := strings.ToLower(command)
-	for _, term := range terms {
-		if strings.Contains(s, strings.ToLower(term)) {
-			return true
-		}
-	}
-	return false
+	return r.Match.Match(cmd)
 }

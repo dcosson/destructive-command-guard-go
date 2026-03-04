@@ -2,12 +2,14 @@ package testharness
 
 import (
 	"bufio"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/dcosson/destructive-command-guard-go/guard"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
+	"github.com/dcosson/destructive-command-guard-go/internal/parse"
 )
 
 // MutationResult tracks a single mutation test.
@@ -110,7 +112,21 @@ func safeMatch(fn packs.MatchFunc, command string) bool {
 	if fn == nil {
 		return false
 	}
-	return fn(command)
+	parser := parse.NewBashParser()
+	parsed := parser.ParseAndExtract(context.Background(), command, 0)
+	for _, cmd := range parsed.Commands {
+		pc := packs.Command{
+			Name:    cmd.Name,
+			Args:    append([]string{}, cmd.Args...),
+			RawArgs: append([]string{}, cmd.RawArgs...),
+			Flags:   cmd.Flags,
+			RawText: cmd.RawText,
+		}
+		if fn.Match(pc) {
+			return true
+		}
+	}
+	return false
 }
 
 func generateMutations() []mutation {
@@ -118,7 +134,7 @@ func generateMutations() []mutation {
 		{
 			operator: "RemoveCondition", category: "matching", detail: "match always true",
 			apply: func(r packs.Rule) packs.Rule {
-				r.Match = func(string) bool { return true }
+				r.Match = packs.MatchFunc(func(packs.Command) bool { return true })
 				return r
 			},
 		},
@@ -126,14 +142,16 @@ func generateMutations() []mutation {
 			operator: "NegateCondition", category: "matching", detail: "negate matcher",
 			apply: func(r packs.Rule) packs.Rule {
 				orig := r.Match
-				r.Match = func(cmd string) bool { return !safeMatch(orig, cmd) }
+				r.Match = packs.MatchFunc(func(cmd packs.Command) bool {
+					return !safeMatch(orig, cmd.RawText)
+				})
 				return r
 			},
 		},
 		{
 			operator: "SwapCommandName", category: "matching", detail: "prefix guard",
 			apply: func(r packs.Rule) packs.Rule {
-				r.Match = func(string) bool { return false }
+				r.Match = packs.MatchFunc(func(packs.Command) bool { return false })
 				return r
 			},
 		},
@@ -141,8 +159,8 @@ func generateMutations() []mutation {
 			operator: "RemoveFlag", category: "matching", detail: "strip force/delete flags",
 			apply: func(r packs.Rule) packs.Rule {
 				orig := r.Match
-				r.Match = func(cmd string) bool {
-					c := strings.ReplaceAll(cmd, "--force", "")
+				r.Match = packs.MatchFunc(func(cmd packs.Command) bool {
+					c := strings.ReplaceAll(cmd.RawText, "--force", "")
 					c = strings.ReplaceAll(c, "-rf", "")
 					c = strings.ReplaceAll(c, "-fr", "")
 					c = strings.ReplaceAll(c, "--delete", "")
@@ -156,28 +174,28 @@ func generateMutations() []mutation {
 					c = strings.ReplaceAll(c, "flush-privileges", "")
 					c = strings.ReplaceAll(c, "flush-tables", "")
 					return safeMatch(orig, c)
-				}
+				})
 				return r
 			},
 		},
 		{
 			operator: "RemoveNot", category: "matching", detail: "broad match always true",
 			apply: func(r packs.Rule) packs.Rule {
-				r.Match = func(string) bool { return true }
+				r.Match = packs.MatchFunc(func(packs.Command) bool { return true })
 				return r
 			},
 		},
 		{
 			operator: "RemoveNotAlternative", category: "matching", detail: "trim --all alternative",
 			apply: func(r packs.Rule) packs.Rule {
-				r.Match = func(string) bool { return false }
+				r.Match = packs.MatchFunc(func(packs.Command) bool { return false })
 				return r
 			},
 		},
 		{
 			operator: "ShiftArgPosition", category: "matching", detail: "rotate tokens",
 			apply: func(r packs.Rule) packs.Rule {
-				r.Match = func(string) bool { return false }
+				r.Match = packs.MatchFunc(func(packs.Command) bool { return false })
 				return r
 			},
 		},

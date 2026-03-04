@@ -3,8 +3,6 @@ package parse
 import (
 	"context"
 	"testing"
-
-	"github.com/dcosson/destructive-command-guard-go/guard"
 )
 
 // E2: Dataflow Resolution Examples
@@ -12,9 +10,9 @@ import (
 // variable assignments are tracked and resolved during extraction.
 
 type dataflowTestCase struct {
-	name   string
-	input  string
-	check  func(t *testing.T, result ParseResult)
+	name  string
+	input string
+	check func(t *testing.T, result ParseResult)
 }
 
 var dataflowTests = []dataflowTestCase{
@@ -95,7 +93,7 @@ var dataflowTests = []dataflowTestCase{
 			// FILE is indeterminate, expect WarnCommandSubstitution
 			foundWarning := false
 			for _, w := range result.Warnings {
-				if w.Code == guard.WarnCommandSubstitution {
+				if w.Code == WarnCommandSubstitution {
 					foundWarning = true
 				}
 			}
@@ -122,7 +120,7 @@ var dataflowTests = []dataflowTestCase{
 		check: func(t *testing.T, result ParseResult) {
 			// No variable assignments, no dataflow warnings
 			for _, w := range result.Warnings {
-				if w.Code == guard.WarnCommandSubstitution || w.Code == guard.WarnExpansionCapped {
+				if w.Code == WarnCommandSubstitution || w.Code == WarnExpansionCapped {
 					t.Errorf("unexpected dataflow warning: %v", w)
 				}
 			}
@@ -162,7 +160,7 @@ var dataflowTests = []dataflowTestCase{
 			// With 3^4=81 possible expansions, should be capped at 16
 			foundCap := false
 			for _, w := range result.Warnings {
-				if w.Code == guard.WarnExpansionCapped {
+				if w.Code == WarnExpansionCapped {
 					foundCap = true
 				}
 			}

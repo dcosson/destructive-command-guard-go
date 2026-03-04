@@ -92,7 +92,7 @@ func TestDbPropertySQLCaseInsensitivity(t *testing.T) {
 			if rule == nil {
 				return false
 			}
-			if !rule.Match(cmd) {
+			if !matchRuleCommand(rule, cmd) {
 				return false
 			}
 		}
@@ -163,7 +163,7 @@ func TestDbPropertyRawStringMatching(t *testing.T) {
 			if rule == nil {
 				t.Fatalf("rule %s not found", tt.ruleID)
 			}
-			got := rule.Match(tt.cmd)
+			got := matchRuleCommand(rule, tt.cmd)
 			if got != tt.wantHit {
 				t.Errorf("match = %v, want %v for cmd: %s", got, tt.wantHit, tt.cmd)
 			}
@@ -197,7 +197,7 @@ func TestDbPropertyCrossPackIsolation(t *testing.T) {
 					t.Fatalf("pack %s not found", otherPackID)
 				}
 				for _, dp := range pack.Destructive {
-					if dp.Match != nil && dp.Match(cmd) {
+					if dp.Match != nil && matchRuleCommand(dp, cmd) {
 						t.Errorf("%s command triggers %s/%s",
 							cmdPackID, otherPackID, dp.ID)
 					}
@@ -309,7 +309,7 @@ func TestDbPropertyDestructiveReachability(t *testing.T) {
 				if rule == nil {
 					t.Fatalf("rule %s not found in pack %s", ruleID, packID)
 				}
-				if !rule.Match(cmd) {
+				if !matchRuleCommand(rule, cmd) {
 					t.Errorf("reachability command %q did not match rule %s", cmd, ruleID)
 				}
 			})

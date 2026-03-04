@@ -131,10 +131,10 @@ func TestOracleBashDataflowComparison(t *testing.T) {
 
 	type dataflowCase struct {
 		name         string
-		input        string     // Full bash command
-		echoVar      string     // Variable to echo for comparison
-		bashExpected string     // What bash actually produces
-		overApprox   bool       // If true, our result may include extra values
+		input        string // Full bash command
+		echoVar      string // Variable to echo for comparison
+		bashExpected string // What bash actually produces
+		overApprox   bool   // If true, our result may include extra values
 	}
 
 	cases := []dataflowCase{
@@ -220,23 +220,23 @@ func TestOracleOverApproximationDocumented(t *testing.T) {
 	bp := NewBashParser()
 
 	type overApproxCase struct {
-		name          string
-		input         string
-		description   string
+		name           string
+		input          string
+		description    string
 		expectMultiple bool // Our analyzer produces multiple values where bash has one
 	}
 
 	cases := []overApproxCase{
 		{
-			name:          "and chain may-alias",
-			input:         "DIR=/ && DIR=/tmp && rm -rf $DIR",
-			description:   "&& branches treated as may-alias: both / and /tmp tracked",
+			name:           "and chain may-alias",
+			input:          "DIR=/ && DIR=/tmp && rm -rf $DIR",
+			description:    "&& branches treated as may-alias: both / and /tmp tracked",
 			expectMultiple: true,
 		},
 		{
-			name:          "or chain may-alias",
-			input:         "DIR=/tmp || DIR=/; rm -rf $DIR",
-			description:   "|| branches treated as may-alias: both /tmp and / tracked",
+			name:           "or chain may-alias",
+			input:          "DIR=/tmp || DIR=/; rm -rf $DIR",
+			description:    "|| branches treated as may-alias: both /tmp and / tracked",
 			expectMultiple: true,
 		},
 	}

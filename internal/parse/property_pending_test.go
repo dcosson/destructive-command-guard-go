@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"testing/quick"
-
-	"github.com/dcosson/destructive-command-guard-go/guard"
 )
 
 // P2: Extract Output Consistency
@@ -201,7 +199,7 @@ func TestPropertyInlineDetectionDepthBounded(t *testing.T) {
 				if depth > 3 && len(result.Commands) > depth {
 					found := false
 					for _, w := range result.Warnings {
-						if w.Code == guard.WarnInlineDepthExceeded {
+						if w.Code == WarnInlineDepthExceeded {
 							found = true
 						}
 					}
@@ -263,9 +261,9 @@ func TestPropertyParseResultBoundaryContract(t *testing.T) {
 			t.Fatal("warning has empty message")
 		}
 		switch w.Code {
-		case guard.WarnPartialParse, guard.WarnInputTruncated, guard.WarnExtractorPanic,
-			guard.WarnInlineDepthExceeded, guard.WarnExpansionCapped,
-			guard.WarnCommandSubstitution, guard.WarnMatcherPanic, guard.WarnUnknownPackID:
+		case WarnPartialParse, WarnInputTruncated, WarnExtractorPanic,
+			WarnInlineDepthExceeded, WarnExpansionCapped,
+			WarnCommandSubstitution, WarnMatcherPanic, WarnUnknownPackID:
 			// valid known codes
 		default:
 			t.Fatalf("unrecognized warning code: %d", w.Code)

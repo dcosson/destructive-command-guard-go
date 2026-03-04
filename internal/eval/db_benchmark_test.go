@@ -162,14 +162,14 @@ func BenchmarkSQLRegexMatch(b *testing.B) {
 	b.Run("match", func(b *testing.B) {
 		cmd := `psql -c "DROP TABLE users"`
 		for i := 0; i < b.N; i++ {
-			dropTableRule.Match(cmd)
+			matchRuleCommand(dropTableRule, cmd)
 		}
 	})
 
 	b.Run("no-match", func(b *testing.B) {
 		cmd := `psql -c "SELECT * FROM users WHERE id = 1"`
 		for i := 0; i < b.N; i++ {
-			dropTableRule.Match(cmd)
+			matchRuleCommand(dropTableRule, cmd)
 		}
 	})
 }
@@ -209,7 +209,7 @@ func TestStressConcurrentDbMatching(t *testing.T) {
 					}
 					for _, dp := range pack.Destructive {
 						if dp.Match != nil {
-							dp.Match(cmd)
+							matchRuleCommand(dp, cmd)
 						}
 					}
 				}

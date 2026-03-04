@@ -21,8 +21,8 @@ type extractionTestCase struct {
 var extractionTests = []extractionTestCase{
 	// --- Bare commands ---
 	{
-		name: "bare command no args",
-		input: "ls",
+		name:     "bare command no args",
+		input:    "ls",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "ls")
@@ -32,8 +32,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "command with single arg",
-		input: "echo hello",
+		name:     "command with single arg",
+		input:    "echo hello",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "echo")
@@ -41,8 +41,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "command with multiple args",
-		input: "cp src.txt dst.txt",
+		name:     "command with multiple args",
+		input:    "cp src.txt dst.txt",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "cp")
@@ -52,8 +52,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Flag styles ---
 	{
-		name: "single short flag",
-		input: "rm -f /tmp/file",
+		name:     "single short flag",
+		input:    "rm -f /tmp/file",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "rm")
@@ -62,8 +62,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "combined short flags",
-		input: "rm -rf /tmp/dir",
+		name:     "combined short flags",
+		input:    "rm -rf /tmp/dir",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "rm")
@@ -72,8 +72,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "long flag without value",
-		input: "git push --force",
+		name:     "long flag without value",
+		input:    "git push --force",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "git")
@@ -81,8 +81,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "long flag with equals value",
-		input: "git log --format=oneline",
+		name:     "long flag with equals value",
+		input:    "git log --format=oneline",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "git")
@@ -90,8 +90,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "mixed short and long flags",
-		input: "docker run -d --name=myapp image",
+		name:     "mixed short and long flags",
+		input:    "docker run -d --name=myapp image",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "docker")
@@ -100,8 +100,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "double dash separator",
-		input: "git checkout -- file.txt",
+		name:     "double dash separator",
+		input:    "git checkout -- file.txt",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "git")
@@ -110,8 +110,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Path prefixes ---
 	{
-		name: "absolute path prefix",
-		input: "/usr/bin/git status",
+		name:     "absolute path prefix",
+		input:    "/usr/bin/git status",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "git")
@@ -119,8 +119,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "relative path prefix",
-		input: "./build.sh --target release",
+		name:     "relative path prefix",
+		input:    "./build.sh --target release",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "build.sh")
@@ -128,8 +128,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "deep path prefix",
-		input: "/usr/local/bin/terraform plan",
+		name:     "deep path prefix",
+		input:    "/usr/local/bin/terraform plan",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "terraform")
@@ -139,8 +139,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Inline env ---
 	{
-		name: "single inline env",
-		input: "RAILS_ENV=production rails db:migrate",
+		name:     "single inline env",
+		input:    "RAILS_ENV=production rails db:migrate",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "rails")
@@ -148,8 +148,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "multiple inline envs",
-		input: "FOO=bar BAZ=qux echo test",
+		name:     "multiple inline envs",
+		input:    "FOO=bar BAZ=qux echo test",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "echo")
@@ -158,8 +158,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "env prefix unwrap",
-		input: "env NODE_ENV=production node server.js",
+		name:     "env prefix unwrap",
+		input:    "env NODE_ENV=production node server.js",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "node")
@@ -169,8 +169,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Quoting ---
 	{
-		name: "single-quoted arg",
-		input: "echo 'hello world'",
+		name:     "single-quoted arg",
+		input:    "echo 'hello world'",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "echo")
@@ -178,8 +178,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "double-quoted arg",
-		input: `echo "hello world"`,
+		name:     "double-quoted arg",
+		input:    `echo "hello world"`,
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "echo")
@@ -187,16 +187,16 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "mixed quoting",
-		input: `echo "hello" 'world'`,
+		name:     "mixed quoting",
+		input:    `echo "hello" 'world'`,
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "echo")
 		},
 	},
 	{
-		name: "single-quoted flag value",
-		input: "psql -c 'DROP DATABASE test'",
+		name:     "single-quoted flag value",
+		input:    "psql -c 'DROP DATABASE test'",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "psql")
@@ -206,8 +206,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Pipelines ---
 	{
-		name: "simple two-stage pipeline",
-		input: "cat file | grep pattern",
+		name:     "simple two-stage pipeline",
+		input:    "cat file | grep pattern",
 		wantCmds: 2,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			assertEqual(t, "cmd[0].Name", cmds[0].Name, "cat")
@@ -217,8 +217,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "three-stage pipeline",
-		input: "cat log | grep error | wc -l",
+		name:     "three-stage pipeline",
+		input:    "cat log | grep error | wc -l",
 		wantCmds: 3,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			assertEqual(t, "cmd[0].Name", cmds[0].Name, "cat")
@@ -234,8 +234,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "pipeline with flags on both sides",
-		input: "find . -name '*.go' | xargs -I{} grep -l TODO {}",
+		name:     "pipeline with flags on both sides",
+		input:    "find . -name '*.go' | xargs -I{} grep -l TODO {}",
 		wantCmds: 2,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			assertEqual(t, "cmd[0].Name", cmds[0].Name, "find")
@@ -245,8 +245,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- And chains ---
 	{
-		name: "simple and chain",
-		input: "echo a && echo b",
+		name:     "simple and chain",
+		input:    "echo a && echo b",
 		wantCmds: 2,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			assertEqual(t, "cmd[0].Name", cmds[0].Name, "echo")
@@ -256,8 +256,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "three-way and chain",
-		input: "mkdir dir && cd dir && git init",
+		name:     "three-way and chain",
+		input:    "mkdir dir && cd dir && git init",
 		wantCmds: 3,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			assertEqual(t, "cmd[0].Name", cmds[0].Name, "mkdir")
@@ -268,8 +268,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Or chains ---
 	{
-		name: "simple or chain",
-		input: "test -d /backup || mkdir /backup",
+		name:     "simple or chain",
+		input:    "test -d /backup || mkdir /backup",
 		wantCmds: 2,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			assertEqual(t, "cmd[0].Name", cmds[0].Name, "test")
@@ -279,8 +279,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Semicolons ---
 	{
-		name: "semicolon chain",
-		input: "echo hello; echo world",
+		name:     "semicolon chain",
+		input:    "echo hello; echo world",
 		wantCmds: 2,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			assertEqual(t, "cmd[0].Name", cmds[0].Name, "echo")
@@ -288,8 +288,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "complex semicolon chain",
-		input: "cd /tmp; ls -la; rm -rf old/",
+		name:     "complex semicolon chain",
+		input:    "cd /tmp; ls -la; rm -rf old/",
 		wantCmds: 3,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			assertEqual(t, "cmd[0].Name", cmds[0].Name, "cd")
@@ -304,8 +304,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Negation ---
 	{
-		name: "negated command",
-		input: "! git diff --quiet",
+		name:     "negated command",
+		input:    "! git diff --quiet",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "git")
@@ -313,8 +313,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "negated in pipeline",
-		input: "! echo foo | grep bar",
+		name:     "negated in pipeline",
+		input:    "! echo foo | grep bar",
 		wantCmds: 2,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			// Negation applies to the pipeline as a whole in bash
@@ -324,16 +324,16 @@ var extractionTests = []extractionTestCase{
 
 	// --- Subshell ---
 	{
-		name: "subshell command",
-		input: "(echo hello)",
+		name:     "subshell command",
+		input:    "(echo hello)",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "echo")
 		},
 	},
 	{
-		name: "subshell with multiple commands",
-		input: "(echo a; echo b)",
+		name:     "subshell with multiple commands",
+		input:    "(echo a; echo b)",
 		wantCmds: 2,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			assertEqual(t, "cmd[0].Name", cmds[0].Name, "echo")
@@ -343,30 +343,30 @@ var extractionTests = []extractionTestCase{
 
 	// --- Declaration commands ---
 	{
-		name: "export with assignment",
-		input: "export FOO=bar",
+		name:     "export with assignment",
+		input:    "export FOO=bar",
 		wantCmds: 1, // declaration_command emits as command with name="export"
 	},
 	{
-		name: "local variable",
-		input: "local myvar=123",
+		name:     "local variable",
+		input:    "local myvar=123",
 		wantCmds: 1, // declaration_command emits as command with name="local"
 	},
 	{
-		name: "declare command",
-		input: "declare -a myarray=(1 2 3)",
+		name:     "declare command",
+		input:    "declare -a myarray=(1 2 3)",
 		wantCmds: 1, // declaration_command emits as command with name="declare"
 	},
 
 	// --- Bare variable assignments ---
 	{
-		name: "bare assignment",
-		input: "FOO=bar",
+		name:     "bare assignment",
+		input:    "FOO=bar",
 		wantCmds: 0,
 	},
 	{
-		name: "bare assignment followed by command",
-		input: "FOO=bar; echo $FOO",
+		name:     "bare assignment followed by command",
+		input:    "FOO=bar; echo $FOO",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "echo")
@@ -375,8 +375,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- RawText and byte positions ---
 	{
-		name: "byte positions for simple command",
-		input: "git push",
+		name:     "byte positions for simple command",
+		input:    "git push",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "git")
@@ -390,8 +390,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "byte positions for second command in chain",
-		input: "echo a && git push",
+		name:     "byte positions for second command in chain",
+		input:    "echo a && git push",
 		wantCmds: 2,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			// Second command should have offset byte positions
@@ -404,8 +404,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Real-world destructive commands ---
 	{
-		name: "rm -rf root",
-		input: "rm -rf /",
+		name:     "rm -rf root",
+		input:    "rm -rf /",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "rm")
@@ -415,8 +415,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "docker system prune",
-		input: "docker system prune -af",
+		name:     "docker system prune",
+		input:    "docker system prune -af",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "docker")
@@ -427,8 +427,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "kubectl delete namespace",
-		input: "kubectl delete namespace production",
+		name:     "kubectl delete namespace",
+		input:    "kubectl delete namespace production",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "kubectl")
@@ -438,8 +438,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "terraform destroy auto-approve",
-		input: "terraform destroy -auto-approve",
+		name:     "terraform destroy auto-approve",
+		input:    "terraform destroy -auto-approve",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "terraform")
@@ -447,8 +447,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "git reset hard",
-		input: "git reset --hard HEAD~5",
+		name:     "git reset hard",
+		input:    "git reset --hard HEAD~5",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "git")
@@ -456,8 +456,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "git push force with refs",
-		input: "git push --force origin main",
+		name:     "git push force with refs",
+		input:    "git push --force origin main",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "git")
@@ -467,8 +467,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "chmod recursive",
-		input: "chmod -R 777 /var/www",
+		name:     "chmod recursive",
+		input:    "chmod -R 777 /var/www",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "chmod")
@@ -476,8 +476,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "chown recursive",
-		input: "chown -R root:root /",
+		name:     "chown recursive",
+		input:    "chown -R root:root /",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "chown")
@@ -485,8 +485,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "redis flushall",
-		input: "redis-cli FLUSHALL",
+		name:     "redis flushall",
+		input:    "redis-cli FLUSHALL",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "redis-cli")
@@ -494,8 +494,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "psql drop database",
-		input: "psql -c 'DROP DATABASE production'",
+		name:     "psql drop database",
+		input:    "psql -c 'DROP DATABASE production'",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "psql")
@@ -503,8 +503,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "aws terminate instances",
-		input: "aws ec2 terminate-instances --instance-ids i-1234567890abcdef0",
+		name:     "aws terminate instances",
+		input:    "aws ec2 terminate-instances --instance-ids i-1234567890abcdef0",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "aws")
@@ -516,8 +516,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "gcloud delete project",
-		input: "gcloud projects delete my-project --quiet",
+		name:     "gcloud delete project",
+		input:    "gcloud projects delete my-project --quiet",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "gcloud")
@@ -527,8 +527,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Mixed compound + flags + env ---
 	{
-		name: "env prefix with pipeline",
-		input: "RAILS_ENV=production rails runner 'cleanup' | tee log.txt",
+		name:     "env prefix with pipeline",
+		input:    "RAILS_ENV=production rails runner 'cleanup' | tee log.txt",
 		wantCmds: 2,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			assertEqual(t, "cmd[0].Name", cmds[0].Name, "rails")
@@ -539,8 +539,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "path prefix with and chain",
-		input: "/usr/bin/test -d /tmp && /usr/bin/rm -rf /tmp/cache",
+		name:     "path prefix with and chain",
+		input:    "/usr/bin/test -d /tmp && /usr/bin/rm -rf /tmp/cache",
 		wantCmds: 2,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			assertEqual(t, "cmd[0].Name", cmds[0].Name, "test")
@@ -552,24 +552,24 @@ var extractionTests = []extractionTestCase{
 
 	// --- Redirections (should not interfere with command extraction) ---
 	{
-		name: "output redirection",
-		input: "echo hello > /tmp/out",
+		name:     "output redirection",
+		input:    "echo hello > /tmp/out",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "echo")
 		},
 	},
 	{
-		name: "input redirection",
-		input: "cat < /tmp/in",
+		name:     "input redirection",
+		input:    "cat < /tmp/in",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "cat")
 		},
 	},
 	{
-		name: "stderr redirection",
-		input: "cmd 2>/dev/null",
+		name:     "stderr redirection",
+		input:    "cmd 2>/dev/null",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "cmd")
@@ -578,34 +578,34 @@ var extractionTests = []extractionTestCase{
 
 	// --- Edge cases ---
 	{
-		name: "empty input",
-		input: "",
+		name:     "empty input",
+		input:    "",
 		wantCmds: 0,
 	},
 	{
-		name: "whitespace only",
-		input: "   \t  \n  ",
+		name:     "whitespace only",
+		input:    "   \t  \n  ",
 		wantCmds: 0,
 	},
 	{
-		name: "single char command",
-		input: "a",
+		name:     "single char command",
+		input:    "a",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "a")
 		},
 	},
 	{
-		name: "command with equals in arg",
-		input: "echo key=value",
+		name:     "command with equals in arg",
+		input:    "echo key=value",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "echo")
 		},
 	},
 	{
-		name: "kill with signal",
-		input: "kill -9 1234",
+		name:     "kill with signal",
+		input:    "kill -9 1234",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "kill")
@@ -614,8 +614,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "dd command",
-		input: "dd if=/dev/zero of=/dev/sda bs=4M",
+		name:     "dd command",
+		input:    "dd if=/dev/zero of=/dev/sda bs=4M",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "dd")
@@ -624,8 +624,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Complex real-world patterns ---
 	{
-		name: "multi-stage pipeline with sort",
-		input: "cat /var/log/syslog | grep error | sort | uniq -c | sort -rn | head -20",
+		name:     "multi-stage pipeline with sort",
+		input:    "cat /var/log/syslog | grep error | sort | uniq -c | sort -rn | head -20",
 		wantCmds: 6,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			// First command name is reliably extracted; later commands may have
@@ -637,8 +637,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "cd and rm pattern",
-		input: "cd /tmp && rm -rf *",
+		name:     "cd and rm pattern",
+		input:    "cd /tmp && rm -rf *",
 		wantCmds: 2,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			assertEqual(t, "cmd[0].Name", cmds[0].Name, "cd")
@@ -646,8 +646,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "test or mkdir pattern",
-		input: "test -d /backup || mkdir -p /backup",
+		name:     "test or mkdir pattern",
+		input:    "test -d /backup || mkdir -p /backup",
 		wantCmds: 2,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			assertEqual(t, "cmd[0].Name", cmds[0].Name, "test")
@@ -658,8 +658,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Ansible/infrastructure ---
 	{
-		name: "ansible shell module",
-		input: "ansible all -m shell -a 'rm -rf /'",
+		name:     "ansible shell module",
+		input:    "ansible all -m shell -a 'rm -rf /'",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "ansible")
@@ -668,8 +668,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "pulumi destroy",
-		input: "pulumi destroy --yes",
+		name:     "pulumi destroy",
+		input:    "pulumi destroy --yes",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "pulumi")
@@ -680,8 +680,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Newline-separated commands ---
 	{
-		name: "newline separated commands",
-		input: "echo a\necho b",
+		name:     "newline separated commands",
+		input:    "echo a\necho b",
 		wantCmds: 2,
 		checkAll: func(t *testing.T, cmds []ExtractedCommand) {
 			assertEqual(t, "cmd[0].Name", cmds[0].Name, "echo")
@@ -691,8 +691,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Multiple flag patterns ---
 	{
-		name: "tar with combined flags",
-		input: "tar -czf archive.tar.gz /data",
+		name:     "tar with combined flags",
+		input:    "tar -czf archive.tar.gz /data",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "tar")
@@ -702,8 +702,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "curl with multiple flags",
-		input: "curl -sSL -o /tmp/out https://example.com",
+		name:     "curl with multiple flags",
+		input:    "curl -sSL -o /tmp/out https://example.com",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "curl")
@@ -714,16 +714,16 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "find with exec",
-		input: "find /tmp -name '*.log' -delete",
+		name:     "find with exec",
+		input:    "find /tmp -name '*.log' -delete",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "find")
 		},
 	},
 	{
-		name: "docker rm with subshell",
-		input: "docker rm $(docker ps -aq)",
+		name:     "docker rm with subshell",
+		input:    "docker rm $(docker ps -aq)",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "docker")
@@ -733,8 +733,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Git operations ---
 	{
-		name: "git delete remote branch",
-		input: "git push origin :refs/heads/feature",
+		name:     "git delete remote branch",
+		input:    "git push origin :refs/heads/feature",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "git")
@@ -743,8 +743,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "git clean",
-		input: "git clean -fdx",
+		name:     "git clean",
+		input:    "git clean -fdx",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "git")
@@ -756,8 +756,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Cloud operations ---
 	{
-		name: "az group delete",
-		input: "az group delete --name my-rg --yes",
+		name:     "az group delete",
+		input:    "az group delete --name my-rg --yes",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "az")
@@ -770,8 +770,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Kubernetes ---
 	{
-		name: "kubectl delete pods all namespaces",
-		input: "kubectl delete pods --all -n kube-system",
+		name:     "kubectl delete pods all namespaces",
+		input:    "kubectl delete pods --all -n kube-system",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "kubectl")
@@ -782,8 +782,8 @@ var extractionTests = []extractionTestCase{
 
 	// --- Additional coverage for 80+ ---
 	{
-		name: "command with numeric args",
-		input: "sleep 60",
+		name:     "command with numeric args",
+		input:    "sleep 60",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "sleep")
@@ -791,8 +791,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "wget with url arg",
-		input: "wget -q https://example.com/file.tar.gz",
+		name:     "wget with url arg",
+		input:    "wget -q https://example.com/file.tar.gz",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "wget")
@@ -800,16 +800,16 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "ssh remote command",
-		input: "ssh user@host 'rm -rf /tmp/*'",
+		name:     "ssh remote command",
+		input:    "ssh user@host 'rm -rf /tmp/*'",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "ssh")
 		},
 	},
 	{
-		name: "scp copy",
-		input: "scp -r /local/path user@host:/remote/path",
+		name:     "scp copy",
+		input:    "scp -r /local/path user@host:/remote/path",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "scp")
@@ -817,8 +817,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "grep with regex",
-		input: "grep -rn 'pattern' /path/to/search",
+		name:     "grep with regex",
+		input:    "grep -rn 'pattern' /path/to/search",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "grep")
@@ -827,8 +827,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "mv rename",
-		input: "mv old.txt new.txt",
+		name:     "mv rename",
+		input:    "mv old.txt new.txt",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "mv")
@@ -837,8 +837,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "mkdir with parent flag",
-		input: "mkdir -p /deep/nested/dir",
+		name:     "mkdir with parent flag",
+		input:    "mkdir -p /deep/nested/dir",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "mkdir")
@@ -847,8 +847,8 @@ var extractionTests = []extractionTestCase{
 		},
 	},
 	{
-		name: "pkill by name",
-		input: "pkill -f java",
+		name:     "pkill by name",
+		input:    "pkill -f java",
 		wantCmds: 1,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "pkill")

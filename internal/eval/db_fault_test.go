@@ -48,7 +48,7 @@ func TestDbFaultDegenerateCommands(t *testing.T) {
 							}
 						}()
 						if dp.Match != nil {
-							dp.Match(cmd)
+							matchRuleCommand(dp, cmd)
 						}
 					}()
 				}
@@ -88,7 +88,7 @@ func TestDbFaultPathologicalRegexInput(t *testing.T) {
 						t.Errorf("panicked on pathological input %d: %v", i, r)
 					}
 				}()
-				dropTableRule.Match(cmd)
+				matchRuleCommand(dropTableRule, cmd)
 			}()
 		})
 	}
@@ -126,7 +126,7 @@ func TestDbFaultSQLInjectionStrings(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			got := dropTableRule.Match(tt.cmd)
+			got := matchRuleCommand(dropTableRule, tt.cmd)
 			if got != tt.wantMatch {
 				t.Errorf("match = %v, want %v for cmd: %q", got, tt.wantMatch, tt.cmd)
 			}

@@ -5,8 +5,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-
-	"github.com/dcosson/destructive-command-guard-go/guard"
 )
 
 func TestBashParserSimpleCommand(t *testing.T) {
@@ -35,7 +33,7 @@ func TestBashParserCompoundCommand(t *testing.T) {
 	if tree == nil {
 		t.Fatalf("expected non-nil tree")
 	}
-	if hasWarningCode(warnings, guard.WarnInputTruncated) {
+	if hasWarningCode(warnings, WarnInputTruncated) {
 		t.Fatalf("unexpected input size warning: %v", warnings)
 	}
 	if tree.RootNode().ChildCount() == 0 {
@@ -52,10 +50,10 @@ func TestBashParserMalformedCommand(t *testing.T) {
 	if tree == nil {
 		t.Fatalf("expected parser recovery tree for malformed input")
 	}
-	if hasWarningCode(warnings, guard.WarnInputTruncated) {
+	if hasWarningCode(warnings, WarnInputTruncated) {
 		t.Fatalf("unexpected size warning for malformed input: %v", warnings)
 	}
-	if hasWarningCode(warnings, guard.WarnExtractorPanic) {
+	if hasWarningCode(warnings, WarnExtractorPanic) {
 		t.Fatalf("unexpected panic warning for malformed input: %v", warnings)
 	}
 }
@@ -70,7 +68,7 @@ func TestBashParserMaxInputBoundary(t *testing.T) {
 	if tree == nil {
 		t.Fatalf("expected parse tree at max boundary")
 	}
-	if hasWarningCode(warnings, guard.WarnInputTruncated) {
+	if hasWarningCode(warnings, WarnInputTruncated) {
 		t.Fatalf("did not expect size warning at boundary")
 	}
 
@@ -79,7 +77,7 @@ func TestBashParserMaxInputBoundary(t *testing.T) {
 	if tree != nil {
 		t.Fatalf("expected nil tree above max boundary")
 	}
-	if !hasWarningCode(warnings, guard.WarnInputTruncated) {
+	if !hasWarningCode(warnings, WarnInputTruncated) {
 		t.Fatalf("expected size warning above boundary, got %v", warnings)
 	}
 }
@@ -113,7 +111,7 @@ func TestBashParserConcurrentStress(t *testing.T) {
 					errCh <- "nil tree for valid input"
 					return
 				}
-				if hasWarningCode(warnings, guard.WarnExtractorPanic) {
+				if hasWarningCode(warnings, WarnExtractorPanic) {
 					errCh <- "panic warning observed"
 					return
 				}
@@ -129,7 +127,7 @@ func TestBashParserConcurrentStress(t *testing.T) {
 	}
 }
 
-func hasWarningCode(warnings []guard.Warning, code guard.WarningCode) bool {
+func hasWarningCode(warnings []Warning, code WarningCode) bool {
 	for _, warning := range warnings {
 		if warning.Code == code {
 			return true

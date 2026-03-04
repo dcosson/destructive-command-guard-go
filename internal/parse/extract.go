@@ -1,10 +1,8 @@
 package parse
 
 import (
-	"strings"
-
-	"github.com/dcosson/destructive-command-guard-go/guard"
 	ts "github.com/dcosson/treesitter-go"
+	"strings"
 )
 
 // CommandExtractor walks a tree-sitter bash AST to discover command structure
@@ -50,8 +48,8 @@ func (ce *CommandExtractor) Extract(tree *Tree, source string) (result ParseResu
 
 	defer func() {
 		if r := recover(); r != nil {
-			result.Warnings = append(result.Warnings, guard.Warning{
-				Code:    guard.WarnExtractorPanic,
+			result.Warnings = append(result.Warnings, Warning{
+				Code:    WarnExtractorPanic,
 				Message: "extractor panic recovered",
 			})
 		}
@@ -163,7 +161,7 @@ func isInterTokenWhitespace(b byte) bool {
 }
 
 // extractCommandFromChildren extracts command data from AST child node texts.
-func (ce *CommandExtractor) extractCommandFromChildren(node ts.Node, cmdText string, inPipeline, negated, mergeMode, isDeclaration bool) ([]ExtractedCommand, []guard.Warning) {
+func (ce *CommandExtractor) extractCommandFromChildren(node ts.Node, cmdText string, inPipeline, negated, mergeMode, isDeclaration bool) ([]ExtractedCommand, []Warning) {
 	base := ExtractedCommand{
 		Flags:      map[string]string{},
 		InlineEnv:  map[string]string{},
@@ -173,7 +171,7 @@ func (ce *CommandExtractor) extractCommandFromChildren(node ts.Node, cmdText str
 		StartByte:  node.StartByte(),
 		EndByte:    node.EndByte(),
 	}
-	var warnings []guard.Warning
+	var warnings []Warning
 
 	childTexts := reconstructChildTexts(cmdText, node)
 	var fallback []string
@@ -233,8 +231,8 @@ func (ce *CommandExtractor) extractCommandFromChildren(node ts.Node, cmdText str
 			exported := isDeclaration && declarationName == "export"
 			if containsCommandSubstitution(v) {
 				ce.defineIndeterminate(k, exported, mergeMode)
-				warnings = append(warnings, guard.Warning{
-					Code:    guard.WarnCommandSubstitution,
+				warnings = append(warnings, Warning{
+					Code:    WarnCommandSubstitution,
 					Message: "variable assigned via command substitution",
 				})
 			} else {
@@ -259,8 +257,8 @@ func (ce *CommandExtractor) extractCommandFromChildren(node ts.Node, cmdText str
 			}
 			exps, capped := ce.dataflow.ResolveString(text)
 			if capped {
-				warnings = append(warnings, guard.Warning{
-					Code:    guard.WarnExpansionCapped,
+				warnings = append(warnings, Warning{
+					Code:    WarnExpansionCapped,
 					Message: "dataflow expansion capped at 16",
 				})
 			}
@@ -292,8 +290,8 @@ func (ce *CommandExtractor) extractCommandFromChildren(node ts.Node, cmdText str
 		for k, v := range variants[0].InlineEnv {
 			if containsCommandSubstitution(v) {
 				ce.defineIndeterminate(k, false, mergeMode)
-				warnings = append(warnings, guard.Warning{
-					Code:    guard.WarnCommandSubstitution,
+				warnings = append(warnings, Warning{
+					Code:    WarnCommandSubstitution,
 					Message: "variable assigned via command substitution",
 				})
 			} else {
@@ -312,8 +310,8 @@ func (ce *CommandExtractor) extractCommandFromChildren(node ts.Node, cmdText str
 			}
 			if containsCommandSubstitution(v) {
 				ce.defineIndeterminate(k, true, mergeMode)
-				warnings = append(warnings, guard.Warning{
-					Code:    guard.WarnCommandSubstitution,
+				warnings = append(warnings, Warning{
+					Code:    WarnCommandSubstitution,
 					Message: "variable assigned via command substitution",
 				})
 			} else {
@@ -337,8 +335,8 @@ func (ce *CommandExtractor) handleBareAssignment(text string, mergeMode bool, re
 	}
 	if containsCommandSubstitution(v) {
 		ce.defineIndeterminate(k, false, mergeMode)
-		result.Warnings = append(result.Warnings, guard.Warning{
-			Code:    guard.WarnCommandSubstitution,
+		result.Warnings = append(result.Warnings, Warning{
+			Code:    WarnCommandSubstitution,
 			Message: "variable assigned via command substitution",
 		})
 	} else {

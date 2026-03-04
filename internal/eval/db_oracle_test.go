@@ -155,7 +155,7 @@ func TestDbComparisonCrossDatabaseConsistency(t *testing.T) {
 					t.Fatalf("pack %s not found", packID)
 				}
 				for _, dp := range pack.Destructive {
-					if dp.Match != nil && dp.Match(cmd) {
+					if dp.Match != nil && matchRuleCommand(dp, cmd) {
 						severities = append(severities, dp.Severity)
 						confidences = append(confidences, dp.Confidence)
 						t.Logf("%s: severity=%d confidence=%d rule=%s",

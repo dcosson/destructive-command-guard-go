@@ -1,11 +1,13 @@
 package eval
 
 import (
+	"context"
 	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
+	"github.com/dcosson/destructive-command-guard-go/internal/parse"
 )
 
 // Config controls a single pipeline evaluation run.
@@ -21,10 +23,14 @@ type Config struct {
 // Pipeline evaluates commands against registered rules.
 type Pipeline struct {
 	registry *packs.Registry
+	parser   *parse.BashParser
 }
 
 func NewPipeline(registry *packs.Registry) *Pipeline {
-	return &Pipeline{registry: registry}
+	return &Pipeline{
+		registry: registry,
+		parser:   parse.NewBashParser(),
+	}
 }
 
 func (p *Pipeline) Run(command string, cfg Config) Result {
@@ -80,29 +86,50 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 	}
 
 	isProd := isProduction(command, cfg.CallerEnv)
-	for _, pack := range activePacks {
-		for _, rule := range pack.Destructive {
-			if rule.Match == nil || !rule.Match(cmd) {
+	parsed := p.parser.ParseAndExtract(context.Background(), command, 0)
+	result.Warnings = append(result.Warnings, convertParseWarnings(parsed.Warnings)...)
+	if len(parsed.Commands) == 0 {
+		result.Decision = DecisionAllow
+		return result
+	}
+
+	for _, extracted := range parsed.Commands {
+		for _, pack := range activePacks {
+			// Safe patterns short-circuit destructive evaluation within a pack.
+			safeMatched := false
+			for _, safe := range pack.Safe {
+				if safe.Match != nil && safe.Match.Match(toPackCommand(extracted)) {
+					safeMatched = true
+					break
+				}
+			}
+			if safeMatched {
 				continue
 			}
-			sev := rule.Severity
-			envEscalated := false
-			if rule.EnvSensitive && isProd && sev < int(SeverityCritical) {
-				sev = sev + 1
-				if sev > int(SeverityCritical) {
-					sev = int(SeverityCritical)
+
+			for _, rule := range pack.Destructive {
+				if rule.Match == nil || !rule.Match.Match(toPackCommand(extracted)) {
+					continue
 				}
-				envEscalated = true
+				sev := rule.Severity
+				envEscalated := false
+				if rule.EnvSensitive && (isProd || isCommandProduction(extracted)) && sev < int(SeverityCritical) {
+					sev = sev + 1
+					if sev > int(SeverityCritical) {
+						sev = int(SeverityCritical)
+					}
+					envEscalated = true
+				}
+				result.Matches = append(result.Matches, Match{
+					Pack:         pack.ID,
+					Rule:         rule.ID,
+					Severity:     Severity(sev),
+					Confidence:   Confidence(rule.Confidence),
+					Reason:       rule.Reason,
+					Remediation:  rule.Remediation,
+					EnvEscalated: envEscalated,
+				})
 			}
-			result.Matches = append(result.Matches, Match{
-				Pack:         pack.ID,
-				Rule:         rule.ID,
-				Severity:     Severity(sev),
-				Confidence:   Confidence(rule.Confidence),
-				Reason:       rule.Reason,
-				Remediation:  rule.Remediation,
-				EnvEscalated: envEscalated,
-			})
 		}
 	}
 
@@ -200,4 +227,45 @@ func isProduction(command string, callerEnv []string) bool {
 		}
 	}
 	return false
+}
+
+func isCommandProduction(cmd parse.ExtractedCommand) bool {
+	for key, value := range cmd.InlineEnv {
+		k := strings.ToUpper(key)
+		if k != "RAILS_ENV" && k != "NODE_ENV" && k != "ENVIRONMENT" && k != "APP_ENV" {
+			continue
+		}
+		if strings.EqualFold(value, "production") || strings.EqualFold(value, "prod") {
+			return true
+		}
+	}
+	return false
+}
+
+func convertParseWarnings(in []parse.Warning) []Warning {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]Warning, 0, len(in))
+	for _, w := range in {
+		out = append(out, Warning{
+			Code:    WarningCode(w.Code),
+			Message: w.Message,
+		})
+	}
+	return out
+}
+
+func toPackCommand(cmd parse.ExtractedCommand) packs.Command {
+	flags := make(map[string]string, len(cmd.Flags))
+	for k, v := range cmd.Flags {
+		flags[k] = v
+	}
+	return packs.Command{
+		Name:    cmd.Name,
+		Args:    append([]string{}, cmd.Args...),
+		RawArgs: append([]string{}, cmd.RawArgs...),
+		Flags:   flags,
+		RawText: cmd.RawText,
+	}
 }

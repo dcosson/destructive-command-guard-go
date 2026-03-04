@@ -3,8 +3,6 @@ package parse
 import (
 	"context"
 	"testing"
-
-	"github.com/dcosson/destructive-command-guard-go/guard"
 )
 
 func TestInlineDetection(t *testing.T) {
@@ -130,7 +128,7 @@ func TestInlineDepthLimit(t *testing.T) {
 
 	found := false
 	for _, w := range warns {
-		if w.Code == guard.WarnInlineDepthExceeded {
+		if w.Code == WarnInlineDepthExceeded {
 			found = true
 			break
 		}

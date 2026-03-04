@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/dcosson/destructive-command-guard-go/guard"
 )
 
 // F1: Context Cancellation
@@ -73,7 +71,7 @@ func TestParseLongInputBoundary(t *testing.T) {
 	if tree == nil {
 		t.Error("expected non-nil tree for input under MaxInputSize")
 	}
-	if hasWarning(warnings, guard.WarnInputTruncated) {
+	if hasWarning(warnings, WarnInputTruncated) {
 		t.Error("did not expect WarnInputTruncated for input under MaxInputSize")
 	}
 
@@ -83,7 +81,7 @@ func TestParseLongInputBoundary(t *testing.T) {
 	if tree != nil {
 		t.Error("expected nil tree for input over MaxInputSize")
 	}
-	if !hasWarning(warnings, guard.WarnInputTruncated) {
+	if !hasWarning(warnings, WarnInputTruncated) {
 		t.Error("expected WarnInputTruncated for input over MaxInputSize")
 	}
 }

@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 	"testing/quick"
-
-	"github.com/dcosson/destructive-command-guard-go/guard"
 )
 
 // P1: Parse Never Panics
@@ -134,7 +132,7 @@ func TestPropertyMaxInputSizeBoundary(t *testing.T) {
 	if tree == nil {
 		t.Error("expected non-nil tree at MaxInputSize boundary")
 	}
-	if hasWarning(warnings, guard.WarnInputTruncated) {
+	if hasWarning(warnings, WarnInputTruncated) {
 		t.Error("did not expect WarnInputTruncated at boundary")
 	}
 
@@ -144,7 +142,7 @@ func TestPropertyMaxInputSizeBoundary(t *testing.T) {
 	if tree != nil {
 		t.Error("expected nil tree above MaxInputSize")
 	}
-	if !hasWarning(warnings, guard.WarnInputTruncated) {
+	if !hasWarning(warnings, WarnInputTruncated) {
 		t.Error("expected WarnInputTruncated above boundary")
 	}
 }

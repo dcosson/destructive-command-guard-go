@@ -3,12 +3,10 @@ package parse
 import (
 	"context"
 	"fmt"
-	"sync"
-
-	"github.com/dcosson/destructive-command-guard-go/guard"
 	ts "github.com/dcosson/treesitter-go"
 	"github.com/dcosson/treesitter-go/languages/bash"
 	tsp "github.com/dcosson/treesitter-go/parser"
+	"sync"
 )
 
 const MaxInputSize = 128 * 1024
@@ -28,10 +26,10 @@ func NewBashParser() *BashParser {
 	return bp
 }
 
-func (bp *BashParser) Parse(ctx context.Context, input string) (tree *Tree, warnings []guard.Warning) {
+func (bp *BashParser) Parse(ctx context.Context, input string) (tree *Tree, warnings []Warning) {
 	if len(input) > MaxInputSize {
-		return nil, []guard.Warning{{
-			Code:    guard.WarnInputTruncated,
+		return nil, []Warning{{
+			Code:    WarnInputTruncated,
 			Message: fmt.Sprintf("input size %d exceeds max size %d", len(input), MaxInputSize),
 		}}
 	}
@@ -43,8 +41,8 @@ func (bp *BashParser) Parse(ctx context.Context, input string) (tree *Tree, warn
 			// Do not return panicked parser to the pool; state may be corrupt.
 			shouldReturn = false
 			tree = nil
-			warnings = append(warnings, guard.Warning{
-				Code:    guard.WarnExtractorPanic,
+			warnings = append(warnings, Warning{
+				Code:    WarnExtractorPanic,
 				Message: fmt.Sprintf("parser panic recovered: %v", r),
 			})
 		}
@@ -59,8 +57,8 @@ func (bp *BashParser) Parse(ctx context.Context, input string) (tree *Tree, warn
 		return nil, warnings
 	}
 	if tree.HasParseError() {
-		warnings = append(warnings, guard.Warning{
-			Code:    guard.WarnPartialParse,
+		warnings = append(warnings, Warning{
+			Code:    WarnPartialParse,
 			Message: "input contains parse recovery errors",
 		})
 	}
@@ -74,7 +72,7 @@ func (bp *BashParser) ParseAndExtract(ctx context.Context, input string, depth i
 		return ParseResult{
 			Commands:     nil,
 			Warnings:     warnings,
-			HasError:     hasWarning(warnings, guard.WarnPartialParse),
+			HasError:     hasWarning(warnings, WarnPartialParse),
 			ExportedVars: map[string][]string{},
 		}
 	}
@@ -83,7 +81,7 @@ func (bp *BashParser) ParseAndExtract(ctx context.Context, input string, depth i
 	result := extractor.Extract(tree, input)
 	inline := NewInlineDetector(bp)
 	var nested []ExtractedCommand
-	var inlineWarnings []guard.Warning
+	var inlineWarnings []Warning
 	for _, cmd := range result.Commands {
 		cmds, warns := inline.Detect(cmd, depth)
 		nested = append(nested, cmds...)
@@ -95,11 +93,11 @@ func (bp *BashParser) ParseAndExtract(ctx context.Context, input string, depth i
 	result.Commands = append(result.Commands, nested...)
 	result.Warnings = append(result.Warnings, inlineWarnings...)
 	result.Warnings = append(warnings, result.Warnings...)
-	result.HasError = hasWarning(result.Warnings, guard.WarnPartialParse)
+	result.HasError = hasWarning(result.Warnings, WarnPartialParse)
 	return result
 }
 
-func hasWarning(warnings []guard.Warning, code guard.WarningCode) bool {
+func hasWarning(warnings []Warning, code WarningCode) bool {
 	for _, warning := range warnings {
 		if warning.Code == code {
 			return true

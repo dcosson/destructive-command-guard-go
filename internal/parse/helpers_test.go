@@ -28,12 +28,12 @@ var commandFragments = struct {
 		"psql", "mysql", "redis-cli", "mongo", "curl", "wget",
 		"ansible", "pulumi", "aws", "gcloud", "az",
 	},
-	flags:     []string{"-f", "-r", "-v", "-n", "-i", "-a", "-l", "-d", "-m", "-c", "-e"},
-	longFlags: []string{"--force", "--recursive", "--verbose", "--dry-run", "--yes", "--all", "--delete", "--no-preserve-root", "--auto-approve"},
-	args:      []string{"/", "/tmp", "/var", ".", "..", "~", "origin", "main", "production", "staging", "*.log", "foo", "bar"},
-	operators: []string{";", "&&", "||", "|"},
-	prefixes:  []string{"/usr/bin/", "/usr/local/bin/", "/bin/", "/sbin/", "./", ""},
-	envPairs:  []string{"RAILS_ENV=production", "NODE_ENV=production", "PGHOST=db.internal", "AWS_PROFILE=prod"},
+	flags:      []string{"-f", "-r", "-v", "-n", "-i", "-a", "-l", "-d", "-m", "-c", "-e"},
+	longFlags:  []string{"--force", "--recursive", "--verbose", "--dry-run", "--yes", "--all", "--delete", "--no-preserve-root", "--auto-approve"},
+	args:       []string{"/", "/tmp", "/var", ".", "..", "~", "origin", "main", "production", "staging", "*.log", "foo", "bar"},
+	operators:  []string{";", "&&", "||", "|"},
+	prefixes:   []string{"/usr/bin/", "/usr/local/bin/", "/bin/", "/sbin/", "./", ""},
+	envPairs:   []string{"RAILS_ENV=production", "NODE_ENV=production", "PGHOST=db.internal", "AWS_PROFILE=prod"},
 	quoteChars: []string{`"`, `'`, ""},
 }
 

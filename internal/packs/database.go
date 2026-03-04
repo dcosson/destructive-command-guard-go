@@ -38,14 +38,14 @@ func postgresqlPack() Pack {
 		},
 		Destructive: []Rule{
 			{
-				ID:         "psql-drop-database",
-				Severity:   3, // High
-				Confidence: 2, // High
-				Reason:     "DROP DATABASE permanently destroys an entire database and all its data",
-				Remediation: "Use pg_dump to create a backup first. Verify the database name.",
+				ID:           "psql-drop-database",
+				Severity:     3, // High
+				Confidence:   2, // High
+				Reason:       "DROP DATABASE permanently destroys an entire database and all its data",
+				Remediation:  "Use pg_dump to create a backup first. Verify the database name.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
-					return hasAll(cmd, "psql") && reDropDatabase.MatchString(cmd)
+				Match: func(cmd Command) bool {
+					return hasAll(cmd, "psql") && reDropDatabase.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -55,7 +55,7 @@ func postgresqlPack() Pack {
 				Reason:       "dropdb permanently destroys an entire PostgreSQL database",
 				Remediation:  "Use pg_dump to create a backup first. Verify the database name.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "dropdb")
 				},
 			},
@@ -66,8 +66,8 @@ func postgresqlPack() Pack {
 				Reason:       "DROP TABLE permanently destroys a table and all its data",
 				Remediation:  "Use pg_dump -t to backup the table first. Consider DROP TABLE IF EXISTS.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
-					return hasAll(cmd, "psql") && reDropTable.MatchString(cmd)
+				Match: func(cmd Command) bool {
+					return hasAll(cmd, "psql") && reDropTable.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -77,8 +77,8 @@ func postgresqlPack() Pack {
 				Reason:       "TRUNCATE removes all rows from a table instantly without logging individual row deletions",
 				Remediation:  "Create a backup first. Consider DELETE with WHERE for selective removal.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
-					return hasAll(cmd, "psql") && reTruncate.MatchString(cmd)
+				Match: func(cmd Command) bool {
+					return hasAll(cmd, "psql") && reTruncate.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -88,8 +88,8 @@ func postgresqlPack() Pack {
 				Reason:       "DELETE FROM without WHERE clause deletes all rows in the table",
 				Remediation:  "Add a WHERE clause to target specific rows, or use TRUNCATE if you intend to remove all rows.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
-					return hasAll(cmd, "psql") && reDeleteFrom.MatchString(cmd) && !reWhere.MatchString(cmd)
+				Match: func(cmd Command) bool {
+					return hasAll(cmd, "psql") && reDeleteFrom.MatchString(cmd.RawText) && !reWhere.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -98,7 +98,7 @@ func postgresqlPack() Pack {
 				Confidence:  2,
 				Reason:      "pg_dump --clean generates DROP commands before CREATE — restoring this dump will destroy existing objects",
 				Remediation: "Use pg_dump without --clean for a non-destructive backup.",
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "pg_dump") && hasAny(cmd, "--clean", " -c ")
 				},
 			},
@@ -109,7 +109,7 @@ func postgresqlPack() Pack {
 				Reason:       "pg_restore --clean drops existing database objects before recreating them",
 				Remediation:  "Use pg_restore without --clean to restore without dropping existing data.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "pg_restore") && hasAny(cmd, "--clean", " -c ")
 				},
 			},
@@ -119,8 +119,8 @@ func postgresqlPack() Pack {
 				Confidence:  1,
 				Reason:      "ALTER TABLE ... DROP permanently removes columns, constraints, or indexes",
 				Remediation: "Create a backup first. Verify the column/constraint name.",
-				Match: func(cmd string) bool {
-					return hasAll(cmd, "psql") && reAlterTable.MatchString(cmd) && reDrop.MatchString(cmd)
+				Match: func(cmd Command) bool {
+					return hasAll(cmd, "psql") && reAlterTable.MatchString(cmd.RawText) && reDrop.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -130,8 +130,8 @@ func postgresqlPack() Pack {
 				Reason:       "UPDATE without WHERE clause modifies all rows in the table",
 				Remediation:  "Add a WHERE clause to target specific rows.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
-					return hasAll(cmd, "psql") && reUpdate.MatchString(cmd) && !reWhere.MatchString(cmd)
+				Match: func(cmd Command) bool {
+					return hasAll(cmd, "psql") && reUpdate.MatchString(cmd.RawText) && !reWhere.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -141,8 +141,8 @@ func postgresqlPack() Pack {
 				Reason:       "DROP SCHEMA destroys all objects in the schema. With CASCADE, this can destroy an entire application's database objects.",
 				Remediation:  "Use pg_dump to backup the schema first. Verify the schema name.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
-					return hasAll(cmd, "psql") && reDropSchema.MatchString(cmd)
+				Match: func(cmd Command) bool {
+					return hasAll(cmd, "psql") && reDropSchema.MatchString(cmd.RawText)
 				},
 			},
 		},
@@ -169,9 +169,9 @@ func mysqlPack() Pack {
 				Reason:       "DROP DATABASE permanently destroys an entire MySQL database and all its tables",
 				Remediation:  "Use mysqldump to create a backup first. Verify the database name.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "mysql") && !hasAny(cmd, "mysqldump", "mysqladmin") &&
-						reDropDatabase.MatchString(cmd)
+						reDropDatabase.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -181,7 +181,7 @@ func mysqlPack() Pack {
 				Reason:       "mysqladmin drop permanently destroys an entire MySQL database",
 				Remediation:  "Use mysqldump to create a backup first. Verify the database name.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "mysqladmin", "drop")
 				},
 			},
@@ -192,9 +192,9 @@ func mysqlPack() Pack {
 				Reason:       "DROP TABLE permanently destroys a table and all its data",
 				Remediation:  "Use mysqldump to backup the table first.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "mysql") && !hasAny(cmd, "mysqldump", "mysqladmin") &&
-						reDropTable.MatchString(cmd)
+						reDropTable.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -204,9 +204,9 @@ func mysqlPack() Pack {
 				Reason:       "TRUNCATE removes all rows from a table instantly",
 				Remediation:  "Create a backup first. Consider DELETE with WHERE for selective removal.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "mysql") && !hasAny(cmd, "mysqldump", "mysqladmin") &&
-						reTruncate.MatchString(cmd)
+						reTruncate.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -216,9 +216,9 @@ func mysqlPack() Pack {
 				Reason:       "DELETE FROM without WHERE clause deletes all rows in the table",
 				Remediation:  "Add a WHERE clause to target specific rows.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "mysql") && !hasAny(cmd, "mysqldump", "mysqladmin") &&
-						reDeleteFrom.MatchString(cmd) && !reWhere.MatchString(cmd)
+						reDeleteFrom.MatchString(cmd.RawText) && !reWhere.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -227,9 +227,9 @@ func mysqlPack() Pack {
 				Confidence:  1,
 				Reason:      "ALTER TABLE ... DROP permanently removes columns, constraints, or indexes",
 				Remediation: "Create a backup first. Verify the column/constraint name.",
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "mysql") && !hasAny(cmd, "mysqldump", "mysqladmin") &&
-						reAlterTable.MatchString(cmd) && reDrop.MatchString(cmd)
+						reAlterTable.MatchString(cmd.RawText) && reDrop.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -238,7 +238,7 @@ func mysqlPack() Pack {
 				Confidence:  2,
 				Reason:      "mysqladmin flush operations can disrupt active connections and require careful timing",
 				Remediation: "Schedule flush operations during maintenance windows.",
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "mysqladmin") &&
 						hasAny(cmd, "flush-hosts", "flush-logs", "flush-privileges", "flush-tables")
 				},
@@ -250,9 +250,9 @@ func mysqlPack() Pack {
 				Reason:       "UPDATE without WHERE clause modifies all rows in the table",
 				Remediation:  "Add a WHERE clause to target specific rows.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "mysql") && !hasAny(cmd, "mysqldump", "mysqladmin") &&
-						reUpdate.MatchString(cmd) && !reWhere.MatchString(cmd)
+						reUpdate.MatchString(cmd.RawText) && !reWhere.MatchString(cmd.RawText)
 				},
 			},
 		},
@@ -276,8 +276,8 @@ func sqlitePack() Pack {
 				Confidence:  2,
 				Reason:      "DROP TABLE permanently destroys a table and all its data in the SQLite database",
 				Remediation: "Copy the database file as a backup first. Use .dump to export data.",
-				Match: func(cmd string) bool {
-					return hasAll(cmd, "sqlite3") && reDropTable.MatchString(cmd)
+				Match: func(cmd Command) bool {
+					return hasAll(cmd, "sqlite3") && reDropTable.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -286,8 +286,8 @@ func sqlitePack() Pack {
 				Confidence:  1,
 				Reason:      "sqlite3 .drop command drops triggers or views",
 				Remediation: "Verify the target. Use .dump to backup first.",
-				Match: func(cmd string) bool {
-					return hasAll(cmd, "sqlite3") && reMongoDotDrop.MatchString(cmd)
+				Match: func(cmd Command) bool {
+					return hasAll(cmd, "sqlite3") && reMongoDotDrop.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -296,8 +296,8 @@ func sqlitePack() Pack {
 				Confidence:  1,
 				Reason:      "DELETE FROM without WHERE clause deletes all rows in the table",
 				Remediation: "Add a WHERE clause to target specific rows.",
-				Match: func(cmd string) bool {
-					return hasAll(cmd, "sqlite3") && reDeleteFrom.MatchString(cmd) && !reWhere.MatchString(cmd)
+				Match: func(cmd Command) bool {
+					return hasAll(cmd, "sqlite3") && reDeleteFrom.MatchString(cmd.RawText) && !reWhere.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -306,8 +306,8 @@ func sqlitePack() Pack {
 				Confidence:  0, // Low — TRUNCATE is not valid SQLite SQL
 				Reason:      "TRUNCATE is not valid SQLite SQL but indicates intent to delete all data",
 				Remediation: "SQLite uses DELETE FROM (without WHERE) instead of TRUNCATE.",
-				Match: func(cmd string) bool {
-					return hasAll(cmd, "sqlite3") && reTruncate.MatchString(cmd)
+				Match: func(cmd Command) bool {
+					return hasAll(cmd, "sqlite3") && reTruncate.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -316,8 +316,8 @@ func sqlitePack() Pack {
 				Confidence:  1,
 				Reason:      "UPDATE without WHERE clause modifies all rows in the table",
 				Remediation: "Add a WHERE clause to target specific rows.",
-				Match: func(cmd string) bool {
-					return hasAll(cmd, "sqlite3") && reUpdate.MatchString(cmd) && !reWhere.MatchString(cmd)
+				Match: func(cmd Command) bool {
+					return hasAll(cmd, "sqlite3") && reUpdate.MatchString(cmd.RawText) && !reWhere.MatchString(cmd.RawText)
 				},
 			},
 		},
@@ -343,10 +343,10 @@ func mongodbPack() Pack {
 				Reason:       "db.dropDatabase() permanently destroys an entire MongoDB database",
 				Remediation:  "Use mongodump to create a backup first. Verify the database name.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAny(cmd, "mongosh", "mongo") &&
 						!hasAny(cmd, "mongodump", "mongorestore") &&
-						reMongoDropDB.MatchString(cmd)
+						reMongoDropDB.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -356,11 +356,11 @@ func mongodbPack() Pack {
 				Reason:       "collection.drop() permanently destroys a MongoDB collection and all its documents",
 				Remediation:  "Use mongodump --collection to backup the collection first.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAny(cmd, "mongosh", "mongo") &&
 						!hasAny(cmd, "mongodump", "mongorestore") &&
-						reMongoCollDrop.MatchString(cmd) &&
-						!reMongoDropDB.MatchString(cmd)
+						reMongoCollDrop.MatchString(cmd.RawText) &&
+						!reMongoDropDB.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -370,10 +370,10 @@ func mongodbPack() Pack {
 				Reason:       "deleteMany({}) with empty filter deletes all documents in the collection",
 				Remediation:  "Add a filter to target specific documents: deleteMany({field: value})",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAny(cmd, "mongosh", "mongo") &&
 						!hasAny(cmd, "mongodump", "mongorestore") &&
-						reMongoDelManyAll.MatchString(cmd)
+						reMongoDelManyAll.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -383,10 +383,10 @@ func mongodbPack() Pack {
 				Reason:       "remove({}) with empty filter deletes all documents in the collection",
 				Remediation:  "Add a query filter: remove({field: value})",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAny(cmd, "mongosh", "mongo") &&
 						!hasAny(cmd, "mongodump", "mongorestore") &&
-						reMongoRemoveAll.MatchString(cmd)
+						reMongoRemoveAll.MatchString(cmd.RawText)
 				},
 			},
 			{
@@ -396,7 +396,7 @@ func mongodbPack() Pack {
 				Reason:       "mongorestore --drop drops existing collections before restoring, losing any data not in the backup",
 				Remediation:  "Use mongorestore without --drop to merge instead of replace.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "mongorestore", "--drop")
 				},
 			},
@@ -407,11 +407,11 @@ func mongodbPack() Pack {
 				Reason:       "deleteMany() deletes multiple documents matching the filter",
 				Remediation:  "Verify the filter matches only intended documents. Use countDocuments() first to check.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAny(cmd, "mongosh", "mongo") &&
 						!hasAny(cmd, "mongodump", "mongorestore") &&
-						reMongoDeleteMany.MatchString(cmd) &&
-						!reMongoDelManyAll.MatchString(cmd)
+						reMongoDeleteMany.MatchString(cmd.RawText) &&
+						!reMongoDelManyAll.MatchString(cmd.RawText)
 				},
 			},
 		},
@@ -436,7 +436,7 @@ func redisPack() Pack {
 				Reason:       "FLUSHALL deletes all keys in all Redis databases",
 				Remediation:  "Use redis-cli BGSAVE first to create a backup. Consider FLUSHDB for single-database flush.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "redis-cli", "flushall")
 				},
 			},
@@ -447,7 +447,7 @@ func redisPack() Pack {
 				Reason:       "FLUSHDB deletes all keys in the current Redis database",
 				Remediation:  "Use redis-cli BGSAVE first. Verify you're connected to the right database.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "redis-cli", "flushdb")
 				},
 			},
@@ -458,7 +458,7 @@ func redisPack() Pack {
 				Reason:       "DEL/UNLINK deletes the specified keys from Redis",
 				Remediation:  "Verify the key names. Use TTL or OBJECT HELP to inspect keys first.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "redis-cli") && hasAny(cmd, " del ", " del\t", " unlink ", " unlink\t")
 				},
 			},
@@ -469,7 +469,7 @@ func redisPack() Pack {
 				Reason:       "CONFIG SET modifies Redis server configuration at runtime",
 				Remediation:  "Verify the configuration parameter and value. Use CONFIG GET to check current value first.",
 				EnvSensitive: true,
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "redis-cli", "config") && hasAny(cmd, " set ", "resetstat")
 				},
 			},
@@ -479,7 +479,7 @@ func redisPack() Pack {
 				Confidence:  2,
 				Reason:      "SHUTDOWN stops the Redis server, causing service disruption",
 				Remediation: "Use redis-cli BGSAVE first. Schedule shutdowns during maintenance windows.",
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "redis-cli", "shutdown")
 				},
 			},
@@ -489,7 +489,7 @@ func redisPack() Pack {
 				Confidence:  2,
 				Reason:      "DEBUG commands can crash the server (SEGFAULT), block it (SLEEP), or modify internal state",
 				Remediation: "DEBUG commands should only be used in development environments for testing purposes.",
-				Match: func(cmd string) bool {
+				Match: func(cmd Command) bool {
 					return hasAll(cmd, "redis-cli", "debug")
 				},
 			},

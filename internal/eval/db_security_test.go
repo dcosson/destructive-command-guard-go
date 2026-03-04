@@ -74,7 +74,7 @@ func TestDbSecuritySQLPatternEvasion(t *testing.T) {
 				t.Fatalf("pack for command %q not found", tt.cmd)
 			}
 			for _, dp := range pack.Destructive {
-				if dp.Match != nil && dp.Match(tt.cmd) {
+				if dp.Match != nil && matchRuleCommand(dp, tt.cmd) {
 					matched = true
 					break
 				}
@@ -136,7 +136,7 @@ func TestDbSecurityMongoEvasion(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			matched := false
 			for _, dp := range mongoPack.Destructive {
-				if dp.Match != nil && dp.Match(tt.cmd) {
+				if dp.Match != nil && matchRuleCommand(dp, tt.cmd) {
 					matched = true
 					break
 				}
@@ -185,7 +185,7 @@ func TestDbSecurityRedisCaseEvasion(t *testing.T) {
 		t.Run(tt.cmd, func(t *testing.T) {
 			matched := false
 			for _, dp := range redisPack.Destructive {
-				if dp.Match != nil && dp.Match(tt.cmd) {
+				if dp.Match != nil && matchRuleCommand(dp, tt.cmd) {
 					matched = true
 					break
 				}

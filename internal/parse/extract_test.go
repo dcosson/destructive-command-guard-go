@@ -3,8 +3,6 @@ package parse
 import (
 	"context"
 	"testing"
-
-	"github.com/dcosson/destructive-command-guard-go/guard"
 )
 
 func TestParseAndExtractBasicCases(t *testing.T) {
@@ -174,7 +172,7 @@ func TestParseAndExtractDataflowBranching(t *testing.T) {
 		result := parser.ParseAndExtract(context.Background(), "export FILE=$(mktemp); rm -rf $FILE", 0)
 		found := false
 		for _, w := range result.Warnings {
-			if w.Code == guard.WarnCommandSubstitution {
+			if w.Code == WarnCommandSubstitution {
 				found = true
 				break
 			}
@@ -205,7 +203,7 @@ func TestParseAndExtractDataflowBranching(t *testing.T) {
 		result := parser.ParseAndExtract(context.Background(), input, 0)
 		found := false
 		for _, w := range result.Warnings {
-			if w.Code == guard.WarnExpansionCapped {
+			if w.Code == WarnExpansionCapped {
 				found = true
 				break
 			}

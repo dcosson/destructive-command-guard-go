@@ -19,13 +19,17 @@ func coreGitPack() Pack {
 		Description: "Potentially destructive git operations",
 		Keywords:    []string{"git", "push", "reset", "clean"},
 		Safe: []Rule{
-			{ID: "git-status"},
+			{
+				ID:    "git-status",
+				Match: And(Name("git"), ArgAt(0, "status")),
+			},
 			{
 				ID: "git-push-force-with-lease",
-				Match: func(command string) bool {
-					return hasAll(command, "git", "push") &&
-						hasAny(command, "--force-with-lease", "--force-if-includes")
-				},
+				Match: And(
+					Name("git"),
+					ArgAt(0, "push"),
+					Or(Flags("--force-with-lease"), Flags("--force-if-includes")),
+				),
 			},
 		},
 		Destructive: []Rule{
@@ -35,11 +39,17 @@ func coreGitPack() Pack {
 				Confidence:  2, // High
 				Reason:      "git push --force can overwrite remote history",
 				Remediation: "Use --force-with-lease or coordinate with collaborators",
-				Match: func(command string) bool {
-					return hasAll(command, "git", "push") &&
-						hasAny(command, "--force", " -f ", " --mirror", " --delete ") &&
-						!hasAny(command, "--force-with-lease", "--force-if-includes")
-				},
+				Match: And(
+					Name("git"),
+					ArgAt(0, "push"),
+					Or(
+						Flags("--force"),
+						Flags("-f"),
+						Flags("--mirror"),
+						Flags("--delete"),
+					),
+					Not(Or(Flags("--force-with-lease"), Flags("--force-if-includes"))),
+				),
 			},
 		},
 	}
@@ -52,7 +62,10 @@ func coreFilesystemPack() Pack {
 		Description: "Potentially destructive filesystem operations",
 		Keywords:    []string{"rm", "dd", "mkfs", "shred", "truncate"},
 		Safe: []Rule{
-			{ID: "ls"},
+			{
+				ID:    "ls",
+				Match: Name("ls"),
+			},
 		},
 		Destructive: []Rule{
 			{
@@ -61,10 +74,15 @@ func coreFilesystemPack() Pack {
 				Confidence:  2, // High
 				Reason:      "rm -rf can permanently delete files",
 				Remediation: "Use safer paths and verify targets before deletion",
-				Match: func(command string) bool {
-					return hasAll(command, "rm") &&
-						hasAny(command, "-rf", "-fr", "--recursive", " --force", " -r ")
-				},
+				Match: And(
+					Name("rm"),
+					Or(
+						Flags("--recursive"),
+						Flags("--force"),
+						Flags("-r", "-f"),
+						Flags("-r"),
+					),
+				),
 			},
 		},
 	}
@@ -77,7 +95,10 @@ func frameworksPack() Pack {
 		Description: "Potentially destructive framework/database actions",
 		Keywords:    []string{"rails", "db:drop", "db:reset"},
 		Safe: []Rule{
-			{ID: "rails-routes"},
+			{
+				ID:    "rails-routes",
+				Match: And(Name("rails"), ArgAt(0, "routes")),
+			},
 		},
 		Destructive: []Rule{
 			{
@@ -87,10 +108,10 @@ func frameworksPack() Pack {
 				Reason:       "rails db:reset drops and recreates the database",
 				Remediation:  "Use non-destructive migrations where possible",
 				EnvSensitive: true,
-				Match: func(command string) bool {
-					return hasAll(command, "rails") &&
-						hasAny(command, "db:reset", "db:drop", "db:truncate")
-				},
+				Match: And(
+					Name("rails"),
+					Or(Arg("db:reset"), Arg("db:drop"), Arg("db:truncate")),
+				),
 			},
 		},
 	}

@@ -3,12 +3,10 @@ package parse
 import (
 	"context"
 	"fmt"
+	ts "github.com/dcosson/treesitter-go"
 	"regexp"
 	"strings"
 	"sync"
-
-	"github.com/dcosson/destructive-command-guard-go/guard"
-	ts "github.com/dcosson/treesitter-go"
 )
 
 const MaxInlineDepth = 3
@@ -87,17 +85,17 @@ func (id *InlineDetector) getParser(lang string) *LangParser {
 	return nil
 }
 
-func (id *InlineDetector) Detect(cmd ExtractedCommand, depth int) ([]ExtractedCommand, []guard.Warning) {
+func (id *InlineDetector) Detect(cmd ExtractedCommand, depth int) ([]ExtractedCommand, []Warning) {
 	if depth >= MaxInlineDepth {
-		return nil, []guard.Warning{{
-			Code:    guard.WarnInlineDepthExceeded,
+		return nil, []Warning{{
+			Code:    WarnInlineDepthExceeded,
 			Message: fmt.Sprintf("inline recursion depth %d exceeds max %d", depth, MaxInlineDepth),
 		}}
 	}
 
 	scripts := id.detectFlagScripts(cmd)
 	var out []ExtractedCommand
-	var warns []guard.Warning
+	var warns []Warning
 	for _, script := range scripts {
 		switch script.Language {
 		case "bash":
@@ -121,16 +119,16 @@ func (id *InlineDetector) Detect(cmd ExtractedCommand, depth int) ([]ExtractedCo
 	return out, warns
 }
 
-func (id *InlineDetector) DetectHeredocs(input string, depth int) ([]ExtractedCommand, []guard.Warning) {
+func (id *InlineDetector) DetectHeredocs(input string, depth int) ([]ExtractedCommand, []Warning) {
 	if depth >= MaxInlineDepth {
-		return nil, []guard.Warning{{
-			Code:    guard.WarnInlineDepthExceeded,
+		return nil, []Warning{{
+			Code:    WarnInlineDepthExceeded,
 			Message: fmt.Sprintf("inline recursion depth %d exceeds max %d", depth, MaxInlineDepth),
 		}}
 	}
 
 	var out []ExtractedCommand
-	var warns []guard.Warning
+	var warns []Warning
 	for _, body := range extractHeredocBodies(input) {
 		res := id.bashParser.ParseAndExtract(context.Background(), body, depth+1)
 		out = append(out, res.Commands...)
