@@ -1,4 +1,4 @@
-.PHONY: build clean deps lint test test-unit test-integration test-e2e test-stress \
+.PHONY: build clean deps lint test test-integration test-e2e test-stress \
        test-security test-mutation test-comparison \
        test-ci-tier1 test-ci-tier2 test-ci-tier3 test-all \
        bench bench-full test-race help
@@ -62,10 +62,6 @@ lint:
 # Excludes e2e/stress/security/mutation/comparison suites in e2etest and
 # integration-tagged internal/eval tests.
 test:
-	$(MAKE) test-unit
-
-# Unit tests only — core logic packages with a fast feedback loop.
-test-unit:
 	go test ./cmd/dcg-go ./guard ./internal/envdetect ./internal/eval ./internal/parse ./internal/packs/... -count=1
 
 # Integration tests (non-black-box) that are intentionally excluded from
@@ -184,7 +180,6 @@ help:
 	@echo ""
 	@echo "Test (primary):"
 	@echo "  make test               Fast unit tests"
-	@echo "  make test-unit          Core package unit tests"
 	@echo "  make test-integration   Heavy integration tests (internal/eval, tagged)"
 	@echo "  make test-race          Full tests with race detector"
 	@echo ""
