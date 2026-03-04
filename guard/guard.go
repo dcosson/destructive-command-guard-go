@@ -6,6 +6,7 @@ import (
 	"github.com/dcosson/destructive-command-guard-go/internal/eval"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
 	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/core"
+	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/database"
 )
 
 var (

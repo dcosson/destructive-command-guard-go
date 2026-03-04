@@ -3,11 +3,6 @@ package packs
 // DefaultRegistry contains built-in command packs.
 var DefaultRegistry = NewRegistry(
 	frameworksPack(),
-	postgresqlPack(),
-	mysqlPack(),
-	sqlitePack(),
-	mongodbPack(),
-	redisPack(),
 )
 
 func frameworksPack() Pack {

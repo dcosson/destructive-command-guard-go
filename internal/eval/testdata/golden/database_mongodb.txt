@@ -18,6 +18,14 @@ confidence: High
 pack: database.mongodb
 rule: mongo-drop-database
 ---
+# D1: dropDatabase with mongos router shell
+command: mongos --eval "db.dropDatabase()"
+decision: Deny
+severity: High
+confidence: High
+pack: database.mongodb
+rule: mongo-drop-database
+---
 # D2: collection.drop (High)
 command: mongosh --eval "db.users.drop()"
 decision: Deny
