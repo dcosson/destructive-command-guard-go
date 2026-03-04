@@ -52,7 +52,7 @@ func (bp *BashParser) Parse(ctx context.Context, input string) (tree *Tree, warn
 	}()
 
 	rawTree := p.ParseString(ctx, []byte(input))
-	tree = newTree(rawTree)
+	tree = NewTree(rawTree)
 	if tree == nil {
 		return nil, warnings
 	}

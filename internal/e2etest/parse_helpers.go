@@ -1,4 +1,4 @@
-package parse
+package e2etest
 
 import (
 	"fmt"
@@ -42,6 +42,11 @@ var commandFragments = struct {
 func generateRandomCommand(goroutine, iteration int) string {
 	r := rand.New(rand.NewSource(int64(goroutine*100000 + iteration)))
 	return generateCommandFromRand(r)
+}
+
+// GenerateRandomCommand is an exported wrapper for command generation helpers.
+func GenerateRandomCommand(goroutine, iteration int) string {
+	return generateRandomCommand(goroutine, iteration)
 }
 
 // generateCommandFromRand creates a random shell command using the provided random source.
@@ -91,6 +96,11 @@ func generateCommandFromRand(r *rand.Rand) string {
 	return strings.Join(parts, " ")
 }
 
+// GenerateCommandFromRand is an exported wrapper for command generation helpers.
+func GenerateCommandFromRand(r *rand.Rand) string {
+	return generateCommandFromRand(r)
+}
+
 // generateBashLikeInput creates an input string that exercises specific bash constructs.
 func generateBashLikeInput(r *rand.Rand) string {
 	constructors := []func(*rand.Rand) string{
@@ -107,6 +117,11 @@ func generateBashLikeInput(r *rand.Rand) string {
 	}
 	ctor := constructors[r.Intn(len(constructors))]
 	return ctor(r)
+}
+
+// GenerateBashLikeInput is an exported wrapper for structured command generation.
+func GenerateBashLikeInput(r *rand.Rand) string {
+	return generateBashLikeInput(r)
 }
 
 func genSimpleCommand(r *rand.Rand) string {

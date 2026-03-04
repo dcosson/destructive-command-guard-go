@@ -2,7 +2,10 @@ package parse
 
 import "regexp"
 
-const maxExpansions = 16
+const (
+	MaxExpansions = 16
+	maxExpansions = MaxExpansions
+)
 
 var varRefRE = regexp.MustCompile(`\$(?:([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z_][A-Za-z0-9_]*)\})`)
 

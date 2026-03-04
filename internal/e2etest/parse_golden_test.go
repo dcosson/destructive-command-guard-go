@@ -1,4 +1,4 @@
-package parse
+package e2etest
 
 import (
 	"context"
@@ -12,8 +12,8 @@ import (
 
 var updateGolden = flag.Bool("update-golden", false, "update golden files with actual output")
 
-// goldenEntry represents a single input→output pair in a golden file.
-type goldenEntry struct {
+// parseGoldenEntry represents a single input→output pair in a parse golden file.
+type parseGoldenEntry struct {
 	Input  string
 	Output string // JSON-encoded extraction result
 }
@@ -26,14 +26,14 @@ type goldenEntry struct {
 //	<JSON>
 //	---INPUT---
 //	...
-func parseGoldenFile(t *testing.T, path string) []goldenEntry {
+func parseParseGoldenFile(t *testing.T, path string) []parseGoldenEntry {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("reading golden file %s: %v", path, err)
 	}
 
-	var entries []goldenEntry
+	var entries []parseGoldenEntry
 	sections := strings.Split(string(data), "---INPUT---\n")
 	for _, section := range sections {
 		// Don't TrimSpace the whole section — the input might be empty or whitespace
@@ -46,7 +46,7 @@ func parseGoldenFile(t *testing.T, path string) []goldenEntry {
 		}
 		// Input: strip trailing newline (the one before ---OUTPUT---)
 		input := strings.TrimRight(parts[0], "\n")
-		entries = append(entries, goldenEntry{
+		entries = append(entries, parseGoldenEntry{
 			Input:  input,
 			Output: strings.TrimRight(parts[1], "\n"),
 		})
@@ -103,7 +103,7 @@ func marshalGolden(result goldenResult) string {
 	return string(b)
 }
 
-func writeGoldenFile(t *testing.T, path string, entries []goldenEntry) {
+func writeParseGoldenFile(t *testing.T, path string, entries []parseGoldenEntry) {
 	t.Helper()
 	var buf strings.Builder
 	for _, e := range entries {
@@ -128,21 +128,21 @@ func runGoldenTest(t *testing.T, goldenPath string, inputs []string) {
 	bp := NewBashParser()
 
 	if *updateGolden {
-		var entries []goldenEntry
+		var entries []parseGoldenEntry
 		for _, input := range inputs {
 			result := bp.ParseAndExtract(context.Background(), input, 0)
 			gr := toGoldenResult(result)
-			entries = append(entries, goldenEntry{
+			entries = append(entries, parseGoldenEntry{
 				Input:  input,
 				Output: marshalGolden(gr),
 			})
 		}
-		writeGoldenFile(t, goldenPath, entries)
+		writeParseGoldenFile(t, goldenPath, entries)
 		t.Logf("updated golden file: %s", goldenPath)
 		return
 	}
 
-	entries := parseGoldenFile(t, goldenPath)
+	entries := parseParseGoldenFile(t, goldenPath)
 	if len(entries) != len(inputs) {
 		t.Fatalf("golden file has %d entries but test has %d inputs (run with -update-golden to refresh)",
 			len(entries), len(inputs))
@@ -210,20 +210,29 @@ var goldenErrorInputs = []string{
 
 func TestGoldenSimpleCommands(t *testing.T) {
 	t.Parallel()
-	runGoldenTest(t, filepath.Join("testdata", "golden", "simple_commands.golden"), goldenSimpleInputs)
+	runGoldenTest(t, parseGoldenPath(t, "simple_commands.golden"), goldenSimpleInputs)
 }
 
 func TestGoldenCompoundCommands(t *testing.T) {
 	t.Parallel()
-	runGoldenTest(t, filepath.Join("testdata", "golden", "compound_commands.golden"), goldenCompoundInputs)
+	runGoldenTest(t, parseGoldenPath(t, "compound_commands.golden"), goldenCompoundInputs)
 }
 
 func TestGoldenDataflow(t *testing.T) {
 	t.Parallel()
-	runGoldenTest(t, filepath.Join("testdata", "golden", "dataflow.golden"), goldenDataflowInputs)
+	runGoldenTest(t, parseGoldenPath(t, "dataflow.golden"), goldenDataflowInputs)
 }
 
 func TestGoldenErrorRecovery(t *testing.T) {
 	t.Parallel()
-	runGoldenTest(t, filepath.Join("testdata", "golden", "error_recovery.golden"), goldenErrorInputs)
+	runGoldenTest(t, parseGoldenPath(t, "error_recovery.golden"), goldenErrorInputs)
+}
+
+func parseGoldenPath(t *testing.T, name string) string {
+	t.Helper()
+	root, err := FindModuleRoot()
+	if err != nil {
+		t.Fatalf("find module root: %v", err)
+	}
+	return filepath.Join(root, "internal", "parse", "testdata", "golden", name)
 }

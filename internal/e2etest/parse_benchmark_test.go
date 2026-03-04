@@ -1,4 +1,4 @@
-package parse
+package e2etest
 
 import (
 	"context"
@@ -182,7 +182,7 @@ func BenchmarkParsePoolEffectiveness(b *testing.B) {
 			p := tsp.NewParser()
 			p.SetLanguage(bash.Language())
 			raw := p.ParseString(ctx, []byte(input))
-			_ = newTree(raw)
+			_ = NewTree(raw)
 		}
 	})
 }

@@ -8,7 +8,7 @@ type Tree struct {
 	raw *ts.Tree
 }
 
-func newTree(raw *ts.Tree) *Tree {
+func NewTree(raw *ts.Tree) *Tree {
 	if raw == nil {
 		return nil
 	}

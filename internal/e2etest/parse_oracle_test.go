@@ -1,4 +1,4 @@
-package parse
+package e2etest
 
 import (
 	"context"

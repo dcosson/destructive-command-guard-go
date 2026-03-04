@@ -65,10 +65,13 @@ test:
 	go test ./cmd/dcg-go ./guard ./internal/envdetect ./internal/evalcore ./internal/eval ./internal/parse ./internal/packs/... -count=1
 
 # Integration tests (non-black-box) that are intentionally excluded from
-# the unit loop. Includes eval-owned corpus/database suites now located under
-# internal/e2etest and gated behind the e2e build tag.
+# the unit loop. Includes:
+# - eval-owned corpus/database suites (tagged e2e)
+# - parse-owned heavy property/oracle/fault/security/golden/stress suites
+#   moved into internal/e2etest.
 test-integration:
 	go test -tags=e2e ./internal/e2etest -run '^(TestGoldenCorpus|TestDb)' -count=1
+	go test ./internal/e2etest -run '^(TestProperty|TestOracle|TestParse|TestWarning|TestMemory|TestConcurrentParsingStress|TestGolden(Simple|Compound|Dataflow|ErrorRecovery))' -count=1
 
 # Unit test target with -race detector enabled (same package set as `make test`).
 # Does not include integration/e2e/stress/security/mutation/comparison targets.
