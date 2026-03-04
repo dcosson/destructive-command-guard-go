@@ -81,7 +81,7 @@ Specifically:
 - **Packs**: each pack category gets its own file in `internal/packs/`. Rules
   use `MatchFunc` closures for matching logic.
 - **Policy types**: `StrictPolicy()`, `InteractivePolicy()`, `PermissivePolicy()`
-  in the `guard` package (public). Internal equivalents in `internal/eval/policy.go`.
+  in the `guard` package (public). Canonical definitions in `internal/evalcore/policy.go`.
 - **No import cycles**: `internal/eval` tests must NOT import `guard` (which
   imports `internal/eval`). Use the internal API directly in `internal/eval` tests.
 - **Golden files**: stored in `{package}/testdata/golden/`. Use TSV format for
