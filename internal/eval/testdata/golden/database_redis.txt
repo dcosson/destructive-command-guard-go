@@ -26,15 +26,13 @@ confidence: High
 pack: database.redis
 rule: redis-flushall
 ---
-# D1: FLUSHALL with host flag — raw string matching catches this.
-# "prod" in hostname triggers env escalation: High → Critical.
+# D1: FLUSHALL with host flag (no env escalation; env detection uses env vars)
 command: redis-cli -h prod.redis.example.com FLUSHALL
 decision: Deny
-severity: Critical
+severity: High
 confidence: High
 pack: database.redis
 rule: redis-flushall
-env_escalated: true
 ---
 # D2: FLUSHDB (High)
 command: redis-cli FLUSHDB

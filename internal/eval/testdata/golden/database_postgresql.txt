@@ -10,14 +10,13 @@ confidence: High
 pack: database.postgresql
 rule: psql-drop-database
 ---
-# D1: DROP DATABASE with host flag ("production" in command triggers env escalation)
+# D1: DROP DATABASE with host flag (no env escalation; env detection uses env vars)
 command: psql -h localhost -c "DROP DATABASE production"
 decision: Deny
-severity: Critical
+severity: High
 confidence: High
 pack: database.postgresql
 rule: psql-drop-database
-env_escalated: true
 ---
 # D1: dropdb utility (no env escalation — "production" in "myapp_production"
 # has no word boundary due to underscore)

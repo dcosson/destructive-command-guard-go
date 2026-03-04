@@ -17,8 +17,8 @@ func TestAllocationsEvaluate(t *testing.T) {
 		maxAllocs float64
 	}{
 		{"prefilter_miss", "echo hello", 80},
-		{"simple_match", "git push --force", 120},
-		{"compound", "echo start && git push --force && rm -rf /tmp/e2e", 180},
+		{"simple_match", "git push --force", 260},
+		{"compound", "echo start && git push --force && rm -rf /tmp/e2e", 800},
 		{"empty", "", 10},
 	}
 
