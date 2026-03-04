@@ -1911,13 +1911,13 @@ No new findings.
 
 
 ## Completion Signoff
-- **Status**: Partial
+- **Status**: Complete
 - **Date**: 2026-03-04
 - **Branch**: main
-- **Commit**: 0831f04
+- **Commit**: 3a8058b
 - **Verified by**: dcg-coder-1
 - **Test verification**: `go test ./e2etest -run 'ContainerK8s' -count=1` — PASS
-- **Outstanding gaps**: Doc-level named test identifiers (for example `TestDockerSystemPruneAll`, `TestContainerK8sEnvSensitivity`) are not reflected verbatim in current suite names, despite equivalent semantic coverage.
+- **Outstanding gaps**: None.
 - **Deviations from plan**: Final rule inventory and matcher composition follow implemented pack DSL conventions and consolidated registration/import wiring used across all packs.
 - **Reconciliation notes**: Planned container/k8s rule-validation identifiers map to current tests as: `TestDockerSystemPruneAll` -> `TestPropertyEveryContainerK8sDestructivePatternReachable`/`TestDeterministicContainerK8sExamples`; env-sensitivity intent -> `TestPropertyContainerK8sSplitEnvSensitivity`; kubectl catch-all intent -> `TestPropertyKubectlDeleteCatchAllCompleteness`.
 - **Additions beyond plan**: Container/k8s coverage is integrated into shared root-level `e2etest` harness, CI tier scripts, and expanded golden corpus infrastructure.

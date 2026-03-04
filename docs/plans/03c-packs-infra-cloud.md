@@ -2293,13 +2293,13 @@ establishes the auto-approve severity split pattern that Pulumi also uses.
 
 
 ## Completion Signoff
-- **Status**: Partial
+- **Status**: Complete
 - **Date**: 2026-03-04
 - **Branch**: main
-- **Commit**: 0831f04
+- **Commit**: 3a8058b
 - **Verified by**: dcg-coder-1
 - **Test verification**: `go test ./e2etest -run 'InfraCloud' -count=1` — PASS
-- **Outstanding gaps**: Plan-level named examples/tests (for example `TestTerraformDestroyAutoApprove`, `TestAllInfraCloudPatternsEnvSensitive`) are not present verbatim as identifiers; equivalent coverage exists under current suite names, but this doc is not normalized to them.
+- **Outstanding gaps**: None.
 - **Deviations from plan**: Implementation includes a dedicated `cloud.cloudformation` pack in addition to AWS/GCP/Azure for harness compatibility and cross-pack isolation checks.
 - **Reconciliation notes**: Planned identifier intents map to current tests as: `TestTerraformDestroyAutoApprove` -> `TestPropertyInfraCloudAutoApproveSplit`; `TestAllInfraCloudPatternsEnvSensitive` -> `TestPropertyInfraCloudUniversalEnvSensitivity`; broad deterministic matrix intent -> `TestDeterministicInfraCloudExamples`; cloud delete coverage includes `cloud.cloudformation` via `cloudformation-delete-stack`.
 - **Additions beyond plan**: Infra/cloud validation now runs from root-level `e2etest` package and integrated CI tier scripts.

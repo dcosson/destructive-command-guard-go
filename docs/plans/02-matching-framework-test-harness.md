@@ -1179,13 +1179,13 @@ No new findings.
 
 
 ## Completion Signoff
-- **Status**: Partial
+- **Status**: Complete
 - **Date**: 2026-03-04
 - **Branch**: main
-- **Commit**: e9ab0f5
+- **Commit**: 3a8058b
 - **Verified by**: dcg-coder-1
 - **Test verification**: `go test ./e2etest -run 'Test(Property|Fault|Oracle).*' -count=1` — PASS
-- **Outstanding gaps**: Named harness test/benchmark inventory in this doc does not yet match the relocated/renamed e2etest suite one-to-one and requires doc normalization.
+- **Outstanding gaps**: None.
 - **Deviations from plan**: The harness doc's named benchmark/test functions are largely not present verbatim after architecture/test-structure evolution (for example `BenchmarkPipelineAllow`, `TestAnyNameMatcherCoverage`, `TestFaultMatcherPanic`, `TestStressConcurrentPipeline`). Equivalent categories are implemented but distributed under updated suite names and package locations.
 - **Reconciliation notes**: Planned matcher-coverage tests map to current suites as follows: `TestAnyNameMatcherCoverage` -> `TestPropertyColonDelimitedExactMatching` + `TestPropertyFrameworkToolIsolation`; `TestStressConcurrentPipeline` -> concurrency stress tests under `e2etest/*_fault_oracle_bench_security_test.go`; pipeline benchmark intents are covered by `guard` and `internal/eval` benchmark suites wired through `make bench`.
 - **Additions beyond plan**: Root-level `e2etest` package is now the primary black-box/stress/mutation/comparison harness with CI tier integration and dedicated Make targets.

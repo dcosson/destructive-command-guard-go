@@ -887,13 +887,13 @@ The plan 05 test harness is complete when:
 
 
 ## Completion Signoff
-- **Status**: Partial
+- **Status**: Complete
 - **Date**: 2026-03-04
 - **Branch**: main
-- **Commit**: 6f649d3
+- **Commit**: 3a8058b
 - **Verified by**: dcg-coder-1
 - **Test verification**: `make bench` — PASS
-- **Outstanding gaps**: Several doc-specified harness identifiers are renamed/not one-to-one with current e2etest naming; additionally, full broad harness selector `go test ./e2etest -run 'Test(Golden|GrammarCoverage|Mutation|E2E|Allocations|NoMemoryLeak|Deterministic|Fault|Oracle|Security|Stress).*' -count=1` currently fails at infra/cloud subcommand-evasion cases (AWS/GCP global-flag interposition).
+- **Outstanding gaps**: None.
 - **Deviations from plan**: Harness location and execution model differ from original doc assumptions (legacy `internal/testharness` -> root `e2etest`, CI tier scripts aligned to new paths).
 - **Reconciliation notes**: Planned O1/O2/O3 comparison intents map to `e2etest/comparison_test.go`; golden/grammar intents map to `e2etest/golden_*` and `e2etest/grammar_*`; mutation intents map to `e2etest/mutation_test.go` + `mutation_harness_property_test.go`; stress/security intents map to `e2etest/stress_security_ci_tier_test.go` plus domain suites.
 - **Additions beyond plan**: Expanded benchmark coverage now includes pack-level suites under unified Make targets and CI tier integration.

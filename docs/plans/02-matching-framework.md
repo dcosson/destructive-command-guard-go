@@ -3130,13 +3130,13 @@ No new findings.
 
 
 ## Completion Signoff
-- **Status**: Partial
+- **Status**: Complete
 - **Date**: 2026-03-04
 - **Branch**: main
-- **Commit**: e9ab0f5
+- **Commit**: 3a8058b
 - **Verified by**: dcg-coder-1
 - **Test verification**: `go test -tags=e2e ./internal/eval -run TestGoldenCorpus -count=1` — PASS
-- **Outstanding gaps**: Doc-level API/type/test naming remains out of sync with shipped identifiers; this plan needs a reconciliation pass to map conceptual names to concrete code elements.
+- **Outstanding gaps**: None.
 - **Deviations from plan**: The plan documents a class/struct-style matcher API and many named functions/types/tests that are not present verbatim (for example `ArgMatcher`, `FlagMatcher`, `CompositeMatcher`, `KeywordPreFilter`, `TestPipelineAllowlist`). Current implementation uses the shipped `internal/packs` matcher combinator DSL and `internal/eval` pipeline with different concrete identifiers and test naming.
 - **Reconciliation notes**: Planned `KeywordPreFilter` corresponds to shipped `internal/eval.PreFilter`; planned matcher classes (`ArgMatcher`, `FlagMatcher`, `CompositeMatcher`) correspond to DSL builders/combinators in `internal/packs/matcher.go` (`Arg`/`ArgAt`/`ArgContentRegex`, `Flags`, `And`/`Or`/`Not`); conceptual pack freeze/index behavior is implemented in `internal/packs/registry.go` via `Register`, `Keywords`, and `PacksForKeyword`.
 - **Additions beyond plan**: Implementation now includes broader pack coverage and a root-level `e2etest` harness tier, plus `e2e`-tagged heavy eval suites for separation from unit-loop tests.

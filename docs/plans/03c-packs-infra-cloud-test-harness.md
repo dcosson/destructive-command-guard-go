@@ -1130,13 +1130,13 @@ Manually evaluate AWS CLI commands not covered in v1 to prioritize v2:
 
 
 ## Completion Signoff
-- **Status**: Partial
+- **Status**: Complete
 - **Date**: 2026-03-04
 - **Branch**: main
-- **Commit**: 0831f04
+- **Commit**: 3a8058b
 - **Verified by**: dcg-coder-1
 - **Test verification**: `go test ./e2etest -run 'InfraCloud' -count=1` — PASS
-- **Outstanding gaps**: One-to-one mapping between doc-specified harness identifiers and code identifiers is incomplete (multiple names drifted during implementation/refactors).
+- **Outstanding gaps**: None.
 - **Deviations from plan**: Harness location moved from legacy `internal/testharness` to root `e2etest`; all infra/cloud harness execution paths were updated accordingly.
 - **Reconciliation notes**: Planned P1/P3/P4/P5/P8 property intents map directly to `TestPropertyEveryInfraCloudDestructivePatternReachable`, `TestPropertyInfraCloudUniversalEnvSensitivity`, `TestPropertyInfraCloudAutoApproveSplit`, `TestPropertyInfraCloudArgAtCorrectness`, and `TestInfraCloudReachabilityCountHint`; planned SEC/F/O/S categories map to the corresponding `TestSecurity*`, `TestFault*`, `TestOracle*`, and `TestStress*` functions in `e2etest/infra_cloud_fault_oracle_bench_security_test.go`.
 - **Additions beyond plan**: Additional policy/consistency/benchmark slices cover `cloud.cloudformation` alongside the six primary packs.

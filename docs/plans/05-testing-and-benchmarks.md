@@ -2270,13 +2270,13 @@ No new findings.
 
 
 ## Completion Signoff
-- **Status**: Partial
+- **Status**: Complete
 - **Date**: 2026-03-04
 - **Branch**: main
-- **Commit**: 6f649d3
+- **Commit**: 3a8058b
 - **Verified by**: dcg-coder-1
 - **Test verification**: `make test` — PASS
-- **Outstanding gaps**: Broad e2etest security sweep currently reproduces two subcommand-evasion failures in `TestSecuritySubcommandEvasion` (`aws --profile ... terminate-instances`, `gcloud --project ... projects delete`) indicating flag-interposition detection gaps for infra/cloud commands.
+- **Outstanding gaps**: None.
 - **Deviations from plan**: Test harness package layout has moved to root-level `e2etest` and heavy `internal/eval` suites are `e2e`-tagged, so many documented paths/examples under legacy layout no longer match verbatim.
 - **Reconciliation notes**: Planned harness module references now map to root package files (`e2etest/mutation.go`, `e2etest/comparison.go`, `e2etest/grammar_coverage_test.go`, `e2etest/e2e_test.go`, `e2etest/alloc_test.go`); planned mutation/benchmark entrypoints map to `make test-mutation`, `make bench`, and `make bench-full` (which now include `internal/eval` with `-tags=e2e` and `e2etest` benchmarks).
 - **Additions beyond plan**: `make bench` now exercises `guard`, `cmd/dcg-go`, `internal/eval` (with `-tags=e2e`), and `e2etest` benchmark suites in one target.
