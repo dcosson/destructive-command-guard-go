@@ -17,15 +17,23 @@ confidence: High
 pack: core.filesystem
 rule: mkfs-any
 ---
-# D3: rm -rf dir
+# D3: rm -rf system absolute path
 command: rm -rf /tmp/build
 decision: Deny
 severity: Critical
 confidence: High
 pack: core.filesystem
-rule: rm-recursive-force
+rule: rm-rf-system
 ---
-# D4: dd of=
+# D4: rm -rf local relative path
+command: rm -rf build
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.filesystem
+rule: rm-rf-local
+---
+# D5: dd of=
 command: dd if=/dev/zero of=/dev/sda bs=4M
 decision: Deny
 severity: High
@@ -33,7 +41,7 @@ confidence: High
 pack: core.filesystem
 rule: dd-write
 ---
-# D5: shred
+# D6: shred
 command: shred -vfz file.txt
 decision: Deny
 severity: High
@@ -41,7 +49,7 @@ confidence: High
 pack: core.filesystem
 rule: shred-any
 ---
-# D6: rm -r
+# D7: rm -r
 command: rm -r /tmp/build
 decision: Ask
 severity: Medium
@@ -49,7 +57,7 @@ confidence: High
 pack: core.filesystem
 rule: rm-recursive
 ---
-# D7: chmod -R
+# D8: chmod -R
 command: chmod -R 755 ./app
 decision: Ask
 severity: Medium
@@ -57,7 +65,7 @@ confidence: High
 pack: core.filesystem
 rule: chmod-recursive
 ---
-# D8: chmod 777
+# D9: chmod 777
 command: chmod 777 script.sh
 decision: Ask
 severity: Medium
@@ -65,7 +73,7 @@ confidence: High
 pack: core.filesystem
 rule: chmod-777
 ---
-# D9: chown -R
+# D10: chown -R
 command: chown -R root:root /var
 decision: Ask
 severity: Medium
@@ -73,7 +81,7 @@ confidence: High
 pack: core.filesystem
 rule: chown-recursive
 ---
-# D10: mv to /dev/null
+# D11: mv to /dev/null
 command: mv important.db /dev/null
 decision: Ask
 severity: Medium
@@ -81,7 +89,7 @@ confidence: High
 pack: core.filesystem
 rule: mv-to-devnull
 ---
-# D11: chmod 000
+# D12: chmod 000
 command: chmod 000 secret.txt
 decision: Ask
 severity: Medium
@@ -89,7 +97,7 @@ confidence: High
 pack: core.filesystem
 rule: chmod-000
 ---
-# D12: truncate -s 0
+# D13: truncate -s 0
 command: truncate -s 0 app.log
 decision: Ask
 severity: Medium

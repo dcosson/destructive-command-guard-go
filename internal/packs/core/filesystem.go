@@ -82,7 +82,7 @@ func FilesystemPack() packs.Pack {
 				Severity:    sevCritical,
 				Confidence:  confHigh,
 				Reason:      "rm -rf / recursively deletes the entire filesystem",
-				Remediation: "Specify a specific directory instead of /",
+				Remediation: "Delete specific files or directories individually rather than using recursive force delete",
 			},
 			{
 				ID: "mkfs-any",
@@ -100,10 +100,10 @@ func FilesystemPack() packs.Pack {
 				Severity:    sevCritical,
 				Confidence:  confHigh,
 				Reason:      "mkfs creates a new filesystem on a device, destroying all existing data on that device",
-				Remediation: "Verify the device is correct and not mounted. Back up data first.",
+				Remediation: "Confirm the target device is intentionally selected and not holding required data before formatting",
 			},
 			{
-				ID: "rm-recursive-force",
+				ID: "rm-rf-system",
 				Match: packs.And(
 					packs.Name("rm"),
 					packs.Or(
@@ -114,11 +114,31 @@ func FilesystemPack() packs.Pack {
 							packs.Or(packs.Flags("-f"), packs.Flags("--force")),
 						),
 					),
+					packs.ArgContentRegex(`^(/|~)`),
 				),
 				Severity:    sevCritical,
 				Confidence:  confHigh,
-				Reason:      "rm -rf recursively deletes files and directories without confirmation",
-				Remediation: "Use rm -ri (interactive) or ls first to preview what will be deleted",
+				Reason:      "rm -rf on system-level absolute paths can recursively delete critical operating system or user data",
+				Remediation: "Delete specific files or directories individually rather than using recursive force delete",
+			},
+			{
+				ID: "rm-rf-local",
+				Match: packs.And(
+					packs.Name("rm"),
+					packs.Or(
+						packs.Flags("-rf"),
+						packs.Flags("-fr"),
+						packs.And(
+							packs.Or(packs.Flags("-r"), packs.Flags("-R"), packs.Flags("--recursive")),
+							packs.Or(packs.Flags("-f"), packs.Flags("--force")),
+						),
+					),
+					packs.Not(packs.ArgContentRegex(`^(/|~)`)),
+				),
+				Severity:    sevMedium,
+				Confidence:  confHigh,
+				Reason:      "rm -rf on relative paths recursively deletes files and directories without confirmation",
+				Remediation: "Delete specific files or directories individually rather than using recursive force delete",
 			},
 			{
 				ID: "dd-write",
@@ -129,7 +149,7 @@ func FilesystemPack() packs.Pack {
 				Severity:    sevHigh,
 				Confidence:  confHigh,
 				Reason:      "dd writes directly to devices or files, overwriting existing data without confirmation",
-				Remediation: "Double-check the of= parameter before running dd",
+				Remediation: "Verify the output target is correct before writing",
 			},
 			{
 				ID:          "shred-any",
@@ -137,7 +157,7 @@ func FilesystemPack() packs.Pack {
 				Severity:    sevHigh,
 				Confidence:  confHigh,
 				Reason:      "shred overwrites files with random data to prevent recovery",
-				Remediation: "Verify target files before running shred",
+				Remediation: "Verify each target file is intended for irreversible deletion before shredding",
 			},
 			{
 				ID: "rm-recursive",
@@ -154,7 +174,7 @@ func FilesystemPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confHigh,
 				Reason:      "rm -r recursively deletes files and directories",
-				Remediation: "Use rm -ri (interactive) to confirm each deletion",
+				Remediation: "Consider deleting specific items rather than entire directory trees",
 			},
 			{
 				ID: "chmod-recursive",
@@ -165,7 +185,7 @@ func FilesystemPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confHigh,
 				Reason:      "chmod -R recursively changes file permissions",
-				Remediation: "Verify target directory and permission mode before recursive chmod",
+				Remediation: "Apply permission changes to specific files rather than recursively",
 			},
 			{
 				ID: "chmod-777",
@@ -176,7 +196,7 @@ func FilesystemPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confHigh,
 				Reason:      "chmod 777 makes files world-writable",
-				Remediation: "Use more restrictive permissions like 644 or 755",
+				Remediation: "Use the minimum required permissions instead of world-writable mode",
 			},
 			{
 				ID: "chown-recursive",
@@ -187,7 +207,7 @@ func FilesystemPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confHigh,
 				Reason:      "chown -R recursively changes file ownership",
-				Remediation: "Verify target directory and owner before recursive chown",
+				Remediation: "Apply ownership changes to specific files rather than recursively",
 			},
 			{
 				ID: "mv-to-devnull",
@@ -198,7 +218,7 @@ func FilesystemPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confHigh,
 				Reason:      "mv to /dev/null can discard files or indicates risky destructive intent",
-				Remediation: "Use explicit delete commands and verify target paths",
+				Remediation: "Use explicit delete operations on confirmed targets instead of moving to /dev/null",
 			},
 			{
 				ID: "chmod-000",
@@ -209,7 +229,7 @@ func FilesystemPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confHigh,
 				Reason:      "chmod 000 removes all permissions, making files inaccessible",
-				Remediation: "Use appropriate permissions that preserve required access",
+				Remediation: "Set only the minimum restrictive permissions needed rather than removing all access",
 			},
 			{
 				ID: "truncate-zero",
@@ -225,7 +245,7 @@ func FilesystemPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confHigh,
 				Reason:      "truncate -s 0 empties file contents completely",
-				Remediation: "Back up the file first or verify this is intended",
+				Remediation: "Confirm the target file can be emptied before truncating to zero",
 			},
 		},
 	}

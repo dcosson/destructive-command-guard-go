@@ -1076,9 +1076,12 @@ subshell	core.filesystem	rm-rf-root	(rm -rf /)
 simple	core.filesystem	mkfs-any	mkfs.ext4 /dev/sda1
 compound	core.filesystem	mkfs-any	echo start && mkfs.ext4 /dev/sda1
 subshell	core.filesystem	mkfs-any	(mkfs.ext4 /dev/sda1)
-simple	core.filesystem	rm-recursive-force	rm -rf /tmp/build
-compound	core.filesystem	rm-recursive-force	echo start && rm -rf /tmp/build
-subshell	core.filesystem	rm-recursive-force	(rm -rf /tmp/build)
+simple	core.filesystem	rm-rf-system	rm -rf /tmp/build
+compound	core.filesystem	rm-rf-system	echo start && rm -rf /tmp/build
+subshell	core.filesystem	rm-rf-system	(rm -rf /tmp/build)
+simple	core.filesystem	rm-rf-local	rm -rf build
+compound	core.filesystem	rm-rf-local	echo start && rm -rf build
+subshell	core.filesystem	rm-rf-local	(rm -rf build)
 simple	core.filesystem	dd-write	dd if=/dev/zero of=/dev/sda bs=4M
 compound	core.filesystem	dd-write	echo start && dd if=/dev/zero of=/dev/sda bs=4M
 subshell	core.filesystem	dd-write	(dd if=/dev/zero of=/dev/sda bs=4M)

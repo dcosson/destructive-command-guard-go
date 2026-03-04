@@ -81,23 +81,24 @@ func TestFilesystemPackInventoryAndReachability(t *testing.T) {
 	if got := len(pk.Safe); got != 4 {
 		t.Fatalf("safe pattern count = %d, want 4", got)
 	}
-	if got := len(pk.Destructive); got != 12 {
-		t.Fatalf("destructive pattern count = %d, want 12", got)
+	if got := len(pk.Destructive); got != 13 {
+		t.Fatalf("destructive pattern count = %d, want 13", got)
 	}
 
 	hits := map[string]string{
-		"rm-rf-root":         "rm -rf /",
-		"mkfs-any":           "mkfs.ext4 /dev/sda1",
-		"rm-recursive-force": "rm -rf /tmp/build",
-		"dd-write":           "dd if=/dev/zero of=/dev/sda bs=4M",
-		"shred-any":          "shred -vfz file.txt",
-		"rm-recursive":       "rm -r /tmp/build",
-		"chmod-recursive":    "chmod -R 755 ./app",
-		"chmod-777":          "chmod 777 file.txt",
-		"chown-recursive":    "chown -R root:root /var/app",
-		"mv-to-devnull":      "mv data.db /dev/null",
-		"chmod-000":          "chmod 000 secret.txt",
-		"truncate-zero":      "truncate -s 0 app.log",
+		"rm-rf-root":      "rm -rf /",
+		"mkfs-any":        "mkfs.ext4 /dev/sda1",
+		"rm-rf-system":    "rm -rf /tmp/build",
+		"rm-rf-local":     "rm -rf build",
+		"dd-write":        "dd if=/dev/zero of=/dev/sda bs=4M",
+		"shred-any":       "shred -vfz file.txt",
+		"rm-recursive":    "rm -r /tmp/build",
+		"chmod-recursive": "chmod -R 755 ./app",
+		"chmod-777":       "chmod 777 file.txt",
+		"chown-recursive": "chown -R root:root /var/app",
+		"mv-to-devnull":   "mv data.db /dev/null",
+		"chmod-000":       "chmod 000 secret.txt",
+		"truncate-zero":   "truncate -s 0 app.log",
 	}
 
 	for _, rule := range pk.Destructive {
