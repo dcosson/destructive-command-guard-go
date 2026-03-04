@@ -1284,26 +1284,7 @@ No new findings.
 
 ---
 
-## Completion Signoff
 
-- **Status**: Partial
-- **Date**: 2026-03-03
-- **Branch**: main
-- **Verified by**: dcg-reviewer
-- **Completed items**:
-  - Database-focused test suites are implemented in `internal/eval`: property (`db_property_test.go`), fault (`db_fault_test.go`), security (`db_security_test.go`), oracle (`db_oracle_test.go`), benchmarks/stress (`db_benchmark_test.go`).
-  - Database golden corpus and policy-monotonicity tests are present and wired into `go test ./internal/eval`.
-  - Verification commands executed:
-    - `go test ./guard ./internal/eval ./internal/parse ./internal/packs -count=1` — PASS
-    - `go test -race ./guard ./internal/eval -count=1` — PASS
-- **Outstanding gaps**:
-  - **P0**: Harness assumptions around safe/destructive interaction are not fully satisfiable because runtime evaluation does not execute safe rules.
-  - **P1**: Planned test-harness references to `CheckFlagValues` matcher semantics do not match implementation architecture (raw command-string matching, no `ArgContentMatcher` flag-value switch behavior to verify).
-  - **P1**: CI-tier mapping in this doc does not match current tier scripts; database P/E/F/SEC/O suite is not explicitly mapped in `scripts/ci_tier1.sh`/`tier2.sh`/`tier3.sh` per this plan.
-  - **P2**: Benchmark execution path differs from plan expectations: `make bench` runs `guard` and `cmd/dcg-go` benchmarks, but not `internal/eval` database benchmark suites defined in this harness.
-  - **P1**: Full-suite verification command `make test` is currently red due to benchmark instability in `internal/testharness` (`TestBenchmarkStability`), so plan exit criteria are not fully met.
-
----
 ## Completion Signoff
 - **Status**: Complete
 - **Date**: 2026-03-04

@@ -762,25 +762,7 @@ No new findings.
 
 ---
 
-## Completion Signoff
 
-- **Status**: Partial
-- **Date**: 2026-03-03
-- **Branch**: main
-- **Verified by**: dcg-reviewer
-- **Completed items**:
-  - Core-related integration/property/fault/security/oracle/stress coverage exists across `guard/*_test.go`.
-  - Repository exposes Make targets for `test`, `test-security`, `test-stress`, and benchmarks.
-  - Verification commands executed:
-    - `go test ./guard ./internal/eval ./internal/parse ./internal/packs -count=1` — PASS
-    - `go test -race ./guard ./internal/eval -count=1` — PASS
-- **Outstanding gaps**:
-  - **P0**: Harness assumptions about safe-pattern behavior and safe/destructive interaction cannot be fully validated because safe-pattern evaluation is not implemented in runtime pipeline logic.
-  - **P1**: Planned core-specific matrices and corpus targets (E1/E2/E3, 84-core-entry expectation) are not implemented as specified; no core-specific golden files exist under `internal/eval/testdata/golden/`.
-  - **P1**: CI tier mapping in this doc does not match actual tier scripts (`scripts/ci_tier1.sh`, `scripts/ci_tier2.sh`, `scripts/ci_tier3.sh`), which target `internal/testharness` subsets unrelated to this document's exact P/E/F/SEC/O mapping.
-  - **P1**: `make test` currently fails in this repo due to benchmark instability in `internal/testharness` (`TestBenchmarkStability`), so full-suite pass criteria in this plan are not currently met.
-
----
 ## Completion Signoff
 - **Status**: Complete
 - **Date**: 2026-03-04
