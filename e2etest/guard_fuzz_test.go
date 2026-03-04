@@ -1,27 +1,35 @@
-package guard_test
+package e2etest
 
 import (
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
-	"github.com/dcosson/destructive-command-guard-go/e2etest"
 	"github.com/dcosson/destructive-command-guard-go/guard"
 	"github.com/dcosson/destructive-command-guard-go/internal/parse"
 )
 
 func FuzzEvaluate(f *testing.F) {
-	for _, seed := range e2etest.LoadFuzzSeeds("testdata/golden") {
+	root, err := FindModuleRoot()
+	if err != nil {
+		f.Fatalf("find module root: %v", err)
+	}
+	for _, seed := range LoadFuzzSeeds(filepath.Join(root, "guard", "testdata", "golden")) {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, command string) {
 		result := guard.Evaluate(command)
-		verifyInvariants(t, command, result)
+		guardVerifyInvariants(t, command, result)
 	})
 }
 
 func FuzzEvaluateWithAllowlist(f *testing.F) {
-	for _, seed := range e2etest.LoadFuzzSeeds("testdata/golden") {
+	root, err := FindModuleRoot()
+	if err != nil {
+		f.Fatalf("find module root: %v", err)
+	}
+	for _, seed := range LoadFuzzSeeds(filepath.Join(root, "guard", "testdata", "golden")) {
 		f.Add(seed, "git *", "rm *")
 	}
 	f.Fuzz(func(t *testing.T, command, allowPattern, blockPattern string) {
@@ -30,21 +38,19 @@ func FuzzEvaluateWithAllowlist(f *testing.F) {
 			guard.WithAllowlist(allowPattern),
 			guard.WithBlocklist(blockPattern),
 		)
-		verifyInvariants(t, command, result)
+		guardVerifyInvariants(t, command, result)
 
 		// INV-A1: exact allowlist match with no separators should allow.
-		if globMatchProduction(allowPattern, command) &&
-			!containsSeparators(command) &&
-			!globMatchProduction(blockPattern, command) &&
+		if guardGlobMatchProduction(allowPattern, command) &&
+			guardContainsSeparators(command) == false &&
+			!guardGlobMatchProduction(blockPattern, command) &&
 			result.Decision != guard.Allow {
 			t.Fatalf("INV-A1: command %q matches allowlist %q but decision %s", command, allowPattern, result.Decision)
 		}
 
 		// INV-A2: allowlist should not bypass after separators.
-		if containsSeparators(command) && prefixMatchesPattern(command, allowPattern) &&
-			!globMatchProduction(blockPattern, command) {
-			// Only enforce when the command would have been non-Allow
-			// without allowlist influence.
+		if guardContainsSeparators(command) && guardPrefixMatchesPattern(command, allowPattern) &&
+			!guardGlobMatchProduction(blockPattern, command) {
 			baseline := guard.Evaluate(command, guard.WithBlocklist(blockPattern))
 			if baseline.Decision != guard.Allow && result.Decision == guard.Allow {
 				t.Fatalf("INV-A2: allowlist %q matched prefix in %q", allowPattern, command)
@@ -53,34 +59,30 @@ func FuzzEvaluateWithAllowlist(f *testing.F) {
 
 		// INV-B1: blocklist match always denies.
 		if strings.TrimSpace(command) != "" &&
-			globMatchProduction(blockPattern, command) &&
+			guardGlobMatchProduction(blockPattern, command) &&
 			result.Decision != guard.Deny {
 			t.Fatalf("INV-B1: command %q matches blocklist %q but got %s", command, blockPattern, result.Decision)
 		}
 	})
 }
 
-func verifyInvariants(t *testing.T, command string, result guard.Result) {
+func guardVerifyInvariants(t *testing.T, command string, result guard.Result) {
 	t.Helper()
 
-	// INV-1: decision must be valid enum.
 	switch result.Decision {
 	case guard.Allow, guard.Deny, guard.Ask:
 	default:
 		t.Fatalf("INV-1: invalid decision %d for %q", result.Decision, command)
 	}
 
-	// INV-2: command preserved.
 	if result.Command != command {
 		t.Fatalf("INV-2: command mismatch got %q want %q", result.Command, command)
 	}
 
-	// INV-3: empty/whitespace command allows.
 	if strings.TrimSpace(command) == "" && result.Decision != guard.Allow {
 		t.Fatalf("INV-3: whitespace command got %s want Allow", result.Decision)
 	}
 
-	// INV-4: nil assessment implies allow and no matches.
 	if result.Assessment == nil {
 		if result.Decision != guard.Allow {
 			t.Fatalf("INV-4: nil assessment with %s decision", result.Decision)
@@ -90,12 +92,10 @@ func verifyInvariants(t *testing.T, command string, result guard.Result) {
 		}
 	}
 
-	// INV-5: matches implies assessment.
 	if len(result.Matches) > 0 && result.Assessment == nil {
 		t.Fatalf("INV-5: %d matches but nil assessment", len(result.Matches))
 	}
 
-	// INV-6: assessment severity valid.
 	if result.Assessment != nil {
 		switch result.Assessment.Severity {
 		case guard.Indeterminate, guard.Low, guard.Medium, guard.High, guard.Critical:
@@ -104,7 +104,6 @@ func verifyInvariants(t *testing.T, command string, result guard.Result) {
 		}
 	}
 
-	// INV-7: match fields populated.
 	for i, m := range result.Matches {
 		if m.Pack == "" {
 			t.Fatalf("INV-7: match %d empty pack", i)
@@ -114,32 +113,30 @@ func verifyInvariants(t *testing.T, command string, result guard.Result) {
 		}
 	}
 
-	// INV-8: oversized input should not escalate to high confidence severity.
 	if len(command) > parse.MaxInputSize && result.Assessment != nil && result.Assessment.Severity > guard.Indeterminate {
-		// This check is intentionally weak because current pipeline does not expose MaxCommandBytes separately.
 		t.Fatalf("INV-8: oversized input (%d) got severity %s", len(command), result.Assessment.Severity)
 	}
 }
 
-func prefixMatchesPattern(command, pattern string) bool {
+func guardPrefixMatchesPattern(command, pattern string) bool {
 	if pattern == "" {
 		return false
 	}
 	for _, sep := range []string{"&&", "||", ";", "|", "&"} {
 		if i := strings.Index(command, sep); i >= 0 {
-			return globMatchProduction(pattern, strings.TrimSpace(command[:i]))
+			return guardGlobMatchProduction(pattern, strings.TrimSpace(command[:i]))
 		}
 	}
 	return false
 }
 
-func containsSeparators(command string) bool {
+func guardContainsSeparators(command string) bool {
 	return strings.Contains(command, ";") ||
 		strings.Contains(command, "|") ||
 		strings.Contains(command, "&")
 }
 
-func globMatchProduction(pattern, command string) bool {
+func guardGlobMatchProduction(pattern, command string) bool {
 	p := strings.TrimSpace(pattern)
 	c := strings.TrimSpace(command)
 	if p == "" {

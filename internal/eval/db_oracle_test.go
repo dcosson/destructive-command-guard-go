@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
 )
 
@@ -28,7 +29,7 @@ func TestDbComparisonUpstreamRust(t *testing.T) {
 	}
 
 	pipeline := NewPipeline(packs.DefaultRegistry)
-	cfg := Config{Policy: interactivePolicy{}}
+	cfg := Config{Policy: evalcore.InteractivePolicy()}
 
 	corpus := []string{
 		// PostgreSQL
@@ -189,9 +190,9 @@ func TestDbComparisonPolicyMonotonicity(t *testing.T) {
 	t.Parallel()
 
 	pipeline := NewPipeline(packs.DefaultRegistry)
-	strictCfg := Config{Policy: strictPolicy{}}
-	interCfg := Config{Policy: interactivePolicy{}}
-	permCfg := Config{Policy: permissivePolicy{}}
+	strictCfg := Config{Policy: evalcore.StrictPolicy()}
+	interCfg := Config{Policy: evalcore.InteractivePolicy()}
+	permCfg := Config{Policy: evalcore.PermissivePolicy()}
 
 	restrictiveness := map[Decision]int{
 		DecisionAllow: 0,

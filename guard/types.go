@@ -1,140 +1,51 @@
 package guard
 
-// Severity levels for destructive command assessments.
-type Severity int
+import "github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 
-const (
-	Indeterminate Severity = iota
-	Low
-	Medium
-	High
-	Critical
+// Type aliases — re-export evalcore types as the public API.
+type (
+	Severity    = evalcore.Severity
+	Confidence  = evalcore.Confidence
+	Decision    = evalcore.Decision
+	Assessment  = evalcore.Assessment
+	Match       = evalcore.Match
+	WarningCode = evalcore.WarningCode
+	Warning     = evalcore.Warning
+	Result      = evalcore.Result
+	Policy      = evalcore.Policy
 )
 
-func (s Severity) String() string {
-	switch s {
-	case Indeterminate:
-		return "Indeterminate"
-	case Low:
-		return "Low"
-	case Medium:
-		return "Medium"
-	case High:
-		return "High"
-	case Critical:
-		return "Critical"
-	default:
-		return "Unknown"
-	}
-}
+// Severity levels for destructive command assessments.
+const (
+	Indeterminate = evalcore.Indeterminate
+	Low           = evalcore.Low
+	Medium        = evalcore.Medium
+	High          = evalcore.High
+	Critical      = evalcore.Critical
+)
 
 // Confidence in pattern match accuracy.
-type Confidence int
-
 const (
-	ConfidenceLow Confidence = iota
-	ConfidenceMedium
-	ConfidenceHigh
+	ConfidenceLow    = evalcore.ConfidenceLow
+	ConfidenceMedium = evalcore.ConfidenceMedium
+	ConfidenceHigh   = evalcore.ConfidenceHigh
 )
-
-func (c Confidence) String() string {
-	switch c {
-	case ConfidenceLow:
-		return "Low"
-	case ConfidenceMedium:
-		return "Medium"
-	case ConfidenceHigh:
-		return "High"
-	default:
-		return "Unknown"
-	}
-}
 
 // Decision is the policy output.
-type Decision int
-
 const (
-	Allow Decision = iota
-	Deny
-	Ask
+	Allow = evalcore.Allow
+	Deny  = evalcore.Deny
+	Ask   = evalcore.Ask
 )
 
-func (d Decision) String() string {
-	switch d {
-	case Allow:
-		return "Allow"
-	case Deny:
-		return "Deny"
-	case Ask:
-		return "Ask"
-	default:
-		return "Unknown"
-	}
-}
-
-// Assessment is the raw matching result before policy conversion.
-type Assessment struct {
-	Severity   Severity
-	Confidence Confidence
-}
-
-// Match represents one destructive pattern match.
-type Match struct {
-	Pack         string
-	Rule         string
-	Severity     Severity
-	Confidence   Confidence
-	Reason       string
-	Remediation  string
-	EnvEscalated bool
-}
-
-type WarningCode int
-
+// Warning codes.
 const (
-	WarnPartialParse WarningCode = iota
-	WarnInlineDepthExceeded
-	WarnInputTruncated
-	WarnExpansionCapped
-	WarnExtractorPanic
-	WarnCommandSubstitution
-	WarnMatcherPanic
-	WarnUnknownPackID
+	WarnPartialParse        = evalcore.WarnPartialParse
+	WarnInlineDepthExceeded = evalcore.WarnInlineDepthExceeded
+	WarnInputTruncated      = evalcore.WarnInputTruncated
+	WarnExpansionCapped     = evalcore.WarnExpansionCapped
+	WarnExtractorPanic      = evalcore.WarnExtractorPanic
+	WarnCommandSubstitution = evalcore.WarnCommandSubstitution
+	WarnMatcherPanic        = evalcore.WarnMatcherPanic
+	WarnUnknownPackID       = evalcore.WarnUnknownPackID
 )
-
-func (w WarningCode) String() string {
-	switch w {
-	case WarnPartialParse:
-		return "PartialParse"
-	case WarnInlineDepthExceeded:
-		return "InlineDepthExceeded"
-	case WarnInputTruncated:
-		return "InputTruncated"
-	case WarnExpansionCapped:
-		return "ExpansionCapped"
-	case WarnExtractorPanic:
-		return "ExtractorPanic"
-	case WarnCommandSubstitution:
-		return "CommandSubstitution"
-	case WarnMatcherPanic:
-		return "MatcherPanic"
-	case WarnUnknownPackID:
-		return "UnknownPackID"
-	default:
-		return "Unknown"
-	}
-}
-
-type Warning struct {
-	Code    WarningCode
-	Message string
-}
-
-// Result contains the full evaluation output.
-type Result struct {
-	Decision   Decision
-	Assessment *Assessment
-	Matches    []Match
-	Warnings   []Warning
-	Command    string
-}

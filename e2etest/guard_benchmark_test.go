@@ -1,10 +1,9 @@
-package guard_test
+package e2etest
 
 import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dcosson/destructive-command-guard-go/e2etest"
 	"github.com/dcosson/destructive-command-guard-go/guard"
 )
 
@@ -38,12 +37,12 @@ func BenchmarkEvaluateFullPipeline(b *testing.B) {
 }
 
 func TestBenchmarkBaselineSerialization(t *testing.T) {
-	results := []e2etest.BenchResult{
+	results := []BenchResult{
 		{Name: "BenchmarkEvaluateFullPipeline/git_force", NsPerOp: 100, AllocsPerOp: 10, BytesPerOp: 320},
 		{Name: "BenchmarkEvaluateFullPipeline/safe_echo", NsPerOp: 50, AllocsPerOp: 5, BytesPerOp: 128},
 	}
 	path := filepath.Join(t.TempDir(), "bench", "baseline.json")
-	if err := e2etest.WriteBenchResults(path, results); err != nil {
+	if err := WriteBenchResults(path, results); err != nil {
 		t.Fatalf("WriteBenchResults error: %v", err)
 	}
 }

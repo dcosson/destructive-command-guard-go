@@ -1,78 +1,51 @@
 package eval
 
-// Severity levels in internal evaluation.
-type Severity int
+import "github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 
-const (
-	SeverityIndeterminate Severity = iota
-	SeverityLow
-	SeverityMedium
-	SeverityHigh
-	SeverityCritical
+// Type aliases — these are the same types as evalcore, not new types.
+type (
+	Severity    = evalcore.Severity
+	Confidence  = evalcore.Confidence
+	Decision    = evalcore.Decision
+	Assessment  = evalcore.Assessment
+	Match       = evalcore.Match
+	WarningCode = evalcore.WarningCode
+	Warning     = evalcore.Warning
+	Result      = evalcore.Result
+	Policy      = evalcore.Policy
 )
 
-// Confidence in internal rule matches.
-type Confidence int
-
+// Severity constants with eval-prefixed names for internal use.
 const (
-	ConfidenceLow Confidence = iota
-	ConfidenceMedium
-	ConfidenceHigh
+	SeverityIndeterminate = evalcore.Indeterminate
+	SeverityLow           = evalcore.Low
+	SeverityMedium        = evalcore.Medium
+	SeverityHigh          = evalcore.High
+	SeverityCritical      = evalcore.Critical
 )
 
-// Decision is the internal policy output.
-type Decision int
-
+// Confidence constants.
 const (
-	DecisionAllow Decision = iota
-	DecisionDeny
-	DecisionAsk
+	ConfidenceLow    = evalcore.ConfidenceLow
+	ConfidenceMedium = evalcore.ConfidenceMedium
+	ConfidenceHigh   = evalcore.ConfidenceHigh
 )
 
-// Assessment is the internal aggregate score.
-type Assessment struct {
-	Severity   Severity
-	Confidence Confidence
-}
-
-// Match is one internal rule match.
-type Match struct {
-	Pack         string
-	Rule         string
-	Severity     Severity
-	Confidence   Confidence
-	Reason       string
-	Remediation  string
-	EnvEscalated bool
-}
-
-type WarningCode int
-
+// Decision constants.
 const (
-	WarnPartialParse WarningCode = iota
-	WarnInlineDepthExceeded
-	WarnInputTruncated
-	WarnExpansionCapped
-	WarnExtractorPanic
-	WarnCommandSubstitution
-	WarnMatcherPanic
-	WarnUnknownPackID
+	DecisionAllow = evalcore.Allow
+	DecisionDeny  = evalcore.Deny
+	DecisionAsk   = evalcore.Ask
 )
 
-type Warning struct {
-	Code    WarningCode
-	Message string
-}
-
-type Result struct {
-	Decision   Decision
-	Assessment *Assessment
-	Matches    []Match
-	Warnings   []Warning
-	Command    string
-}
-
-// Policy converts an Assessment to a Decision.
-type Policy interface {
-	Decide(Assessment) Decision
-}
+// Warning code constants.
+const (
+	WarnPartialParse        = evalcore.WarnPartialParse
+	WarnInlineDepthExceeded = evalcore.WarnInlineDepthExceeded
+	WarnInputTruncated      = evalcore.WarnInputTruncated
+	WarnExpansionCapped     = evalcore.WarnExpansionCapped
+	WarnExtractorPanic      = evalcore.WarnExtractorPanic
+	WarnCommandSubstitution = evalcore.WarnCommandSubstitution
+	WarnMatcherPanic        = evalcore.WarnMatcherPanic
+	WarnUnknownPackID       = evalcore.WarnUnknownPackID
+)

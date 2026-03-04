@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
 )
 
@@ -300,7 +301,7 @@ func parseConfidence(s string) Confidence {
 func TestGoldenCorpus(t *testing.T) {
 	t.Parallel()
 	pipeline := NewPipeline(packs.DefaultRegistry)
-	cfg := Config{Policy: interactivePolicy{}}
+	cfg := Config{Policy: evalcore.InteractivePolicy()}
 
 	dir := "testdata/golden"
 	entries := LoadCorpus(t, dir)

@@ -62,7 +62,7 @@ lint:
 # Excludes e2e/stress/security/mutation/comparison suites in e2etest and
 # integration-tagged internal/eval tests.
 test:
-	go test ./cmd/dcg-go ./guard ./internal/envdetect ./internal/eval ./internal/parse ./internal/packs/... -count=1
+	go test ./cmd/dcg-go ./guard ./internal/envdetect ./internal/evalcore ./internal/eval ./internal/parse ./internal/packs/... -count=1
 
 # Integration tests (non-black-box) that are intentionally excluded from
 # the unit loop. Currently includes heavy internal/eval corpus/property suites.
@@ -91,14 +91,12 @@ test-e2e:
 # mutation timeouts. These are CPU and memory intensive.
 test-stress:
 	go test ./e2etest -run '^TestStress' -count=1 -v -timeout 30m
-	go test ./guard -run '^TestStress' -count=1 -v -timeout 10m
 	go test ./cmd/dcg-go -run '^TestStress' -count=1 -v -timeout 10m
 
 # Security tests: fuzz corpus cleanliness, golden file non-execution,
 # subprocess isolation, heap growth bounds, env sensitivity, evasion checks.
 test-security:
 	go test ./e2etest -run '^TestSecurity' -count=1 -v -timeout 15m
-	go test ./guard -run '^TestSecurity' -count=1 -v -timeout 15m
 	go test ./cmd/dcg-go -run '^TestSecurity' -count=1 -v -timeout 15m
 
 # Mutation testing harness: verifies mutation operators and kill rates.
@@ -119,8 +117,7 @@ ifndef UPSTREAM_BINARY
 	@echo "UPSTREAM_BINARY is not set. Skipping comparison tests."
 	@echo "Usage: make test-comparison UPSTREAM_BINARY=/path/to/upstream-dcg"
 else
-	UPSTREAM_BINARY=$(UPSTREAM_BINARY) go test ./e2etest -run '^TestComparison' -count=1 -v
-	UPSTREAM_BINARY=$(UPSTREAM_BINARY) go test ./guard -run '^TestOracle.*Upstream' -count=1 -v
+	UPSTREAM_BINARY=$(UPSTREAM_BINARY) go test ./e2etest -run '^TestComparison|^TestOracle.*Upstream' -count=1 -v
 endif
 
 # --------------------------------------------------------------------------- #
@@ -145,14 +142,12 @@ test-ci-tier3:
 
 # Run all benchmarks with a single iteration (validation mode).
 bench:
-	go test ./guard -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
 	go test ./cmd/dcg-go -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
 	go test -tags=e2e ./internal/eval -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
 	go test ./e2etest -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
 
 # Run benchmarks with full iterations for performance measurement.
 bench-full:
-	go test ./guard -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
 	go test ./cmd/dcg-go -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
 	go test -tags=e2e ./internal/eval -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
 	go test ./e2etest -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5

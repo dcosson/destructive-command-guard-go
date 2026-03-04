@@ -1,4 +1,4 @@
-package guard_test
+package e2etest
 
 import (
 	"slices"

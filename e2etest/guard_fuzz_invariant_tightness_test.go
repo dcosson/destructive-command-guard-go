@@ -1,4 +1,4 @@
-package guard_test
+package e2etest
 
 import (
 	"strings"
@@ -79,14 +79,14 @@ func TestPropertyFuzzInvariantsTightness(t *testing.T) {
 	for _, tc := range broken {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			if violation := firstInvariantViolation(tc.command, tc.result); violation == "" {
+			if violation := guardFirstInvariantViolation(tc.command, tc.result); violation == "" {
 				t.Fatalf("expected an invariant violation for %s", tc.name)
 			}
 		})
 	}
 }
 
-func firstInvariantViolation(command string, result guard.Result) string {
+func guardFirstInvariantViolation(command string, result guard.Result) string {
 	// INV-1: decision must be valid enum.
 	switch result.Decision {
 	case guard.Allow, guard.Deny, guard.Ask:

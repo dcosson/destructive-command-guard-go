@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
 )
 
@@ -46,7 +47,7 @@ func BenchmarkMatchCommand(b *testing.B) {
 		{"compound", "echo start && git push --force && rm -rf /tmp/build"},
 	}
 
-	cfg := Config{Policy: interactivePolicy{}}
+	cfg := Config{Policy: evalcore.InteractivePolicy()}
 	for _, tc := range commands {
 		tc := tc
 		b.Run(tc.name, func(b *testing.B) {

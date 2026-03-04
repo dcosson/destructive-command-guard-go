@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
 )
 
@@ -126,7 +127,7 @@ func BenchmarkSQLitePackMatch(b *testing.B) {
 
 func BenchmarkDbGoldenCorpus(b *testing.B) {
 	pipeline := NewPipeline(packs.DefaultRegistry)
-	cfg := Config{Policy: interactivePolicy{}}
+	cfg := Config{Policy: evalcore.InteractivePolicy()}
 
 	entries := LoadCorpus(b, "testdata/golden")
 	var dbEntries []GoldenEntry
@@ -229,7 +230,7 @@ func TestStressHighVolumeDbCommands(t *testing.T) {
 	}
 
 	pipeline := NewPipeline(packs.DefaultRegistry)
-	cfg := Config{Policy: interactivePolicy{}}
+	cfg := Config{Policy: evalcore.InteractivePolicy()}
 
 	commands := []string{
 		`psql -c "DROP TABLE users"`,

@@ -42,68 +42,18 @@ func Evaluate(command string, opts ...Option) Result {
 	if cfg.policy == nil {
 		cfg.policy = InteractivePolicy()
 	}
-	internal := getPipeline().Run(command, cfg.toInternal())
-	return fromInternalResult(internal)
+	return getPipeline().Run(command, cfg.toInternal())
 }
 
 func (c *evalConfig) toInternal() eval.Config {
 	return eval.Config{
-		Policy:        policyAdapter{policy: c.policy},
+		Policy:        c.policy,
 		Allowlist:     c.allowlist,
 		Blocklist:     c.blocklist,
 		EnabledPacks:  c.enabledPacks,
 		DisabledPacks: c.disabledPacks,
 		CallerEnv:     c.callerEnv,
 	}
-}
-
-type policyAdapter struct {
-	policy Policy
-}
-
-func (a policyAdapter) Decide(in eval.Assessment) eval.Decision {
-	out := a.policy.Decide(Assessment{
-		Severity:   Severity(in.Severity),
-		Confidence: Confidence(in.Confidence),
-	})
-	return eval.Decision(out)
-}
-
-func fromInternalResult(in eval.Result) Result {
-	out := Result{
-		Decision: Decision(in.Decision),
-		Command:  in.Command,
-	}
-	if in.Assessment != nil {
-		out.Assessment = &Assessment{
-			Severity:   Severity(in.Assessment.Severity),
-			Confidence: Confidence(in.Assessment.Confidence),
-		}
-	}
-	if len(in.Matches) > 0 {
-		out.Matches = make([]Match, 0, len(in.Matches))
-		for _, m := range in.Matches {
-			out.Matches = append(out.Matches, Match{
-				Pack:         m.Pack,
-				Rule:         m.Rule,
-				Severity:     Severity(m.Severity),
-				Confidence:   Confidence(m.Confidence),
-				Reason:       m.Reason,
-				Remediation:  m.Remediation,
-				EnvEscalated: m.EnvEscalated,
-			})
-		}
-	}
-	if len(in.Warnings) > 0 {
-		out.Warnings = make([]Warning, 0, len(in.Warnings))
-		for _, w := range in.Warnings {
-			out.Warnings = append(out.Warnings, Warning{
-				Code:    WarningCode(w.Code),
-				Message: w.Message,
-			})
-		}
-	}
-	return out
 }
 
 // PackInfo describes a registered pack.

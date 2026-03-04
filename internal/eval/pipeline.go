@@ -6,19 +6,8 @@ import (
 	"strings"
 
 	"github.com/dcosson/destructive-command-guard-go/internal/envdetect"
+	"github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
-	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/cloud"
-	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/containers"
-	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/core"
-	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/database"
-	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/frameworks"
-	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/infrastructure"
-	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/kubernetes"
-	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/macos"
-	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/personal"
-	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/platform"
-	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/remote"
-	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/secrets"
 	"github.com/dcosson/destructive-command-guard-go/internal/parse"
 )
 
@@ -91,7 +80,7 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 
 	policy := cfg.Policy
 	if policy == nil {
-		policy = interactivePolicy{}
+		policy = evalcore.InteractivePolicy()
 	}
 
 	activePacks, warnings := p.activePacks(cfg)

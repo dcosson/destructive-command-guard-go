@@ -1,4 +1,4 @@
-package guard_test
+package e2etest
 
 import (
 	"bytes"
@@ -15,13 +15,6 @@ import (
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
 )
 
-type testPolicyAdapter struct{ p guard.Policy }
-
-func (a testPolicyAdapter) Decide(in eval.Assessment) eval.Decision {
-	out := a.p.Decide(guard.Assessment{Severity: guard.Severity(in.Severity), Confidence: guard.Confidence(in.Confidence)})
-	return eval.Decision(out)
-}
-
 func TestOracleInternalVsPublicEquivalence(t *testing.T) {
 	pipeline := eval.NewPipeline(packs.DefaultRegistry)
 	commands := []string{
@@ -35,11 +28,12 @@ func TestOracleInternalVsPublicEquivalence(t *testing.T) {
 	for _, cmd := range commands {
 		cmd := cmd
 		t.Run(cmd, func(t *testing.T) {
-			public := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
-			internal := pipeline.Run(cmd, eval.Config{Policy: testPolicyAdapter{p: guard.InteractivePolicy()}})
+			policy := guard.InteractivePolicy()
+			public := guard.Evaluate(cmd, guard.WithPolicy(policy))
+			internal := pipeline.Run(cmd, eval.Config{Policy: policy})
 
-			if int(public.Decision) != int(internal.Decision) {
-				t.Fatalf("decision mismatch command=%q public=%s internal=%d", cmd, public.Decision, internal.Decision)
+			if public.Decision != internal.Decision {
+				t.Fatalf("decision mismatch command=%q public=%s internal=%s", cmd, public.Decision, internal.Decision)
 			}
 			if len(public.Matches) != len(internal.Matches) {
 				t.Fatalf("matches len mismatch command=%q public=%d internal=%d", cmd, len(public.Matches), len(internal.Matches))
@@ -48,8 +42,8 @@ func TestOracleInternalVsPublicEquivalence(t *testing.T) {
 				t.Fatalf("assessment nil mismatch command=%q", cmd)
 			}
 			if public.Assessment != nil && internal.Assessment != nil {
-				if int(public.Assessment.Severity) != int(internal.Assessment.Severity) {
-					t.Fatalf("assessment severity mismatch command=%q public=%s internal=%d", cmd, public.Assessment.Severity, internal.Assessment.Severity)
+				if public.Assessment.Severity != internal.Assessment.Severity {
+					t.Fatalf("assessment severity mismatch command=%q public=%s internal=%s", cmd, public.Assessment.Severity, internal.Assessment.Severity)
 				}
 			}
 		})
@@ -71,7 +65,7 @@ func TestOracleRustComparisonIfAvailable(t *testing.T) {
 		cmd := cmd
 		t.Run(cmd, func(t *testing.T) {
 			goResult := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
-			rustDecision, err := runUpstreamDecision(upstream, cmd)
+			rustDecision, err := guardRunUpstreamDecision(upstream, cmd)
 			if err != nil {
 				t.Fatalf("run upstream: %v", err)
 			}
@@ -85,7 +79,7 @@ func TestOracleRustComparisonIfAvailable(t *testing.T) {
 	}
 }
 
-func runUpstreamDecision(binary, command string) (string, error) {
+func guardRunUpstreamDecision(binary, command string) (string, error) {
 	c := exec.Command(binary, "check", command)
 	var stdout, stderr bytes.Buffer
 	c.Stdout = &stdout
@@ -102,7 +96,7 @@ func runUpstreamDecision(binary, command string) (string, error) {
 		Decision string `json:"decision"`
 	}
 	if json.Unmarshal(stdout.Bytes(), &obj) == nil && obj.Decision != "" {
-		return normalizeDecision(obj.Decision), nil
+		return guardNormalizeDecision(obj.Decision), nil
 	}
 	low := strings.ToLower(out)
 	switch {
@@ -117,7 +111,7 @@ func runUpstreamDecision(binary, command string) (string, error) {
 	}
 }
 
-func normalizeDecision(s string) string {
+func guardNormalizeDecision(s string) string {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "deny":
 		return "Deny"
