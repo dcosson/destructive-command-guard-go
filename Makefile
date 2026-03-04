@@ -59,7 +59,8 @@ lint:
 # --------------------------------------------------------------------------- #
 
 # Fast unit tests. This is what you run most often.
-# Excludes e2e/stress/security/mutation/comparison suites in e2etest and
+# Excludes heavy test suites (property, fault, security, oracle, stress,
+# benchmark, fuzz, mutation, comparison) which live in e2etest/, and
 # integration-tagged internal/eval tests.
 test:
 	go test ./cmd/dcg-go ./guard ./internal/envdetect ./internal/evalcore ./internal/eval ./internal/parse ./internal/packs/... -count=1
@@ -71,7 +72,7 @@ test-integration:
 
 # Same as test but with -race detector enabled. Slower but catches data races.
 test-race:
-	go test ./cmd/dcg-go ./guard ./internal/envdetect ./internal/eval ./internal/parse ./internal/packs/... -count=1 -race
+	go test ./cmd/dcg-go ./guard ./internal/envdetect ./internal/evalcore ./internal/eval ./internal/parse ./internal/packs/... -count=1 -race
 
 # --------------------------------------------------------------------------- #
 # Tests — E2E (builds binary, runs subprocess tests)

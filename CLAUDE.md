@@ -20,10 +20,11 @@ make help           # See all available targets
 cmd/dcg-go/         CLI entry point (hook mode, test mode, packs mode)
 guard/              Public API — guard.Evaluate(command, ...options)
 internal/
+  evalcore/         Shared types (Severity, Decision, Policy, Result, etc.)
   parse/            Tree-sitter shell command parsing and AST analysis
   eval/             Evaluation pipeline — matching, severity, policy decisions
   packs/            Pack definitions (git, filesystem, database, infra, k8s, etc.)
-  e2etest/          Advanced test infrastructure (mutation, comparison, e2e, stress)
+e2etest/            Heavy cross-cutting tests (property, fault, oracle, stress, e2e, etc.)
 scripts/            CI tier scripts
 docs/plans/         Architecture and plan documents
 ```
