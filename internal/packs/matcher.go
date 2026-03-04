@@ -53,6 +53,37 @@ func ArgAt(idx int, value string) MatchFunc {
 	})
 }
 
+// ArgSubsequence matches when all values appear in Args in order.
+// Values do not need to be contiguous.
+func ArgSubsequence(values ...string) MatchFunc {
+	if len(values) == 0 {
+		return MatchFunc(func(Command) bool { return false })
+	}
+	wants := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return MatchFunc(func(Command) bool { return false })
+		}
+		wants = append(wants, strings.ToLower(trimmed))
+	}
+	return MatchFunc(func(cmd Command) bool {
+		if len(cmd.Args) < len(wants) {
+			return false
+		}
+		pos := 0
+		for _, arg := range cmd.Args {
+			if strings.EqualFold(arg, wants[pos]) {
+				pos++
+				if pos == len(wants) {
+					return true
+				}
+			}
+		}
+		return false
+	})
+}
+
 // Flags returns true only if all listed flags are present.
 func Flags(flags ...string) MatchFunc {
 	return MatchFunc(func(cmd Command) bool {

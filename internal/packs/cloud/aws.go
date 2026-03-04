@@ -23,7 +23,7 @@ func awsPack() packs.Pack {
 			{ID: "aws-describe-safe", Match: packs.And(packs.Name("aws"), packs.ArgContains("describe"))},
 		},
 		Destructive: []packs.Rule{
-			{ID: "aws-ec2-terminate", Severity: sevCritical, Confidence: confHigh, EnvSensitive: true, Reason: "EC2 terminate-instances destroys running compute instances", Remediation: "Verify instance IDs and environment before termination", Match: packs.And(packs.Name("aws"), packs.ArgAt(0, "ec2"), packs.ArgAt(1, "terminate-instances"))},
+			{ID: "aws-ec2-terminate", Severity: sevCritical, Confidence: confHigh, EnvSensitive: true, Reason: "EC2 terminate-instances destroys running compute instances", Remediation: "Verify instance IDs and environment before termination", Match: packs.And(packs.Name("aws"), packs.ArgSubsequence("ec2", "terminate-instances"))},
 		},
 	}
 }
