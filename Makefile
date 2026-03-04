@@ -71,7 +71,7 @@ test:
 #   moved into internal/e2etest.
 test-integration:
 	go test -tags=e2e ./internal/e2etest -run '^(TestGoldenCorpus|TestDb)' -count=1
-	go test ./internal/e2etest -run '^(TestProperty|TestOracle|TestParse|TestWarning|TestMemory|TestConcurrentParsingStress|TestGolden(Simple|Compound|Dataflow|ErrorRecovery))' -count=1
+	go test ./internal/e2etest -run '^(TestParse|TestConcurrentParsingStress|TestWarningMessageSafety|TestMemorySafety|TestMemorySoakS2|TestGolden(SimpleCommands|CompoundCommands|Dataflow|ErrorRecovery)|TestOracle(SExpressionDeterminism|TreeSitterCLI|BashDataflowComparison|OverApproximationDocumented)|TestProperty(ExtractOutputConsistency|NormalizeIdempotent|NormalizeStripsPath|DataflowExpansionBounded|FullPipelineNeverPanics|FullPipelineStructured|InlineDetectionDepthBounded|ParseResultBoundaryContract|ParseNeverPanics|ParseNeverPanicsStructured|ParseNeverPanicsAdversarial|ParseNeverPanicsRealWorld|ParseDeterministic|ValidCommandsReturnTree|MaxInputSizeBoundary|ParseRootNodeType))$$' -count=1
 
 # Unit test target with -race detector enabled (same package set as `make test`).
 # Does not include integration/e2e/stress/security/mutation/comparison targets.
