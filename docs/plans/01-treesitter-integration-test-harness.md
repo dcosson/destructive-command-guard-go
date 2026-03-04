@@ -1027,3 +1027,15 @@ No new findings.
 - **Outstanding gaps**:
   - The documented corpus text files (`internal/parse/testdata/commands.txt`, `dataflow_cases.txt`, `inline_scripts.txt`, `error_recovery.txt`) are not present; test data is currently embedded/generated in tests. Severity: P3 (documentation/traceability gap).
   - `inline.golden` is listed in this harness doc but does not exist under `internal/parse/testdata/golden/`. Severity: P3 (documentation-vs-assets mismatch).
+
+---
+## Completion Signoff
+- **Status**: Partial
+- **Date**: 2026-03-04
+- **Branch**: main
+- **Commit**: e9ab0f5
+- **Verified by**: dcg-coder-1
+- **Test verification**: `go test ./internal/parse -count=1` — PASS
+- **Outstanding gaps**: Planned identifiers above are not implemented under the exact documented names; this doc still needs reconciliation from example-name form to actual test inventory.
+- **Deviations from plan**: Several planned test/benchmark identifiers are not present verbatim in code (`TestParseNeverPanics`, `TestParseLongInput`, `TestMemorySoak`, `TestConcurrentParsing`, `BenchmarkParseWithPool`, `BenchmarkParseWithoutPool`). Implemented equivalents exist with renamed scopes/suffixes (for example `TestConcurrentParsingStress`, `TestMemorySoakS2`, `TestPropertyExtractOutputConsistency`).
+- **Additions beyond plan**: Additional parse fuzz coverage exists (`FuzzParseAndExtract`) and parser security/fault suites are broader than the original harness examples.

@@ -3145,3 +3145,15 @@ No new findings.
   - The planned `internal/envdetect` package is absent; environment detection is inlined inside `internal/eval/pipeline.go`. Severity: P2 (package boundary and design divergence).
   - Planned pre-filter design (Aho-Corasick + dynamic candidate selection) is not implemented; current prefilter is lowercase substring scan. Severity: P2 (algorithmic divergence/perf profile mismatch).
   - Planned file/module layout and pack shape differ substantially (for example, no `internal/packs/matcher.go`, no `internal/packs/core/git.go`, and different safe/destructive rule counts from the plan’s test-pack specification). Severity: P2 (implementation drift from design doc).
+
+---
+## Completion Signoff
+- **Status**: Partial
+- **Date**: 2026-03-04
+- **Branch**: main
+- **Commit**: e9ab0f5
+- **Verified by**: dcg-coder-1
+- **Test verification**: `go test -tags=e2e ./internal/eval -run TestGoldenCorpus -count=1` — PASS
+- **Outstanding gaps**: Doc-level API/type/test naming remains out of sync with shipped identifiers; this plan needs a reconciliation pass to map conceptual names to concrete code elements.
+- **Deviations from plan**: The plan documents a class/struct-style matcher API and many named functions/types/tests that are not present verbatim (for example `ArgMatcher`, `FlagMatcher`, `CompositeMatcher`, `KeywordPreFilter`, `TestPipelineAllowlist`). Current implementation uses the shipped `internal/packs` matcher combinator DSL and `internal/eval` pipeline with different concrete identifiers and test naming.
+- **Additions beyond plan**: Implementation now includes broader pack coverage and a root-level `e2etest` harness tier, plus `e2e`-tagged heavy eval suites for separation from unit-loop tests.

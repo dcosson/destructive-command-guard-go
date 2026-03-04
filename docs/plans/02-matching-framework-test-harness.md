@@ -1191,3 +1191,15 @@ No new findings.
   - This harness is written for the plan-02 matcher architecture (parse-driven matcher DSL and envdetect package), but the implemented architecture is materially different (raw-string rule predicates in `internal/eval`/`internal/packs`). Severity: P1 (harness-to-implementation mismatch).
   - Several named harness expectations are not directly realizable against current code boundaries (for example matcher-type-specific coverage like `AnyName`/`ArgContentRegex` in a matcher DSL that is not implemented as documented). Severity: P2 (spec mismatch).
   - Exit criterion "all tests pass with `-race`" for the full relevant suite is not yet evidenced in this signoff pass; only targeted race subsets were validated due a stalled long-running full race invocation in this environment. Severity: P2 (verification completeness gap).
+
+---
+## Completion Signoff
+- **Status**: Partial
+- **Date**: 2026-03-04
+- **Branch**: main
+- **Commit**: e9ab0f5
+- **Verified by**: dcg-coder-1
+- **Test verification**: `go test ./e2etest -run 'Test(Property|Fault|Oracle).*' -count=1` — PASS
+- **Outstanding gaps**: Named harness test/benchmark inventory in this doc does not yet match the relocated/renamed e2etest suite one-to-one and requires doc normalization.
+- **Deviations from plan**: The harness doc's named benchmark/test functions are largely not present verbatim after architecture/test-structure evolution (for example `BenchmarkPipelineAllow`, `TestAnyNameMatcherCoverage`, `TestFaultMatcherPanic`, `TestStressConcurrentPipeline`). Equivalent categories are implemented but distributed under updated suite names and package locations.
+- **Additions beyond plan**: Root-level `e2etest` package is now the primary black-box/stress/mutation/comparison harness with CI tier integration and dedicated Make targets.
