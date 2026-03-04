@@ -107,7 +107,11 @@ func TestStressHighVolumeFuzzSeedRunner(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping high-volume fuzz seed runner in short mode")
 	}
-	seeds := LoadFuzzSeeds(filepath.Join("..", "..", "guard", "testdata", "golden"))
+	root, err := FindModuleRoot()
+	if err != nil {
+		t.Fatalf("FindModuleRoot: %v", err)
+	}
+	seeds := LoadFuzzSeeds(filepath.Join(root, "guard", "testdata", "golden"))
 	if len(seeds) == 0 {
 		t.Fatal("no fuzz seeds loaded")
 	}
@@ -248,7 +252,11 @@ type guardDecisionGoldenEntry struct {
 
 func loadGuardDecisionGoldenEntries(t *testing.T) []guardDecisionGoldenEntry {
 	t.Helper()
-	path := filepath.Join("..", "..", "guard", "testdata", "golden", "commands.txt")
+	root, err := FindModuleRoot()
+	if err != nil {
+		t.Fatalf("FindModuleRoot: %v", err)
+	}
+	path := filepath.Join(root, "guard", "testdata", "golden", "commands.txt")
 	f, err := os.Open(path)
 	if err != nil {
 		t.Fatalf("open decision golden file: %v", err)

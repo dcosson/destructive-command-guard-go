@@ -151,11 +151,15 @@ test-ci-tier3:
 bench:
 	go test ./guard -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
 	go test ./cmd/dcg-go -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
+	go test -tags=e2e ./internal/eval -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
+	go test ./e2etest -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
 
 # Run benchmarks with full iterations for performance measurement.
 bench-full:
 	go test ./guard -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
 	go test ./cmd/dcg-go -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
+	go test -tags=e2e ./internal/eval -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
+	go test ./e2etest -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
 
 # --------------------------------------------------------------------------- #
 # Aggregate targets

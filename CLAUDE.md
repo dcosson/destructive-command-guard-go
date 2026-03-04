@@ -23,7 +23,7 @@ internal/
   parse/            Tree-sitter shell command parsing and AST analysis
   eval/             Evaluation pipeline — matching, severity, policy decisions
   packs/            Pack definitions (git, filesystem, database, infra, k8s, etc.)
-  testharness/      Advanced test infrastructure (mutation, comparison, e2e, stress)
+  e2etest/          Advanced test infrastructure (mutation, comparison, e2e, stress)
 scripts/            CI tier scripts
 docs/plans/         Architecture and plan documents
 ```
@@ -62,8 +62,8 @@ Specifically:
    document the prefix in the table above. Add it to `test-all` if it should
    run in the full suite.
 
-3. **New E2E test** — place it in `internal/testharness/` with a `TestE2E`
-   prefix, or in a dedicated `e2etests/` directory. If it needs external
+3. **New E2E test** — place it in `e2etest/` with a `TestE2E`
+   prefix. If it needs external
    dependencies, add install steps to `make deps`.
 
 4. **New CI tier test** — update the appropriate `scripts/ci_tier*.sh` script
@@ -85,5 +85,5 @@ Specifically:
   imports `internal/eval`). Use the internal API directly in `internal/eval` tests.
 - **Golden files**: stored in `{package}/testdata/golden/`. Use TSV format for
   corpus files, text format for per-pack golden files.
-- **Test helpers**: shared test utilities go in `internal/testharness/`. Per-package
+- **Test helpers**: shared black-box/e2e test utilities go in `e2etest/`. Per-package
   helpers go in `{package}/helpers_test.go` or `{package}/pack_helpers_test.go`.

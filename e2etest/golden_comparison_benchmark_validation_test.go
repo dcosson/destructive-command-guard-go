@@ -53,7 +53,11 @@ func TestGoldenValidationSchemaCoverageFreshness(t *testing.T) {
 }
 
 func TestGoldenDecisionFileSelfConsistency(t *testing.T) {
-	path := filepath.Join("..", "..", "guard", "testdata", "golden", "commands.txt")
+	root, err := FindModuleRoot()
+	if err != nil {
+		t.Fatalf("FindModuleRoot: %v", err)
+	}
+	path := filepath.Join(root, "guard", "testdata", "golden", "commands.txt")
 	f, err := os.Open(path)
 	if err != nil {
 		t.Fatalf("open %s: %v", path, err)
