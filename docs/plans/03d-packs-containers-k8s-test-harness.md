@@ -1051,3 +1051,15 @@ Test harness scaffold files exist and are well-structured (`containers_k8s_prope
 - Reachability map has 4 entries (one per pack stub) vs planned 36 (one per destructive pattern)
 - Two test properties from the plan are not implemented in code: P2 and P6
 - The test harness will activate automatically when packs are registered; no test code changes needed for core coverage (only P2, P6, and reachability map expansion needed)
+
+---
+## Completion Signoff
+- **Status**: Partial
+- **Date**: 2026-03-04
+- **Branch**: main
+- **Commit**: 0831f04
+- **Verified by**: dcg-coder-1
+- **Test verification**: `go test ./e2etest -run 'ContainerK8s' -count=1` — PASS
+- **Outstanding gaps**: Harness doc still references several non-verbatim test names relative to current implementation, requiring a doc normalization pass for exact identifier parity.
+- **Deviations from plan**: Harness execution/package path has moved to `e2etest` from the legacy internal location.
+- **Additions beyond plan**: Cross-pack isolation, security, and benchmark coverage are now aligned with the unified e2etest + CI tier layout.

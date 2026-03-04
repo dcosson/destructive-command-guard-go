@@ -1167,3 +1167,15 @@ Test harness scaffold files exist and are well-structured (`infra_cloud_property
 ### Gaps
 
 The test harness is designed to activate automatically when packs are registered. No test code changes are needed — only the pack implementations.
+
+---
+## Completion Signoff
+- **Status**: Partial
+- **Date**: 2026-03-04
+- **Branch**: main
+- **Commit**: 0831f04
+- **Verified by**: dcg-coder-1
+- **Test verification**: `go test ./e2etest -run 'InfraCloud' -count=1` — PASS
+- **Outstanding gaps**: One-to-one mapping between doc-specified harness identifiers and code identifiers is incomplete (multiple names drifted during implementation/refactors).
+- **Deviations from plan**: Harness location moved from `internal/testharness` to root `e2etest`; all infra/cloud harness execution paths were updated accordingly.
+- **Additions beyond plan**: Additional policy/consistency/benchmark slices cover `cloud.cloudformation` alongside the six primary packs.

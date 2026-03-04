@@ -1970,3 +1970,15 @@ Two plan-specified test properties are absent from test code:
 ### Bead Discrepancy
 
 Beads dcg-ppb.1, dcg-ppb.2, dcg-ppb.3 were all closed on 2026-03-02 but no corresponding pack implementation code exists on main. Work may have been done in an unmerged branch/worktree, or was never completed.
+
+---
+## Completion Signoff
+- **Status**: Partial
+- **Date**: 2026-03-04
+- **Branch**: main
+- **Commit**: 0831f04
+- **Verified by**: dcg-coder-1
+- **Test verification**: `go test ./e2etest -run 'ContainerK8s' -count=1` — PASS
+- **Outstanding gaps**: Doc-level named test identifiers (for example `TestDockerSystemPruneAll`, `TestContainerK8sEnvSensitivity`) are not reflected verbatim in current suite names, despite equivalent semantic coverage.
+- **Deviations from plan**: Final rule inventory and matcher composition follow implemented pack DSL conventions and consolidated registration/import wiring used across all packs.
+- **Additions beyond plan**: Container/k8s coverage is integrated into shared root-level `e2etest` harness, CI tier scripts, and expanded golden corpus infrastructure.
