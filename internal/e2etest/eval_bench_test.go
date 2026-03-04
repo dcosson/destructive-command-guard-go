@@ -1,15 +1,16 @@
-package eval
+package e2etest
 
 import (
 	"strings"
 	"testing"
 
+	"github.com/dcosson/destructive-command-guard-go/internal/eval"
 	"github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
 )
 
 func BenchmarkPreFilter(b *testing.B) {
-	pf := NewPreFilter(packs.DefaultRegistry)
+	pf := eval.NewPreFilter(packs.DefaultRegistry)
 	commands := []struct {
 		name string
 		cmd  string
@@ -34,7 +35,7 @@ func BenchmarkPreFilter(b *testing.B) {
 }
 
 func BenchmarkMatchCommand(b *testing.B) {
-	pipeline := NewPipeline(packs.DefaultRegistry)
+	pipeline := eval.NewPipeline(packs.DefaultRegistry)
 	commands := []struct {
 		name string
 		cmd  string
@@ -47,7 +48,7 @@ func BenchmarkMatchCommand(b *testing.B) {
 		{"compound", "echo start && git push --force && rm -rf /tmp/build"},
 	}
 
-	cfg := Config{Policy: evalcore.InteractivePolicy()}
+	cfg := eval.Config{Policy: evalcore.InteractivePolicy()}
 	for _, tc := range commands {
 		tc := tc
 		b.Run(tc.name, func(b *testing.B) {

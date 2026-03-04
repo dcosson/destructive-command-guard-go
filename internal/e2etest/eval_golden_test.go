@@ -1,6 +1,6 @@
 //go:build e2e
 
-package eval
+package e2etest
 
 import (
 	"bufio"
@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dcosson/destructive-command-guard-go/internal/eval"
 	"github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
 )
@@ -176,7 +177,7 @@ func validateAndAdd(tb testing.TB, path string, e *GoldenEntry, entries *[]Golde
 }
 
 // RunCorpus runs all golden file entries against the pipeline.
-func RunCorpus(t *testing.T, entries []GoldenEntry, pipeline *Pipeline, cfg Config) {
+func RunCorpus(t *testing.T, entries []GoldenEntry, pipeline *eval.Pipeline, cfg eval.Config) {
 	t.Helper()
 	for _, e := range entries {
 		name := e.Description
@@ -186,14 +187,14 @@ func RunCorpus(t *testing.T, entries []GoldenEntry, pipeline *Pipeline, cfg Conf
 		t.Run(name, func(t *testing.T) {
 			result := pipeline.Run(e.Command, cfg)
 
-			wantDecision := parseDecision(e.Decision)
+			wantDecision := parseGoldenDecision(e.Decision)
 			if result.Decision != wantDecision {
 				t.Errorf("%s:%d: command %q: decision = %v, want %s",
 					e.File, e.Line, e.Command, result.Decision, e.Decision)
 			}
 
 			if e.Severity != "" && result.Assessment != nil {
-				wantSev := parseSeverity(e.Severity)
+				wantSev := parseGoldenSeverity(e.Severity)
 				if result.Assessment.Severity != wantSev {
 					t.Errorf("%s:%d: severity = %v, want %s",
 						e.File, e.Line, result.Assessment.Severity, e.Severity)
@@ -201,7 +202,7 @@ func RunCorpus(t *testing.T, entries []GoldenEntry, pipeline *Pipeline, cfg Conf
 			}
 
 			if e.Confidence != "" && result.Assessment != nil {
-				wantConf := parseConfidence(e.Confidence)
+				wantConf := parseGoldenConfidence(e.Confidence)
 				if result.Assessment.Confidence != wantConf {
 					t.Errorf("%s:%d: confidence = %v, want %s",
 						e.File, e.Line, result.Assessment.Confidence, e.Confidence)
@@ -257,42 +258,42 @@ func RunCorpus(t *testing.T, entries []GoldenEntry, pipeline *Pipeline, cfg Conf
 	}
 }
 
-func parseDecision(s string) Decision {
+func parseGoldenDecision(s string) eval.Decision {
 	switch s {
 	case "Allow":
-		return DecisionAllow
+		return eval.DecisionAllow
 	case "Deny":
-		return DecisionDeny
+		return eval.DecisionDeny
 	case "Ask":
-		return DecisionAsk
+		return eval.DecisionAsk
 	}
 	return -1
 }
 
-func parseSeverity(s string) Severity {
+func parseGoldenSeverity(s string) eval.Severity {
 	switch s {
 	case "Critical":
-		return SeverityCritical
+		return eval.SeverityCritical
 	case "High":
-		return SeverityHigh
+		return eval.SeverityHigh
 	case "Medium":
-		return SeverityMedium
+		return eval.SeverityMedium
 	case "Low":
-		return SeverityLow
+		return eval.SeverityLow
 	case "Indeterminate":
-		return SeverityIndeterminate
+		return eval.SeverityIndeterminate
 	}
 	return -1
 }
 
-func parseConfidence(s string) Confidence {
+func parseGoldenConfidence(s string) eval.Confidence {
 	switch s {
 	case "High":
-		return ConfidenceHigh
+		return eval.ConfidenceHigh
 	case "Medium":
-		return ConfidenceMedium
+		return eval.ConfidenceMedium
 	case "Low":
-		return ConfidenceLow
+		return eval.ConfidenceLow
 	}
 	return -1
 }
@@ -300,10 +301,10 @@ func parseConfidence(s string) Confidence {
 // TestGoldenCorpus runs all golden file entries against the pipeline.
 func TestGoldenCorpus(t *testing.T) {
 	t.Parallel()
-	pipeline := NewPipeline(packs.DefaultRegistry)
-	cfg := Config{Policy: evalcore.InteractivePolicy()}
+	pipeline := eval.NewPipeline(packs.DefaultRegistry)
+	cfg := eval.Config{Policy: evalcore.InteractivePolicy()}
 
-	dir := "testdata/golden"
+	dir := filepath.Join("..", "eval", "testdata", "golden")
 	entries := LoadCorpus(t, dir)
 	if len(entries) == 0 {
 		t.Skip("no golden file entries found")

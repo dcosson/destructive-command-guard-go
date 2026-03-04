@@ -1,6 +1,6 @@
 //go:build e2e
 
-package eval
+package e2etest
 
 // Database pack fault injection tests (F1-F3) from test harness plan 03b.
 // F1: Nil/empty/degenerate commands. F2: Pathological regex input. F3: SQL injection strings.

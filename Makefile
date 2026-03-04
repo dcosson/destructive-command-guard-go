@@ -60,15 +60,15 @@ lint:
 
 # Fast unit tests. This is what you run most often.
 # Excludes heavy test suites (property, fault, security, oracle, stress,
-# benchmark, fuzz, mutation, comparison) which live in internal/e2etest/, and
-# integration-tagged internal/eval tests.
+# benchmark, fuzz, mutation, comparison) which live in internal/e2etest/.
 test:
 	go test ./cmd/dcg-go ./guard ./internal/envdetect ./internal/evalcore ./internal/eval ./internal/parse ./internal/packs/... -count=1
 
 # Integration tests (non-black-box) that are intentionally excluded from
-# the unit loop. Currently includes heavy internal/eval corpus/property suites.
+# the unit loop. Includes eval-owned corpus/database suites now located under
+# internal/e2etest and gated behind the e2e build tag.
 test-integration:
-	go test -tags=e2e ./internal/eval -count=1
+	go test -tags=e2e ./internal/e2etest -run '^(TestGoldenCorpus|TestDb)' -count=1
 
 # Unit test target with -race detector enabled (same package set as `make test`).
 # Does not include integration/e2e/stress/security/mutation/comparison targets.

@@ -1,6 +1,6 @@
 //go:build e2e
 
-package eval
+package e2etest
 
 // Database pack security tests (SEC1-SEC4) from test harness plan 03b.
 // SEC1: SQL pattern evasion attempts.

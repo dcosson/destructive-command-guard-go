@@ -1,16 +1,18 @@
 //go:build e2e
 
-package eval
+package e2etest
 
 // Database pack benchmarks (B1-B3) and stress tests (S1-S2) from test harness
 // plan 03b. Measures per-pack matching throughput, regex overhead,
 // and concurrent safety.
 
 import (
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/dcosson/destructive-command-guard-go/internal/eval"
 	"github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
 )
@@ -126,10 +128,10 @@ func BenchmarkSQLitePackMatch(b *testing.B) {
 // --- B2: Database Golden File Corpus Throughput ---
 
 func BenchmarkDbGoldenCorpus(b *testing.B) {
-	pipeline := NewPipeline(packs.DefaultRegistry)
-	cfg := Config{Policy: evalcore.InteractivePolicy()}
+	pipeline := eval.NewPipeline(packs.DefaultRegistry)
+	cfg := eval.Config{Policy: evalcore.InteractivePolicy()}
 
-	entries := LoadCorpus(b, "testdata/golden")
+	entries := LoadCorpus(b, filepath.Join("..", "eval", "testdata", "golden"))
 	var dbEntries []GoldenEntry
 	for _, e := range entries {
 		if strings.HasPrefix(e.File, "testdata/golden/database_") ||
@@ -229,8 +231,8 @@ func TestStressHighVolumeDbCommands(t *testing.T) {
 		t.Skip("stress test")
 	}
 
-	pipeline := NewPipeline(packs.DefaultRegistry)
-	cfg := Config{Policy: evalcore.InteractivePolicy()}
+	pipeline := eval.NewPipeline(packs.DefaultRegistry)
+	cfg := eval.Config{Policy: evalcore.InteractivePolicy()}
 
 	commands := []string{
 		`psql -c "DROP TABLE users"`,

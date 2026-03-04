@@ -1,6 +1,6 @@
 //go:build e2e
 
-package eval
+package e2etest
 
 // Database pack property tests (P3-P7) from test harness plan 03b.
 // P1-P2 are covered by reachability + golden file tests.

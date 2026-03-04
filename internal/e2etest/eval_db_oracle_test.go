@@ -1,6 +1,6 @@
 //go:build e2e
 
-package eval
+package e2etest
 
 // Database pack comparison oracle tests (O1-O3) from test harness plan 03b.
 // O1: Upstream Rust comparison (skips without binary).
@@ -9,9 +9,11 @@ package eval
 
 import (
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/dcosson/destructive-command-guard-go/internal/eval"
 	"github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
 )
@@ -28,8 +30,8 @@ func TestDbComparisonUpstreamRust(t *testing.T) {
 		t.Skip("upstream Rust binary 'destructive-command-guard' not found in PATH")
 	}
 
-	pipeline := NewPipeline(packs.DefaultRegistry)
-	cfg := Config{Policy: evalcore.InteractivePolicy()}
+	pipeline := eval.NewPipeline(packs.DefaultRegistry)
+	cfg := eval.Config{Policy: evalcore.InteractivePolicy()}
 
 	corpus := []string{
 		// PostgreSQL
@@ -64,13 +66,13 @@ func TestDbComparisonUpstreamRust(t *testing.T) {
 		`redis-cli INFO`,
 	}
 
-	decisionStr := func(d Decision) string {
+	decisionStr := func(d eval.Decision) string {
 		switch d {
-		case DecisionAllow:
+		case eval.DecisionAllow:
 			return "Allow"
-		case DecisionDeny:
+		case eval.DecisionDeny:
 			return "Deny"
-		case DecisionAsk:
+		case eval.DecisionAsk:
 			return "Ask"
 		}
 		return "Unknown"
@@ -189,18 +191,18 @@ func TestDbComparisonCrossDatabaseConsistency(t *testing.T) {
 func TestDbComparisonPolicyMonotonicity(t *testing.T) {
 	t.Parallel()
 
-	pipeline := NewPipeline(packs.DefaultRegistry)
-	strictCfg := Config{Policy: evalcore.StrictPolicy()}
-	interCfg := Config{Policy: evalcore.InteractivePolicy()}
-	permCfg := Config{Policy: evalcore.PermissivePolicy()}
+	pipeline := eval.NewPipeline(packs.DefaultRegistry)
+	strictCfg := eval.Config{Policy: evalcore.StrictPolicy()}
+	interCfg := eval.Config{Policy: evalcore.InteractivePolicy()}
+	permCfg := eval.Config{Policy: evalcore.PermissivePolicy()}
 
-	restrictiveness := map[Decision]int{
-		DecisionAllow: 0,
-		DecisionAsk:   1,
-		DecisionDeny:  2,
+	restrictiveness := map[eval.Decision]int{
+		eval.DecisionAllow: 0,
+		eval.DecisionAsk:   1,
+		eval.DecisionDeny:  2,
 	}
 
-	entries := LoadCorpus(t, "testdata/golden")
+	entries := LoadCorpus(t, filepath.Join("..", "eval", "testdata", "golden"))
 	var dbEntries []GoldenEntry
 	for _, e := range entries {
 		if strings.HasPrefix(e.File, "testdata/golden/database_") ||

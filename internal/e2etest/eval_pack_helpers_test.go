@@ -1,4 +1,4 @@
-package eval
+package e2etest
 
 // Shared pack test helpers for database pack tests.
 
