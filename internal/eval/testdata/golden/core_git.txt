@@ -161,46 +161,58 @@ confidence: Medium
 pack: core.git
 rule: git-restore-file
 ---
+# D21: git push --force-with-lease
+command: git push --force-with-lease origin main
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.git
+rule: git-push-force-with-lease
+---
+# D22: git push --force-if-includes
+command: git push --force-if-includes origin main
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.git
+rule: git-push-force-if-includes
+---
 # S1: git push safe
 command: git push origin main
 decision: Allow
 ---
-# S2: git push --force-with-lease
-command: git push --force-with-lease origin main
-decision: Allow
----
-# S3: git branch -d
+# S2: git branch -d
 command: git branch -d merged
 decision: Allow
 ---
-# S4: git reset --soft
+# S3: git reset --soft
 command: git reset --soft HEAD~1
 decision: Allow
 ---
-# S5: git rebase --abort
+# S4: git rebase --abort
 command: git rebase --abort
 decision: Allow
 ---
-# S6: git status
+# S5: git status
 command: git status
 decision: Allow
 ---
-# S7: git log
+# S6: git log
 command: git log --oneline
 decision: Allow
 ---
-# S8: git diff
+# S7: git diff
 command: git diff HEAD~1
 decision: Allow
 ---
-# S9: git restore --staged
+# S8: git restore --staged
 command: git restore --staged app/main.go
 decision: Allow
 ---
-# S10: git fetch
+# S9: git fetch
 command: git fetch origin
 decision: Allow
 ---
-# S11: git switch
+# S10: git switch
 command: git switch main
 decision: Allow

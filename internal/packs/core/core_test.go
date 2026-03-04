@@ -10,34 +10,36 @@ import (
 
 func TestGitPackInventoryAndReachability(t *testing.T) {
 	pk := GitPack()
-	if got := len(pk.Safe); got != 11 {
-		t.Fatalf("safe pattern count = %d, want 11", got)
+	if got := len(pk.Safe); got != 10 {
+		t.Fatalf("safe pattern count = %d, want 10", got)
 	}
-	if got := len(pk.Destructive); got != 20 {
-		t.Fatalf("destructive pattern count = %d, want 20", got)
+	if got := len(pk.Destructive); got != 22 {
+		t.Fatalf("destructive pattern count = %d, want 22", got)
 	}
 
 	hits := map[string]string{
-		"git-push-force":            "git push --force origin main",
-		"git-push-mirror":           "git push --mirror",
-		"git-reset-hard":            "git reset --hard HEAD~1",
-		"git-checkout-discard-all":  "git checkout -- .",
-		"git-rebase":                "git rebase main",
-		"git-clean-force":           "git clean -f",
-		"git-clean-force-dirs":      "git clean -fd",
-		"git-branch-force-delete":   "git branch -D dead-branch",
-		"git-push-delete":           "git push origin --delete old-branch",
-		"git-stash-drop":            "git stash drop stash@{0}",
-		"git-checkout-discard-file": "git checkout -- app/main.go",
-		"git-checkout-dot":          "git checkout .",
-		"git-push-refspec-delete":   "git push origin :old-branch",
-		"git-push-force-refspec":    "git push origin +main:main",
-		"git-restore-worktree-all":  "git restore .",
-		"git-restore-source":        "git restore --source HEAD~2 app/main.go",
-		"git-reflog-expire":         "git reflog expire --expire=now --all",
-		"git-gc-prune":              "git gc --prune=now",
-		"git-filter-branch":         "git filter-branch --tree-filter 'rm secrets.txt' HEAD",
-		"git-restore-file":          "git restore app/main.go",
+		"git-push-force":             "git push --force origin main",
+		"git-push-force-with-lease":  "git push --force-with-lease origin main",
+		"git-push-force-if-includes": "git push --force-if-includes origin main",
+		"git-push-mirror":            "git push --mirror",
+		"git-reset-hard":             "git reset --hard HEAD~1",
+		"git-checkout-discard-all":   "git checkout -- .",
+		"git-rebase":                 "git rebase main",
+		"git-clean-force":            "git clean -f",
+		"git-clean-force-dirs":       "git clean -fd",
+		"git-branch-force-delete":    "git branch -D dead-branch",
+		"git-push-delete":            "git push origin --delete old-branch",
+		"git-stash-drop":             "git stash drop stash@{0}",
+		"git-checkout-discard-file":  "git checkout -- app/main.go",
+		"git-checkout-dot":           "git checkout .",
+		"git-push-refspec-delete":    "git push origin :old-branch",
+		"git-push-force-refspec":     "git push origin +main:main",
+		"git-restore-worktree-all":   "git restore .",
+		"git-restore-source":         "git restore --source HEAD~2 app/main.go",
+		"git-reflog-expire":          "git reflog expire --expire=now --all",
+		"git-gc-prune":               "git gc --prune=now",
+		"git-filter-branch":          "git filter-branch --tree-filter 'rm secrets.txt' HEAD",
+		"git-restore-file":           "git restore app/main.go",
 	}
 
 	for _, rule := range pk.Destructive {
@@ -51,17 +53,16 @@ func TestGitPackInventoryAndReachability(t *testing.T) {
 	}
 
 	safeHits := map[string]string{
-		"git-push-safe":             "git push origin main",
-		"git-push-force-with-lease": "git push --force-with-lease origin main",
-		"git-branch-safe":           "git branch -d merged-branch",
-		"git-reset-safe":            "git reset --soft HEAD~1",
-		"git-rebase-recovery":       "git rebase --abort",
-		"git-status":                "git status",
-		"git-log":                   "git log --oneline -n 5",
-		"git-diff":                  "git diff HEAD~1",
-		"git-restore-staged-safe":   "git restore --staged app/main.go",
-		"git-fetch":                 "git fetch origin",
-		"git-switch-safe":           "git switch main",
+		"git-push-safe":           "git push origin main",
+		"git-branch-safe":         "git branch -d merged-branch",
+		"git-reset-safe":          "git reset --soft HEAD~1",
+		"git-rebase-recovery":     "git rebase --abort",
+		"git-status":              "git status",
+		"git-log":                 "git log --oneline -n 5",
+		"git-diff":                "git diff HEAD~1",
+		"git-restore-staged-safe": "git restore --staged app/main.go",
+		"git-fetch":               "git fetch origin",
+		"git-switch-safe":         "git switch main",
 	}
 
 	for _, rule := range pk.Safe {

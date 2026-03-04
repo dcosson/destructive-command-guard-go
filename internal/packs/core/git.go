@@ -35,24 +35,13 @@ func GitPack() packs.Pack {
 						packs.Flags("--force"),
 						packs.Flags("-f"),
 						packs.Flags("--force-with-lease"),
+						packs.Flags("--force-if-includes"),
 						packs.Flags("--mirror"),
 						packs.Flags("--delete"),
 						packs.Flags("-d"),
 					)),
 					packs.Not(packs.ArgContentRegex(`^:`)),
 					packs.Not(packs.ArgContentRegex(`^\+`)),
-				),
-			},
-			{
-				ID: "git-push-force-with-lease",
-				Match: packs.And(
-					packs.Name("git"),
-					packs.ArgAt(0, "push"),
-					packs.Flags("--force-with-lease"),
-					packs.Not(packs.Or(
-						packs.Flags("--force"),
-						packs.Flags("-f"),
-					)),
 				),
 			},
 			{
@@ -120,6 +109,30 @@ func GitPack() packs.Pack {
 				Confidence:  confHigh,
 				Reason:      "git push --force overwrites remote history, potentially losing other contributors' commits",
 				Remediation: "Use git push --force-with-lease for safer force pushing",
+			},
+			{
+				ID: "git-push-force-with-lease",
+				Match: packs.And(
+					packs.Name("git"),
+					packs.ArgAt(0, "push"),
+					packs.Flags("--force-with-lease"),
+				),
+				Severity:    sevMedium,
+				Confidence:  confHigh,
+				Reason:      "git push --force-with-lease overwrites remote history with a safety check, but still force-pushes",
+				Remediation: "Review that the lease check is sufficient for your use case",
+			},
+			{
+				ID: "git-push-force-if-includes",
+				Match: packs.And(
+					packs.Name("git"),
+					packs.ArgAt(0, "push"),
+					packs.Flags("--force-if-includes"),
+				),
+				Severity:    sevMedium,
+				Confidence:  confHigh,
+				Reason:      "git push --force-if-includes can overwrite remote history when divergence checks pass",
+				Remediation: "Review that include checks are sufficient for your use case",
 			},
 			{
 				ID:          "git-push-mirror",
