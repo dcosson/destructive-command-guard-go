@@ -2282,3 +2282,15 @@ No new findings.
   - This plan assumes completion across the full planned pack set (notably batch-3 pack docs including personal/macos), but those pack implementations are not all present; corresponding "all packs" hardening claims are therefore not fully satisfiable yet. Severity: P1 (dependency completeness gap).
   - Upstream Rust comparison execution is optional via `UPSTREAM_BINARY`; this signoff pass did not provide evidence of fully pinned, continuously-run upstream parity checks. Severity: P2 (verification completeness gap).
   - Some benchmark wiring differs from plan examples (for example Makefile `bench` targets currently emphasize `guard`/`cmd` only), so per-stage benchmark execution is only partially aligned with the doc narrative. Severity: P2 (plan/automation drift).
+
+---
+## Completion Signoff
+- **Status**: Partial
+- **Date**: 2026-03-04
+- **Branch**: main
+- **Commit**: 6f649d3
+- **Verified by**: dcg-coder-1
+- **Test verification**: `make test` — PASS
+- **Outstanding gaps**: Broad e2etest security sweep currently reproduces two subcommand-evasion failures in `TestSecuritySubcommandEvasion` (`aws --profile ... terminate-instances`, `gcloud --project ... projects delete`) indicating flag-interposition detection gaps for infra/cloud commands.
+- **Deviations from plan**: Test harness package layout has moved to root-level `e2etest` and heavy `internal/eval` suites are `e2e`-tagged, so many documented paths/examples under legacy layout no longer match verbatim.
+- **Additions beyond plan**: `make bench` now exercises `guard`, `cmd/dcg-go`, `internal/eval` (with `-tags=e2e`), and `e2etest` benchmark suites in one target.
