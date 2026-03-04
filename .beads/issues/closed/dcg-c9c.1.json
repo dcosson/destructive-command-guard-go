@@ -1,0 +1,67 @@
+{
+  "id": "dcg-c9c.1",
+  "title": "Parser-matcher integration: wire ExtractedCommand into eval pipeline + builder DSL + safe-pattern evaluation",
+  "description": "FOUNDATIONAL TASK — everything else depends on this.\n\nThree tightly coupled changes that fix the core architecture gap identified across plans 02, 03a, 03b:\n\n1. **Parser-matcher integration**: The eval pipeline (internal/eval/pipeline.go) currently passes raw command strings to Rule.Match(command string). It must instead call the tree-sitter parser to get an ExtractedCommand, then pass that to matchers. Change MatchFunc from func(command string) bool to func(cmd parse.ExtractedCommand) bool. Update all existing rules in internal/packs/ to use structured matching on ExtractedCommand fields (Name, Args, Flags) instead of strings.Contains.\n\n2. **Matcher DSL / builder pattern**: Implement the planned matcher types: CommandMatcher interface, NameMatcher, FlagMatcher, ArgMatcher, CompositeMatcher. Implement builder functions: packs.Name(), packs.ArgAt(), packs.Flags(), packs.And(), packs.Or(), packs.Not(). These are specified in plan 02-matching-framework.md.\n\n3. **Safe-pattern evaluation**: The pipeline currently only evaluates destructive rules. Implement safe rule evaluation with short-circuit semantics: if a command matches a safe pattern, skip destructive evaluation for that pack. This is a P0 gap in plans 03a and 03b.\n\nAffects: internal/eval/pipeline.go, internal/packs/registry.go, internal/packs/defaults.go, internal/packs/database.go, new files for matcher types.\nTests: Update all existing tests, add matcher DSL unit tests, safe-pattern interaction tests.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-c9c",
+  "dependencies": [
+    {
+      "id": "dcg-c9c",
+      "type": "parent-child"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-c9c.2",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-c9c.3",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-c9c.4",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-c9c.5",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-c9c.6",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-c9c.7",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-c9c.8",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-c9c.9",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "assignee": "dcg-coder-1",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Completed. Parser-matcher integration, builder DSL, safe-pattern short-circuiting, and core-pack registration regression fix (69fb99c) are in. Remaining non-blocking follow-ups tracked under dcg-c9c.9: allocation regression + env-escalation golden compatibility.",
+      "created_at": "2026-03-03T20:19:20.056079-08:00"
+    }
+  ],
+  "created_at": "2026-03-03T15:11:41.633954-08:00",
+  "updated_at": "2026-03-03T20:19:20.075648-08:00",
+  "closed_at": "2026-03-03T20:19:20.075648-08:00",
+  "close_reason": "Closed"
+}

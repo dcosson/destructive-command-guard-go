@@ -1,0 +1,43 @@
+{
+  "id": "dcg-c9c.2",
+  "title": "Envdetect package extraction + Aho-Corasick pre-filter",
+  "description": "Two infrastructure improvements specified in plan 02:\n\n1. **Envdetect package**: Extract environment detection logic from internal/eval/pipeline.go into a dedicated internal/envdetect package. This enables structured environment-aware matching (CI detection, container detection, etc.) as specified in the architecture.\n\n2. **Aho-Corasick pre-filter**: Replace the current lowercase substring scan pre-filter with the planned Aho-Corasick multi-pattern matcher for candidate selection. This is an algorithmic improvement for performance when many pack rules are registered.\n\nThese are P2 gaps from plan 02-matching-framework. Not blocking for pack implementations but important for matching the planned architecture.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-c9c",
+  "dependencies": [
+    {
+      "id": "dcg-c9c",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-c9c.1",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "assignee": "dcg-coder-2",
+  "comments": [
+    {
+      "id": 1,
+      "author": "dcg-coder-2",
+      "text": "Implementation complete (0556d7e). envdetect package + Aho-Corasick pre-filter + pipeline integration. All existing tests pass. Awaiting review.",
+      "created_at": "2026-03-03T20:08:09.340777-08:00"
+    },
+    {
+      "id": 2,
+      "author": "Danny Cosson",
+      "text": "Completed in commit 0556d7e. Reviewed by dcg-reviewer.",
+      "created_at": "2026-03-03T20:21:37.272486-08:00"
+    }
+  ],
+  "created_at": "2026-03-03T15:11:48.434189-08:00",
+  "updated_at": "2026-03-03T20:21:37.282445-08:00",
+  "closed_at": "2026-03-03T20:21:37.282445-08:00",
+  "close_reason": "Closed"
+}

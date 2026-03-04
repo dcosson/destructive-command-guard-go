@@ -1,0 +1,53 @@
+{
+  "id": "dcg-c9c.4",
+  "title": "Database pack restructuring (03b): per-provider files + matcher DSL migration + gaps",
+  "description": "Restructure database packs to match plan 03b-packs-database.md.\n\n1. **Restructure**: Move from flat internal/packs/database.go to internal/packs/database/ directory with per-provider files (postgres.go, mysql.go, redis.go, mongodb.go, sqlite.go, generic.go).\n\n2. **Matcher DSL migration**: Convert all raw string matching to use builder DSL over ExtractedCommand (SQLContent, ArgAtFold, CheckFlagValues matcher models from plan).\n\n3. **Fix mongos gap**: Pack keywords include mongos but destructive matchers only check mongosh/mongo. Implement full mongos support.\n\n4. **Golden files + tests**: Per-provider golden file entries and unit tests.\n\nFollows the pattern established by core pack expansion (task 3).",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-c9c",
+  "dependencies": [
+    {
+      "id": "dcg-c9c",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-c9c.1",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-c9c.3",
+      "type": "blocks"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-c9c.9",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "assignee": "dcg-coder-1",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Implementation complete in local commit b5c8558: moved database packs into internal/packs/database/* with init() registration, wired blank imports in guard/eval, added mongos destructive coverage in golden corpus and property test. Awaiting reviewer validation; push currently blocked in runtime (uid 501 auth).",
+      "created_at": "2026-03-03T20:28:23.122338-08:00"
+    },
+    {
+      "id": 2,
+      "author": "Danny Cosson",
+      "text": "Reviewed by dcg-reviewer, no issues found. Completed in commit b5c8558.",
+      "created_at": "2026-03-03T20:29:09.200743-08:00"
+    }
+  ],
+  "created_at": "2026-03-03T15:12:00.096942-08:00",
+  "updated_at": "2026-03-03T20:29:09.218035-08:00",
+  "closed_at": "2026-03-03T20:29:09.218035-08:00",
+  "close_reason": "Closed"
+}

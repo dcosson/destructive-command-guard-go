@@ -1,0 +1,45 @@
+{
+  "id": "dcg-c9c.9",
+  "title": "Test infrastructure fixes: benchmark stability + CI tier alignment + test harness updates",
+  "description": "Fix test infrastructure gaps found across multiple signoff docs.\n\n1. **Benchmark stability (P1)**: TestBenchmarkStability in internal/testharness is failing, causing 'make test' to be red. Diagnose and fix the instability. This blocks the full-suite pass criterion for plans 03a and 03b.\n\n2. **CI tier alignment**: Current scripts/ci_tier1.sh/tier2.sh/tier3.sh target different test subsets than what plan docs specify. Align the tier scripts with the P/E/F/SEC/O category mapping from plans, or update plans to match reality.\n\n3. **Test harness updates**: After the parser-matcher integration (task 1) and core pack expansion (task 3) are done, update test harnesses for plans 01, 02, 03a, 03b to match the new architecture:\n   - 01-test-harness: Add missing corpus text files and golden files referenced in doc\n   - 02-test-harness: Update to test actual matcher DSL types instead of planned-but-never-implemented ones\n   - 03a-test-harness: Add core-specific golden files, update safe-pattern tests\n   - 03b-test-harness: Update CheckFlagValues/ArgContentMatcher test references\n\n4. **Test command alignment**: Ensure bench Makefile targets cover all pack benchmark suites, not just guard/cmd.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-c9c",
+  "dependencies": [
+    {
+      "id": "dcg-c9c",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-c9c.1",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-c9c.3",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-c9c.4",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "assignee": "dcg-coder-1",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Reviewed by dcg-reviewer, no findings. Env-escalation golden + allocation budget fixes verified. Completed in commits aaa6ff3 and f8621ae.",
+      "created_at": "2026-03-03T22:49:22.842267-08:00"
+    }
+  ],
+  "created_at": "2026-03-03T15:12:24.829995-08:00",
+  "updated_at": "2026-03-03T22:49:22.854277-08:00",
+  "closed_at": "2026-03-03T22:49:22.854277-08:00",
+  "close_reason": "Closed"
+}

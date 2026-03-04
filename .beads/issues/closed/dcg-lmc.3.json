@@ -1,0 +1,33 @@
+{
+  "id": "dcg-lmc.3",
+  "title": "Signoff: Packs infra + containers + other (03c, 03d, 03e)",
+  "description": "Run /plan-work-completion-signoff on these docs:\n- docs/plans/03c-packs-infra-cloud.md → internal/packs/ (infra/cloud rules)\n- docs/plans/03c-packs-infra-cloud-test-harness.md → guard/ tests, internal/eval/ tests\n- docs/plans/03d-packs-containers-k8s.md → internal/packs/ (container/k8s rules)\n- docs/plans/03d-packs-containers-k8s-test-harness.md → guard/ tests, internal/eval/ tests\n- docs/plans/03e-packs-other.md → internal/packs/ (frameworks, etc.)\n- docs/plans/03e-packs-other-test-harness.md → guard/ tests, internal/eval/ tests\n\nFor each doc: read the plan thoroughly, compare every specified type/interface/function/algorithm against the actual code, run tests, then add a Completion Signoff section. Report gaps to dcg-scheduler.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-lmc",
+  "dependencies": [
+    {
+      "id": "dcg-lmc",
+      "type": "parent-child"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "assignee": "dcg-coder-2",
+  "comments": [
+    {
+      "id": 1,
+      "author": "Danny Cosson",
+      "text": "Completion signoff done for all 6 docs (03c, 03d, 03e + test harnesses). Committed as ba2048e. 03c: 0/75 rules (0%). 03d: 0/53 rules (0%). 03e: 2/41 rules (~5%). Builder DSL prerequisite not implemented. Test harness skeletons exist but all skip at runtime.",
+      "created_at": "2026-03-03T13:11:52.316406-08:00"
+    }
+  ],
+  "created_at": "2026-03-03T11:40:23.189738-08:00",
+  "updated_at": "2026-03-03T13:13:44.811336-08:00",
+  "closed_at": "2026-03-03T13:13:44.811336-08:00",
+  "close_reason": "Closed"
+}

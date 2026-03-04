@@ -1,0 +1,35 @@
+{
+  "id": "dcg-lmc",
+  "title": "Plan completion signoff",
+  "description": "Verify all 20 implemented plan docs against actual code. Each plan doc is compared feature-by-feature against the implementation to confirm completeness, document deviations, and surface any gaps.",
+  "status": "closed",
+  "priority": 2,
+  "type": "epic",
+  "dependents": [
+    {
+      "id": "dcg-lmc.1",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-lmc.2",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-lmc.3",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-lmc.4",
+      "type": "parent-child"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg"
+  ],
+  "created_at": "2026-03-03T11:39:43.891518-08:00",
+  "updated_at": "2026-03-03T13:13:56.303046-08:00",
+  "closed_at": "2026-03-03T13:13:56.303046-08:00",
+  "close_reason": "Closed"
+}
