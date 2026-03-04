@@ -100,7 +100,7 @@ func FilesystemPack() packs.Pack {
 				Severity:    sevCritical,
 				Confidence:  confHigh,
 				Reason:      "mkfs creates a new filesystem on a device, destroying all existing data on that device",
-				Remediation: "Confirm the target device is intentionally selected and not holding required data before formatting",
+				Remediation: "Use read-only disk inspection commands instead of formatting commands",
 			},
 			{
 				ID: "rm-rf-system",
@@ -149,7 +149,7 @@ func FilesystemPack() packs.Pack {
 				Severity:    sevHigh,
 				Confidence:  confHigh,
 				Reason:      "dd writes directly to devices or files, overwriting existing data without confirmation",
-				Remediation: "Verify the output target is correct before writing",
+				Remediation: "Use cp for file copies instead of raw device writes",
 			},
 			{
 				ID:          "shred-any",
@@ -157,7 +157,7 @@ func FilesystemPack() packs.Pack {
 				Severity:    sevHigh,
 				Confidence:  confHigh,
 				Reason:      "shred overwrites files with random data to prevent recovery",
-				Remediation: "Verify each target file is intended for irreversible deletion before shredding",
+				Remediation: "Move files to archive storage instead of shredding",
 			},
 			{
 				ID: "rm-recursive",
@@ -245,7 +245,7 @@ func FilesystemPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confHigh,
 				Reason:      "truncate -s 0 empties file contents completely",
-				Remediation: "Confirm the target file can be emptied before truncating to zero",
+				Remediation: "Write output to a new file instead of truncating existing files",
 			},
 		},
 	}

@@ -32,7 +32,7 @@ func kubectlPack() packs.Pack {
 				Confidence:   confHigh,
 				EnvSensitive: true,
 				Reason:       "Deleting a namespace removes all resources contained within it",
-				Remediation:  "Confirm namespace target and backup workload/state resources first",
+				Remediation:  "Delete specific resources instead of deleting the namespace",
 				Match: packs.And(
 					packs.Name("kubectl"),
 					packs.ArgAt(0, "delete"),
@@ -45,7 +45,7 @@ func kubectlPack() packs.Pack {
 				Confidence:   confHigh,
 				EnvSensitive: true,
 				Reason:       "Deleting high-impact Kubernetes resources can cause downtime or data loss",
-				Remediation:  "Scale down or stage rollout changes, and verify selectors/resource names before deletion",
+				Remediation:  "Use rollout or scale commands instead of deleting workloads",
 				Match: packs.And(
 					packs.Name("kubectl"),
 					packs.ArgAt(0, "delete"),
@@ -65,7 +65,7 @@ func kubectlPack() packs.Pack {
 				Confidence:   confMedium,
 				EnvSensitive: true,
 				Reason:       "kubectl delete removes targeted resources from the cluster",
-				Remediation:  "Use kubectl get to verify targets and prefer apply-driven rollouts where possible",
+				Remediation:  "Use apply and rollout commands instead of delete",
 				Match: packs.And(
 					packs.Name("kubectl"),
 					packs.ArgAt(0, "delete"),
@@ -77,7 +77,7 @@ func kubectlPack() packs.Pack {
 				Confidence:   confHigh,
 				EnvSensitive: true,
 				Reason:       "kubectl drain evicts workloads from a node and can disrupt running services",
-				Remediation:  "Run drain during maintenance windows and verify PodDisruptionBudgets",
+				Remediation:  "Use cordon to stop new scheduling without evicting workloads",
 				Match: packs.And(
 					packs.Name("kubectl"),
 					packs.ArgAt(0, "drain"),

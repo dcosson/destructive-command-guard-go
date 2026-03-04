@@ -36,24 +36,24 @@ func filesPack() packs.Pack {
 			"Desktop", "Documents", "Downloads", "Pictures", "Music", "Videos", "Mobile Documents",
 		},
 		Destructive: []packs.Rule{
-			{ID: "personal-files-delete", Severity: sevCritical, Confidence: confHigh, Reason: "Destructive command targets a personal file directory", Remediation: "Verify this deletion is intentional", Match: packs.And(
+			{ID: "personal-files-delete", Severity: sevCritical, Confidence: confHigh, Reason: "Command removes content in a personal file directory", Remediation: "Delete explicit files instead of deleting personal directories", Match: packs.And(
 				packs.Or(packs.Name("rm"), packs.Name("shred"), packs.Name("srm"), packs.Name("unlink")),
 				packs.ArgContentRegex(personalPathRe.String()),
 			)},
-			{ID: "personal-files-overwrite", Severity: sevHigh, Confidence: confHigh, Reason: "File operation targets a personal directory and may overwrite files", Remediation: "Use no-clobber flags or verify paths", Match: packs.And(
+			{ID: "personal-files-overwrite", Severity: sevHigh, Confidence: confHigh, Reason: "File operation may overwrite files in a personal directory", Remediation: "Write to a new output path instead of overwriting existing files", Match: packs.And(
 				packs.Or(packs.Name("mv"), packs.Name("cp")),
 				packs.ArgContentRegex(personalPathRe.String()),
 				packs.Not(packs.Or(packs.Flags("-n"), packs.Flags("--no-clobber"))),
 			)},
-			{ID: "personal-files-modify", Severity: sevHigh, Confidence: confMedium, Reason: "Command modifies personal file attributes or content", Remediation: "Verify this modification is intentional", Match: packs.And(
+			{ID: "personal-files-modify", Severity: sevHigh, Confidence: confMedium, Reason: "Command modifies attributes or content in a personal directory", Remediation: "Apply changes to specific files only", Match: packs.And(
 				packs.Or(packs.Name("chmod"), packs.Name("chown"), packs.Name("chgrp"), packs.Name("truncate")),
 				packs.ArgContentRegex(personalPathRe.String()),
 			)},
-			{ID: "personal-files-write", Severity: sevHigh, Confidence: confMedium, Reason: "Command writes to a personal file directory", Remediation: "Verify this write target is correct", Match: packs.And(
+			{ID: "personal-files-write", Severity: sevHigh, Confidence: confMedium, Reason: "Command writes new content into a personal directory", Remediation: "Write to a temporary workspace path instead", Match: packs.And(
 				packs.Or(packs.Name("sed"), packs.Name("tee"), packs.Name("dd")),
 				packs.ArgContentRegex(personalPathRe.String()),
 			)},
-			{ID: "personal-files-access", Severity: sevMedium, Confidence: confMedium, Reason: "Command accesses a personal file directory", Remediation: "Verify this access is intentional", Match: packs.And(
+			{ID: "personal-files-access", Severity: sevMedium, Confidence: confMedium, Reason: "Command reads files in a personal directory", Remediation: "Use project-local files instead of personal directories", Match: packs.And(
 				packs.AnyName(),
 				packs.ArgContentRegex(personalPathRe.String()),
 			)},

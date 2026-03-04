@@ -72,8 +72,8 @@ func systemPack() packs.Pack {
 				packs.Name("fdesetup"),
 				packs.Or(packs.ArgAt(0, "disable"), packs.ArgAt(0, "removeuser"), packs.ArgAt(0, "destroy")),
 			)},
-			{ID: "defaults-delete", Severity: sevHigh, Confidence: confHigh, Reason: "Deleting defaults can break app/system behavior", Remediation: "Inspect values before deleting defaults", Match: packs.And(packs.Name("defaults"), packs.ArgAt(0, "delete"))},
-			{ID: "defaults-write", Severity: sevHigh, Confidence: confMedium, Reason: "Writing defaults changes app/system behavior", Remediation: "Review domain and key before writing", Match: packs.And(packs.Name("defaults"), packs.ArgAt(0, "write"))},
+			{ID: "defaults-delete", Severity: sevHigh, Confidence: confHigh, Reason: "defaults delete removes preference keys and can break app or system behavior", Remediation: "Use defaults read for non-mutating preference inspection", Match: packs.And(packs.Name("defaults"), packs.ArgAt(0, "delete"))},
+			{ID: "defaults-write", Severity: sevHigh, Confidence: confMedium, Reason: "defaults write changes app or system preference behavior", Remediation: "Use defaults read for non-mutating preference inspection", Match: packs.And(packs.Name("defaults"), packs.ArgAt(0, "write"))},
 			{ID: "systemsetup-modify", Severity: sevHigh, Confidence: confMedium, Reason: "systemsetup modifies machine-level configuration", Remediation: "Use getter flags for read-only inspection", Match: packs.And(
 				packs.Name("systemsetup"),
 				packs.Not(packs.Or(

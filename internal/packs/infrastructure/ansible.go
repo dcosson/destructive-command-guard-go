@@ -12,7 +12,7 @@ func ansiblePack() packs.Pack {
 			{ID: "ansible-ping-safe", Match: packs.And(packs.Name("ansible"), packs.Flags("-m"), packs.ArgContains("ping"))},
 		},
 		Destructive: []packs.Rule{
-			{ID: "ansible-delete", Severity: sevHigh, Confidence: confHigh, EnvSensitive: true, Reason: "Ansible command uses absent state to remove managed resources", Remediation: "Verify target hosts and desired state before execution", Match: packs.And(
+			{ID: "ansible-delete", Severity: sevHigh, Confidence: confHigh, EnvSensitive: true, Reason: "Ansible absent state removes managed resources", Remediation: "Use present state to keep resources provisioned", Match: packs.And(
 				packs.Or(packs.Name("ansible"), packs.Name("ansible-playbook")),
 				packs.RawTextContains("state=absent"),
 			)},

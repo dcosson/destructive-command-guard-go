@@ -33,8 +33,8 @@ func dockerPack() packs.Pack {
 				ID:          "docker-system-prune",
 				Severity:    sevHigh,
 				Confidence:  confHigh,
-				Reason:      "Docker resource removal and prune operations delete containers, images, networks, or cached data",
-				Remediation: "Use docker ps/images to inspect targets first and prefer scoped cleanup commands",
+				Reason:      "Docker remove and prune operations delete containers, images, networks, or cached data",
+				Remediation: "Use scoped remove commands instead of broad prune operations",
 				Match: packs.And(
 					packs.Name("docker"),
 					packs.Not(packs.ArgAt(0, "compose")),

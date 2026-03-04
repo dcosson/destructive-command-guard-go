@@ -38,9 +38,9 @@ func githubPack() packs.Pack {
 			{ID: "gh-pr-list-safe", Match: packs.And(packs.Name("gh"), packs.ArgAt(0, "pr"), packs.ArgAt(1, "list"))},
 		},
 		Destructive: []packs.Rule{
-			{ID: "gh-repo-delete", Severity: sevCritical, Confidence: confHigh, Reason: "gh repo delete permanently removes a repository", Remediation: "Confirm archival/backups and owner/repo target before deletion", Match: packs.And(packs.Name("gh"), packs.ArgAt(0, "repo"), packs.ArgAt(1, "delete"), repoTargetAt(2))},
-			{ID: "gh-release-delete", Severity: sevHigh, Confidence: confHigh, Reason: "gh release delete removes published release artifacts", Remediation: "Verify release/tag and downstream distribution dependencies", Match: packs.And(packs.Name("gh"), packs.ArgAt(0, "release"), packs.ArgAt(1, "delete"))},
-			{ID: "gh-issue-pr-close", Severity: sevLow, Confidence: confMedium, Reason: "gh issue/pr close changes workflow state and can disrupt active collaboration", Remediation: "Confirm issue/PR status and team expectations before closing", Match: packs.And(packs.Name("gh"), packs.Or(
+			{ID: "gh-repo-delete", Severity: sevCritical, Confidence: confHigh, Reason: "gh repo delete permanently removes a repository", Remediation: "Archive the repository instead of deleting it", Match: packs.And(packs.Name("gh"), packs.ArgAt(0, "repo"), packs.ArgAt(1, "delete"), repoTargetAt(2))},
+			{ID: "gh-release-delete", Severity: sevHigh, Confidence: confHigh, Reason: "gh release delete removes published release artifacts", Remediation: "Create a superseding release instead of deleting", Match: packs.And(packs.Name("gh"), packs.ArgAt(0, "release"), packs.ArgAt(1, "delete"))},
+			{ID: "gh-issue-pr-close", Severity: sevLow, Confidence: confMedium, Reason: "gh issue and pr close change workflow state", Remediation: "Use labels or comments to defer work without closing", Match: packs.And(packs.Name("gh"), packs.Or(
 				packs.And(packs.ArgAt(0, "issue"), packs.ArgAt(1, "close"), packs.Flags("--yes")),
 				packs.And(packs.ArgAt(0, "pr"), packs.ArgAt(1, "close"), packs.Flags("--yes")),
 			))},

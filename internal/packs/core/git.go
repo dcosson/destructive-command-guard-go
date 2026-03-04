@@ -108,7 +108,7 @@ func GitPack() packs.Pack {
 				Severity:    sevHigh,
 				Confidence:  confHigh,
 				Reason:      "git push --force overwrites remote history, potentially losing other contributors' commits",
-				Remediation: "Use git push --force-with-lease for safer force pushing",
+				Remediation: "Push without force or merge before pushing",
 			},
 			{
 				ID: "git-push-force-with-lease",
@@ -120,7 +120,7 @@ func GitPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confHigh,
 				Reason:      "git push --force-with-lease overwrites remote history with a safety check, but still force-pushes",
-				Remediation: "Review that the lease check is sufficient for your use case",
+				Remediation: "Push without force or merge before pushing",
 			},
 			{
 				ID: "git-push-force-if-includes",
@@ -132,7 +132,7 @@ func GitPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confHigh,
 				Reason:      "git push --force-if-includes can overwrite remote history when divergence checks pass",
-				Remediation: "Review that include checks are sufficient for your use case",
+				Remediation: "Push without force or merge before pushing",
 			},
 			{
 				ID:          "git-push-mirror",
@@ -140,7 +140,7 @@ func GitPack() packs.Pack {
 				Severity:    sevHigh,
 				Confidence:  confHigh,
 				Reason:      "git push --mirror overwrites all remote refs to match local, deleting remote branches not present locally",
-				Remediation: "Use explicit branch pushes instead of --mirror",
+				Remediation: "Push explicit refs instead of mirroring all refs",
 			},
 			{
 				ID:          "git-reset-hard",
@@ -148,7 +148,7 @@ func GitPack() packs.Pack {
 				Severity:    sevHigh,
 				Confidence:  confHigh,
 				Reason:      "git reset --hard discards all uncommitted changes permanently",
-				Remediation: "Use git stash before git reset --hard, or use git reset --soft/--mixed",
+				Remediation: "Use git reset --soft or git reset --mixed",
 			},
 			{
 				ID: "git-checkout-discard-all",
@@ -161,7 +161,7 @@ func GitPack() packs.Pack {
 				Severity:    sevHigh,
 				Confidence:  confHigh,
 				Reason:      "git checkout -- . discards all working directory changes permanently",
-				Remediation: "Use git stash to save changes, or use git checkout -- <specific-file>",
+				Remediation: "Restore only required files with git restore <path>",
 			},
 			{
 				ID: "git-rebase",
@@ -177,7 +177,7 @@ func GitPack() packs.Pack {
 				Severity:    sevHigh,
 				Confidence:  confMedium,
 				Reason:      "git rebase rewrites commit history; rebasing shared branches can lose work for other contributors",
-				Remediation: "Only rebase local, unpublished branches. Use git merge for shared branches.",
+				Remediation: "Use git merge to preserve branch history",
 			},
 			{
 				ID: "git-clean-force",
@@ -189,7 +189,7 @@ func GitPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confHigh,
 				Reason:      "git clean -f permanently deletes untracked files",
-				Remediation: "Use git clean -n (dry run) first to preview what will be deleted",
+				Remediation: "Remove specific paths explicitly with rm <path>",
 			},
 			{
 				ID: "git-clean-force-dirs",
@@ -202,7 +202,7 @@ func GitPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confHigh,
 				Reason:      "git clean -fd permanently deletes untracked files and directories",
-				Remediation: "Use git clean -nd (dry run with directories) first to preview what will be deleted",
+				Remediation: "Remove specific paths explicitly with rm <path>",
 			},
 			{
 				ID: "git-branch-force-delete",
@@ -220,7 +220,7 @@ func GitPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confHigh,
 				Reason:      "git branch -D force-deletes a local branch even if it has unmerged changes",
-				Remediation: "Use git branch -d (lowercase) which refuses to delete unmerged branches",
+				Remediation: "Use git branch -d to delete only merged branches",
 			},
 			{
 				ID: "git-push-delete",
@@ -232,7 +232,7 @@ func GitPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confHigh,
 				Reason:      "git push --delete removes a branch or tag from the remote",
-				Remediation: "Verify the branch/tag name before deleting from remote",
+				Remediation: "Keep the ref and deprecate it through branch policy",
 			},
 			{
 				ID: "git-stash-drop",
@@ -244,7 +244,7 @@ func GitPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confHigh,
 				Reason:      "git stash drop/clear permanently discards stashed changes",
-				Remediation: "Use git stash list to review stashes before dropping",
+				Remediation: "Keep stashes or apply them with git stash apply",
 			},
 			{
 				ID: "git-checkout-discard-file",
@@ -257,7 +257,7 @@ func GitPack() packs.Pack {
 				Severity:    sevLow,
 				Confidence:  confMedium,
 				Reason:      "git checkout -- <file> discards uncommitted changes to specified files",
-				Remediation: "Use git stash to save changes first, or verify you want to discard these specific files",
+				Remediation: "Restore only required files with git restore <path>",
 			},
 			{
 				ID: "git-checkout-dot",
@@ -270,7 +270,7 @@ func GitPack() packs.Pack {
 				Severity:    sevHigh,
 				Confidence:  confHigh,
 				Reason:      "git checkout . discards all working directory changes permanently",
-				Remediation: "Use git stash to save changes, or use git checkout <specific-file>",
+				Remediation: "Restore only required files with git restore <path>",
 			},
 			{
 				ID: "git-push-refspec-delete",
@@ -282,7 +282,7 @@ func GitPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confHigh,
 				Reason:      "git push :branch deletes a remote branch using refspec deletion syntax",
-				Remediation: "Use git push --delete <branch> for clarity, and verify the branch name",
+				Remediation: "Keep the ref and deprecate it through branch policy",
 			},
 			{
 				ID: "git-push-force-refspec",
@@ -294,7 +294,7 @@ func GitPack() packs.Pack {
 				Severity:    sevHigh,
 				Confidence:  confMedium,
 				Reason:      "git push +refspec force-pushes an individual ref, overwriting remote history for that ref",
-				Remediation: "Use git push --force-with-lease for safer force pushing",
+				Remediation: "Push without force or merge before pushing",
 			},
 			{
 				ID: "git-restore-worktree-all",
@@ -306,7 +306,7 @@ func GitPack() packs.Pack {
 				Severity:    sevHigh,
 				Confidence:  confHigh,
 				Reason:      "git restore . discards all working tree changes permanently",
-				Remediation: "Use git stash to save changes first, or restore specific files",
+				Remediation: "Restore only required files with git restore <path>",
 			},
 			{
 				ID: "git-restore-source",
@@ -318,7 +318,7 @@ func GitPack() packs.Pack {
 				Severity:    sevHigh,
 				Confidence:  confMedium,
 				Reason:      "git restore --source overwrites working tree files from a specific commit",
-				Remediation: "Use git stash first, or verify the source commit is correct",
+				Remediation: "Read historical content with git show <commit>:<path>",
 			},
 			{
 				ID: "git-reflog-expire",
@@ -330,7 +330,7 @@ func GitPack() packs.Pack {
 				Severity:    sevHigh,
 				Confidence:  confHigh,
 				Reason:      "git reflog expire removes reflog entries, eliminating the safety net for recovering from git reset --hard and git rebase",
-				Remediation: "Avoid expiring reflogs unless you are certain previous states are no longer needed",
+				Remediation: "Keep reflog entries and rely on default expiration",
 			},
 			{
 				ID: "git-gc-prune",
@@ -342,7 +342,7 @@ func GitPack() packs.Pack {
 				Severity:    sevMedium,
 				Confidence:  confMedium,
 				Reason:      "git gc --prune permanently removes unreachable objects, making recovery from reflog impossible",
-				Remediation: "Use git gc without --prune (default prune age is safer)",
+				Remediation: "Run git gc without explicit prune flags",
 			},
 			{
 				ID: "git-filter-branch",
@@ -356,7 +356,7 @@ func GitPack() packs.Pack {
 				Severity:    sevHigh,
 				Confidence:  confMedium,
 				Reason:      "git filter-branch/filter-repo rewrites entire repository history, modifying all commits",
-				Remediation: "Create a backup branch before running, and verify repository rewrite scope",
+				Remediation: "Use targeted commit edits instead of full history rewrite",
 			},
 			{
 				ID: "git-restore-file",
@@ -370,7 +370,7 @@ func GitPack() packs.Pack {
 				Severity:    sevLow,
 				Confidence:  confMedium,
 				Reason:      "git restore <file> discards uncommitted changes to specified files",
-				Remediation: "Use git stash to save changes first",
+				Remediation: "Restore only required files with git restore <path>",
 			},
 		},
 	}

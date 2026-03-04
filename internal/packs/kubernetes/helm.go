@@ -21,7 +21,7 @@ func helmPack() packs.Pack {
 				Confidence:   confHigh,
 				EnvSensitive: true,
 				Reason:       "helm uninstall removes a release and its managed Kubernetes resources",
-				Remediation:  "Confirm release and namespace targets before uninstalling",
+				Remediation:  "Use helm upgrade to change release state without uninstalling",
 				Match: packs.And(
 					packs.Name("helm"),
 					packs.Or(packs.ArgAt(0, "uninstall"), packs.ArgAt(0, "delete")),
@@ -32,8 +32,8 @@ func helmPack() packs.Pack {
 				Severity:     sevMedium,
 				Confidence:   confHigh,
 				EnvSensitive: true,
-				Reason:       "helm rollback changes live release state and may cause disruption",
-				Remediation:  "Validate target revision and chart compatibility before rollback",
+				Reason:       "helm rollback switches live release state to an earlier revision",
+				Remediation:  "Use helm upgrade to apply forward-only changes",
 				Match: packs.And(
 					packs.Name("helm"),
 					packs.ArgAt(0, "rollback"),

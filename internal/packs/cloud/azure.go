@@ -12,7 +12,7 @@ func azurePack() packs.Pack {
 			{ID: "azure-list-safe", Match: packs.And(packs.Name("az"), packs.ArgContains("list"))},
 		},
 		Destructive: []packs.Rule{
-			{ID: "azure-group-delete", Severity: sevCritical, Confidence: confHigh, EnvSensitive: true, Reason: "az group delete removes all resources in a resource group", Remediation: "Verify group name and subscriptions before deletion", Match: packs.And(packs.Name("az"), packs.ArgAt(0, "group"), packs.ArgAt(1, "delete"))},
+			{ID: "azure-group-delete", Severity: sevCritical, Confidence: confHigh, EnvSensitive: true, Reason: "az group delete removes the resource group and all contained resources", Remediation: "Delete specific resources instead of deleting the group", Match: packs.And(packs.Name("az"), packs.ArgAt(0, "group"), packs.ArgAt(1, "delete"))},
 		},
 	}
 }

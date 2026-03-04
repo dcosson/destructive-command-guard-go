@@ -23,8 +23,8 @@ func composePack() packs.Pack {
 				ID:          "compose-down-volumes",
 				Severity:    sevHigh,
 				Confidence:  confHigh,
-				Reason:      "Compose down/rm/stop tears down or removes service containers and attached resources",
-				Remediation: "Use compose ps and compose logs first, and avoid -v unless volume data can be discarded",
+				Reason:      "Compose down, rm, and stop tear down service containers and attached resources",
+				Remediation: "Use compose restart for service restarts and avoid volume deletion flags",
 				Match: packs.Or(
 					packs.And(
 						packs.Name("docker-compose"),

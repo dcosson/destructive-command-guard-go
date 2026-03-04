@@ -10,20 +10,20 @@ func mongodbPack() packs.Pack {
 		Keywords:    []string{"mongo", "mongosh", "mongos", "mongodump", "mongorestore"},
 		Safe:        []packs.Rule{{ID: "mongodump-safe"}, {ID: "mongosh-readonly-safe"}, {ID: "mongosh-interactive-safe"}},
 		Destructive: []packs.Rule{
-			{ID: "mongo-drop-database", Severity: sevHigh, Confidence: confHigh, Reason: "db.dropDatabase() permanently destroys an entire MongoDB database", Remediation: "Use mongodump to create a backup first. Verify the database name.", EnvSensitive: true, Match: func(cmd packs.Command) bool {
+			{ID: "mongo-drop-database", Severity: sevHigh, Confidence: confHigh, Reason: "db.dropDatabase() permanently removes the database and all collections", Remediation: "Drop specific collections instead of dropping the database", EnvSensitive: true, Match: func(cmd packs.Command) bool {
 				return hasAny(cmd, "mongosh", "mongo", "mongos") && !hasAny(cmd, "mongodump", "mongorestore") && reMongoDropDB.MatchString(cmd.RawText)
 			}},
-			{ID: "mongo-collection-drop", Severity: sevHigh, Confidence: confHigh, Reason: "collection.drop() permanently destroys a MongoDB collection and all its documents", Remediation: "Use mongodump --collection to backup the collection first.", EnvSensitive: true, Match: func(cmd packs.Command) bool {
+			{ID: "mongo-collection-drop", Severity: sevHigh, Confidence: confHigh, Reason: "collection.drop() permanently removes the collection and all documents", Remediation: "Delete only required documents with deleteMany(filter)", EnvSensitive: true, Match: func(cmd packs.Command) bool {
 				return hasAny(cmd, "mongosh", "mongo", "mongos") && !hasAny(cmd, "mongodump", "mongorestore") && reMongoCollDrop.MatchString(cmd.RawText) && !reMongoDropDB.MatchString(cmd.RawText)
 			}},
-			{ID: "mongo-delete-many-all", Severity: sevMedium, Confidence: confHigh, Reason: "deleteMany({}) with empty filter deletes all documents in the collection", Remediation: "Add a filter to target specific documents: deleteMany({field: value})", EnvSensitive: true, Match: func(cmd packs.Command) bool {
+			{ID: "mongo-delete-many-all", Severity: sevMedium, Confidence: confHigh, Reason: "deleteMany({}) with an empty filter removes every document in the collection", Remediation: "Use deleteMany with a restrictive filter", EnvSensitive: true, Match: func(cmd packs.Command) bool {
 				return hasAny(cmd, "mongosh", "mongo", "mongos") && !hasAny(cmd, "mongodump", "mongorestore") && reMongoDelManyAll.MatchString(cmd.RawText)
 			}},
-			{ID: "mongo-remove-all", Severity: sevMedium, Confidence: confHigh, Reason: "remove({}) with empty filter deletes all documents in the collection", Remediation: "Add a query filter: remove({field: value})", EnvSensitive: true, Match: func(cmd packs.Command) bool {
+			{ID: "mongo-remove-all", Severity: sevMedium, Confidence: confHigh, Reason: "remove({}) with an empty filter removes every document in the collection", Remediation: "Use remove with a restrictive filter", EnvSensitive: true, Match: func(cmd packs.Command) bool {
 				return hasAny(cmd, "mongosh", "mongo", "mongos") && !hasAny(cmd, "mongodump", "mongorestore") && reMongoRemoveAll.MatchString(cmd.RawText)
 			}},
-			{ID: "mongorestore-drop", Severity: sevMedium, Confidence: confHigh, Reason: "mongorestore --drop drops existing collections before restoring, losing any data not in the backup", Remediation: "Use mongorestore without --drop to merge instead of replace.", EnvSensitive: true, Match: func(cmd packs.Command) bool { return hasAll(cmd, "mongorestore", "--drop") }},
-			{ID: "mongo-delete-many", Severity: sevMedium, Confidence: confMedium, Reason: "deleteMany() deletes multiple documents matching the filter", Remediation: "Verify the filter matches only intended documents. Use countDocuments() first to check.", EnvSensitive: true, Match: func(cmd packs.Command) bool {
+			{ID: "mongorestore-drop", Severity: sevMedium, Confidence: confHigh, Reason: "mongorestore --drop deletes existing collections before restore", Remediation: "Run mongorestore without --drop", EnvSensitive: true, Match: func(cmd packs.Command) bool { return hasAll(cmd, "mongorestore", "--drop") }},
+			{ID: "mongo-delete-many", Severity: sevMedium, Confidence: confMedium, Reason: "deleteMany() removes multiple documents that match the filter", Remediation: "Use deleteOne for single-document removal", EnvSensitive: true, Match: func(cmd packs.Command) bool {
 				return hasAny(cmd, "mongosh", "mongo", "mongos") && !hasAny(cmd, "mongodump", "mongorestore") && reMongoDeleteMany.MatchString(cmd.RawText) && !reMongoDelManyAll.MatchString(cmd.RawText)
 			}},
 		},

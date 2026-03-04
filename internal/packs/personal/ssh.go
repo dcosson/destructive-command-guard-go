@@ -88,11 +88,11 @@ func sshPack() packs.Pack {
 			)},
 		},
 		Destructive: []packs.Rule{
-			{ID: "ssh-directory-destructive", Severity: sevCritical, Confidence: confHigh, Reason: "Destructive operation targets the SSH directory", Remediation: "Do not modify or delete the .ssh directory", Match: packs.And(
+			{ID: "ssh-directory-destructive", Severity: sevCritical, Confidence: confHigh, Reason: "Destructive operation targets the SSH directory", Remediation: "Leave ~/.ssh unchanged and edit only explicit non-key files", Match: packs.And(
 				packs.Or(packs.Name("rm"), packs.Name("chmod"), packs.Name("mv")),
 				anyArg(isSSHDirArg),
 			)},
-			{ID: "ssh-private-key-access", Severity: sevHigh, Confidence: confHigh, Reason: "Command accesses an SSH private key", Remediation: "Use public keys for configuration, not private keys", Match: packs.And(
+			{ID: "ssh-private-key-access", Severity: sevHigh, Confidence: confHigh, Reason: "Command accesses a private SSH key", Remediation: "Use public key material instead of private key files", Match: packs.And(
 				packs.AnyName(),
 				anyArg(isSSHPrivateKey),
 				packs.Not(anyArg(isSSHPublicKey)),
