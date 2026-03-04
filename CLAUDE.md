@@ -24,7 +24,7 @@ internal/
   parse/            Tree-sitter shell command parsing and AST analysis
   eval/             Evaluation pipeline — matching, severity, policy decisions
   packs/            Pack definitions (git, filesystem, database, infra, k8s, etc.)
-e2etest/            Heavy cross-cutting tests (property, fault, oracle, stress, e2e, etc.)
+internal/e2etest/            Heavy cross-cutting tests (property, fault, oracle, stress, e2e, etc.)
 scripts/            CI tier scripts
 docs/plans/         Architecture and plan documents
 ```
@@ -63,7 +63,7 @@ Specifically:
    document the prefix in the table above. Add it to `test-all` if it should
    run in the full suite.
 
-3. **New E2E test** — place it in `e2etest/` with a `TestE2E`
+3. **New E2E test** — place it in `internal/e2etest/` with a `TestE2E`
    prefix. If it needs external
    dependencies, add install steps to `make deps`.
 
@@ -86,5 +86,5 @@ Specifically:
   imports `internal/eval`). Use the internal API directly in `internal/eval` tests.
 - **Golden files**: stored in `{package}/testdata/golden/`. Use TSV format for
   corpus files, text format for per-pack golden files.
-- **Test helpers**: shared black-box/e2e test utilities go in `e2etest/`. Per-package
+- **Test helpers**: shared black-box/e2e test utilities go in `internal/e2etest/`. Per-package
   helpers go in `{package}/helpers_test.go` or `{package}/pack_helpers_test.go`.

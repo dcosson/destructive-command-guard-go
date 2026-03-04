@@ -60,7 +60,7 @@ lint:
 
 # Fast unit tests. This is what you run most often.
 # Excludes heavy test suites (property, fault, security, oracle, stress,
-# benchmark, fuzz, mutation, comparison) which live in e2etest/, and
+# benchmark, fuzz, mutation, comparison) which live in internal/e2etest/, and
 # integration-tagged internal/eval tests.
 test:
 	go test ./cmd/dcg-go ./guard ./internal/envdetect ./internal/evalcore ./internal/eval ./internal/parse ./internal/packs/... -count=1
@@ -83,7 +83,7 @@ test-race:
 # subprocess. These test the full CLI surface: hook mode, test mode, packs
 # mode, and real-world scenario evaluation.
 test-e2e:
-	go test ./e2etest -run '^TestE2E' -count=1 -v
+	go test ./internal/e2etest -run '^TestE2E' -count=1 -v
 
 # --------------------------------------------------------------------------- #
 # Tests — stress, security, benchmarks (longer-running)
@@ -92,18 +92,18 @@ test-e2e:
 # Stress tests: concurrent evaluation, high-volume fuzzing, memory pressure,
 # mutation timeouts. These are CPU and memory intensive.
 test-stress:
-	go test ./e2etest -run '^TestStress' -count=1 -v -timeout 30m
+	go test ./internal/e2etest -run '^TestStress' -count=1 -v -timeout 30m
 	go test ./cmd/dcg-go -run '^TestStress' -count=1 -v -timeout 10m
 
 # Security tests: fuzz corpus cleanliness, golden file non-execution,
 # subprocess isolation, heap growth bounds, env sensitivity, evasion checks.
 test-security:
-	go test ./e2etest -run '^TestSecurity' -count=1 -v -timeout 15m
+	go test ./internal/e2etest -run '^TestSecurity' -count=1 -v -timeout 15m
 	go test ./cmd/dcg-go -run '^TestSecurity' -count=1 -v -timeout 15m
 
 # Mutation testing harness: verifies mutation operators and kill rates.
 test-mutation:
-	go test ./e2etest -run '^Test(Mutation|DeterministicKnownMutationKill)' -count=1 -v
+	go test ./internal/e2etest -run '^Test(Mutation|DeterministicKnownMutationKill)' -count=1 -v
 
 # --------------------------------------------------------------------------- #
 # Tests — comparison (requires UPSTREAM_BINARY)
@@ -119,7 +119,7 @@ ifndef UPSTREAM_BINARY
 	@echo "UPSTREAM_BINARY is not set. Skipping comparison tests."
 	@echo "Usage: make test-comparison UPSTREAM_BINARY=/path/to/upstream-dcg"
 else
-	UPSTREAM_BINARY=$(UPSTREAM_BINARY) go test ./e2etest -run '^TestComparison|^TestOracle.*Upstream' -count=1 -v
+	UPSTREAM_BINARY=$(UPSTREAM_BINARY) go test ./internal/e2etest -run '^TestComparison|^TestOracle.*Upstream' -count=1 -v
 endif
 
 # --------------------------------------------------------------------------- #
@@ -146,13 +146,13 @@ test-ci-tier3:
 bench:
 	go test ./cmd/dcg-go -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
 	go test -tags=e2e ./internal/eval -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
-	go test ./e2etest -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
+	go test ./internal/e2etest -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
 
 # Run benchmarks with full iterations for performance measurement.
 bench-full:
 	go test ./cmd/dcg-go -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
 	go test -tags=e2e ./internal/eval -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
-	go test ./e2etest -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
+	go test ./internal/e2etest -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
 
 # --------------------------------------------------------------------------- #
 # Aggregate targets

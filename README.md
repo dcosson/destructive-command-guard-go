@@ -156,7 +156,7 @@ internal/
   parse/                Tree-sitter shell parsing and AST analysis
   eval/                 Evaluation pipeline (matching, severity, policy)
   packs/                Pack definitions and registry
-  e2etest/              Test infrastructure (mutation, comparison, e2e, stress)
+  internal/e2etest/              Test infrastructure (mutation, comparison, e2e, stress)
 scripts/                CI tier scripts
 docs/plans/             Architecture and plan documents
 ```
@@ -216,8 +216,8 @@ Tests follow a prefix-based naming convention that maps to Makefile targets:
 
 | Prefix | What it tests | Target |
 |--------|---------------|--------|
-| `TestProperty*` | Invariants across random inputs | `make test-integration` / `e2etest` |
-| `TestFault*` | Error paths and edge cases | `make test-integration` / `e2etest` |
+| `TestProperty*` | Invariants across random inputs | `make test-integration` / `internal/e2etest` |
+| `TestFault*` | Error paths and edge cases | `make test-integration` / `internal/e2etest` |
 | `TestOracle*` | Correctness via cross-checking | `make test` |
 | `TestGolden*` | Golden corpus validation | `make test` |
 | `TestDeterministic*` | Consistency across runs | `make test` |

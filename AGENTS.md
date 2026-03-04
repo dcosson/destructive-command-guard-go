@@ -48,7 +48,7 @@ complete.
 
 5. **Is it an E2E test that builds and runs the binary?**
    - Use the `TestE2E` prefix.
-   - Place it in `e2etest/` (current convention).
+   - Place it in `internal/e2etest/` (current convention).
    - Ensure `make test-e2e` picks it up.
 
 ### Example: adding a new test category
@@ -58,7 +58,7 @@ If you create tests with a new prefix like `TestChaos*`:
 ```makefile
 # In Makefile, add:
 test-chaos:
-	go test ./e2etest -run '^TestChaos' -count=1 -v -timeout 30m
+	go test ./internal/e2etest -run '^TestChaos' -count=1 -v -timeout 30m
 
 # Update test-all:
 test-all: test test-e2e test-stress test-security test-mutation test-chaos bench
@@ -73,7 +73,7 @@ guard/              Public API (guard.Evaluate, policies, options)
 internal/eval/      Evaluation pipeline (DO NOT import guard from tests here)
 internal/packs/     Pack rule definitions
 internal/parse/     Tree-sitter command parsing
-e2etest/           Shared black-box/E2E/stress/mutation/comparison test infrastructure
+internal/e2etest/           Shared black-box/E2E/stress/mutation/comparison test infrastructure
 cmd/dcg-go/         CLI binary
 ```
 
@@ -81,7 +81,7 @@ cmd/dcg-go/         CLI binary
 
 - `guard` imports `internal/eval`, `internal/packs`, `internal/parse`
 - `internal/eval` tests must NOT import `guard` — this creates an import cycle
-- `e2etest` may import `guard` (it's a leaf test package)
+- `internal/e2etest` may import `guard` (it's a leaf test package)
 - `cmd/dcg-go` imports `guard`
 
 ## Git Workflow
