@@ -7,7 +7,6 @@ import (
 
 	"github.com/dcosson/destructive-command-guard-go/internal/envdetect"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
-	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/core"
 	"github.com/dcosson/destructive-command-guard-go/internal/parse"
 )
 
