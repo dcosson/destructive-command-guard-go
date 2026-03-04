@@ -1,0 +1,74 @@
+# Golden file: personal.files and personal.ssh packs
+format: v1
+---
+# D1: personal files delete
+command: rm ~/Desktop/file.txt
+decision: Deny
+severity: Critical
+confidence: High
+pack: personal.files
+rule: personal-files-delete
+---
+# D2: personal files overwrite
+command: cp file.txt ~/Downloads/
+decision: Deny
+severity: High
+confidence: High
+pack: personal.files
+rule: personal-files-overwrite
+---
+# D2 near-miss: no-clobber falls to access
+command: cp -n file.txt ~/Documents/
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: personal.files
+rule: personal-files-access
+---
+# D3: personal files modify
+command: chmod 777 ~/Documents/script.sh
+decision: Deny
+severity: High
+confidence: Medium
+pack: personal.files
+rule: personal-files-modify
+---
+# D4: personal files write
+command: sed -i 's/old/new/' ~/Documents/notes.txt
+decision: Deny
+severity: High
+confidence: Medium
+pack: personal.files
+rule: personal-files-write
+---
+# D5: personal files access
+command: cat "~/Library/Mobile Documents/com~apple~CloudDocs/file.txt"
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: personal.files
+rule: personal-files-access
+---
+# S1: ssh public key access
+command: cat ~/.ssh/id_rsa.pub
+decision: Allow
+---
+# S2: ssh config read
+command: cat ~/.ssh/config
+decision: Allow
+---
+# D1: ssh directory destructive
+command: rm -rf ~/.ssh/
+decision: Deny
+severity: Critical
+confidence: High
+pack: personal.ssh
+rule: ssh-directory-destructive
+---
+# D2: ssh private key access
+command: cat ~/.ssh/id_rsa
+decision: Deny
+severity: High
+confidence: High
+pack: personal.ssh
+rule: ssh-private-key-access

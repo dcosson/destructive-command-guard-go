@@ -1180,3 +1180,107 @@ subshell	platform.github	gh-release-delete	(gh release delete v1.0.0 --yes)
 simple	platform.github	gh-issue-pr-close	gh issue close 42 --yes
 compound	platform.github	gh-issue-pr-close	echo start && gh issue close 42 --yes
 subshell	platform.github	gh-issue-pr-close	(gh issue close 42 --yes)
+# Personal packs coverage (dcg-c9c.8)
+simple	personal.files	personal-files-delete	rm ~/Desktop/file.txt
+compound	personal.files	personal-files-delete	echo start && rm ~/Desktop/file.txt
+subshell	personal.files	personal-files-delete	(rm ~/Desktop/file.txt)
+simple	personal.files	personal-files-overwrite	cp file.txt ~/Downloads/
+compound	personal.files	personal-files-overwrite	echo start && cp file.txt ~/Downloads/
+subshell	personal.files	personal-files-overwrite	(cp file.txt ~/Downloads/)
+simple	personal.files	personal-files-modify	chmod 777 ~/Documents/script.sh
+compound	personal.files	personal-files-modify	echo start && chmod 777 ~/Documents/script.sh
+subshell	personal.files	personal-files-modify	(chmod 777 ~/Documents/script.sh)
+simple	personal.files	personal-files-write	sed -i 's/old/new/' ~/Documents/notes.txt
+compound	personal.files	personal-files-write	echo start && sed -i 's/old/new/' ~/Documents/notes.txt
+subshell	personal.files	personal-files-write	(sed -i 's/old/new/' ~/Documents/notes.txt)
+simple	personal.files	personal-files-access	cat ~/Documents/notes.txt
+compound	personal.files	personal-files-access	echo start && cat ~/Documents/notes.txt
+subshell	personal.files	personal-files-access	(cat ~/Documents/notes.txt)
+simple	personal.ssh	ssh-directory-destructive	rm -rf ~/.ssh/
+compound	personal.ssh	ssh-directory-destructive	echo start && rm -rf ~/.ssh/
+subshell	personal.ssh	ssh-directory-destructive	(rm -rf ~/.ssh/)
+simple	personal.ssh	ssh-private-key-access	cat ~/.ssh/id_rsa
+compound	personal.ssh	ssh-private-key-access	echo start && cat ~/.ssh/id_rsa
+subshell	personal.ssh	ssh-private-key-access	(cat ~/.ssh/id_rsa)
+# macOS packs coverage (dcg-c9c.8)
+simple	macos.communication	osascript-send-message	osascript -e 'tell application "Messages" to send "hello" to buddy "John"'
+compound	macos.communication	osascript-send-message	echo start && osascript -e 'tell application "Messages" to send "hello" to buddy "John"'
+subshell	macos.communication	osascript-send-message	(osascript -e 'tell application "Messages" to send "hello" to buddy "John"')
+simple	macos.communication	osascript-send-email	osascript -e 'tell application "Mail" to make new outgoing message'
+compound	macos.communication	osascript-send-email	echo start && osascript -e 'tell application "Mail" to make new outgoing message'
+subshell	macos.communication	osascript-send-email	(osascript -e 'tell application "Mail" to make new outgoing message')
+simple	macos.communication	osascript-system-events	osascript -e 'tell application "System Events" to keystroke "q" using command down'
+compound	macos.communication	osascript-system-events	echo start && osascript -e 'tell application "System Events" to keystroke "q" using command down'
+subshell	macos.communication	osascript-system-events	(osascript -e 'tell application "System Events" to keystroke "q" using command down')
+simple	macos.communication	osascript-sensitive-app	osascript -e 'tell application "Contacts" to get every person'
+compound	macos.communication	osascript-sensitive-app	echo start && osascript -e 'tell application "Contacts" to get every person'
+subshell	macos.communication	osascript-sensitive-app	(osascript -e 'tell application "Contacts" to get every person')
+simple	macos.communication	shortcuts-run	shortcuts run 'My Shortcut'
+compound	macos.communication	shortcuts-run	echo start && shortcuts run 'My Shortcut'
+subshell	macos.communication	shortcuts-run	(shortcuts run 'My Shortcut')
+simple	macos.communication	automator-run	automator workflow.workflow
+compound	macos.communication	automator-run	echo start && automator workflow.workflow
+subshell	macos.communication	automator-run	(automator workflow.workflow)
+simple	macos.communication	osascript-finder-destructive	osascript -e 'tell application "Finder" to empty trash'
+compound	macos.communication	osascript-finder-destructive	echo start && osascript -e 'tell application "Finder" to empty trash'
+subshell	macos.communication	osascript-finder-destructive	(osascript -e 'tell application "Finder" to empty trash')
+simple	macos.communication	open-terminal	open -a Terminal
+compound	macos.communication	open-terminal	echo start && open -a Terminal
+subshell	macos.communication	open-terminal	(open -a Terminal)
+simple	macos.communication	osascript-jxa-catchall	osascript -l JavaScript -e 'Application("Messages").send("hi")'
+compound	macos.communication	osascript-jxa-catchall	echo start && osascript -l JavaScript -e 'Application("Messages").send("hi")'
+subshell	macos.communication	osascript-jxa-catchall	(osascript -l JavaScript -e 'Application("Messages").send("hi")')
+simple	macos.privacy	keychain-read-password	security find-generic-password -s MyService
+compound	macos.privacy	keychain-read-password	echo start && security find-generic-password -s MyService
+subshell	macos.privacy	keychain-read-password	(security find-generic-password -s MyService)
+simple	macos.privacy	keychain-dump	security dump-keychain
+compound	macos.privacy	keychain-dump	echo start && security dump-keychain
+subshell	macos.privacy	keychain-dump	(security dump-keychain)
+simple	macos.privacy	messages-db-access	sqlite3 ~/Library/Messages/chat.db "SELECT * FROM message"
+compound	macos.privacy	messages-db-access	echo start && sqlite3 ~/Library/Messages/chat.db "SELECT * FROM message"
+subshell	macos.privacy	messages-db-access	(sqlite3 ~/Library/Messages/chat.db "SELECT * FROM message")
+simple	macos.privacy	private-data-access	sqlite3 ~/Library/Safari/History.db
+compound	macos.privacy	private-data-access	echo start && sqlite3 ~/Library/Safari/History.db
+subshell	macos.privacy	private-data-access	(sqlite3 ~/Library/Safari/History.db)
+simple	macos.privacy	spotlight-search	mdfind "tax return"
+compound	macos.privacy	spotlight-search	echo start && mdfind "tax return"
+subshell	macos.privacy	spotlight-search	(mdfind "tax return")
+simple	macos.system	csrutil-disable	csrutil disable
+compound	macos.system	csrutil-disable	echo start && csrutil disable
+subshell	macos.system	csrutil-disable	(csrutil disable)
+simple	macos.system	diskutil-erase	diskutil apfs deleteVolume disk2s1
+compound	macos.system	diskutil-erase	echo start && diskutil apfs deleteVolume disk2s1
+subshell	macos.system	diskutil-erase	(diskutil apfs deleteVolume disk2s1)
+simple	macos.system	launchctl-remove	launchctl remove com.apple.service
+compound	macos.system	launchctl-remove	echo start && launchctl remove com.apple.service
+subshell	macos.system	launchctl-remove	(launchctl remove com.apple.service)
+simple	macos.system	tmutil-delete	tmutil delete /Volumes/Backup/Backups.backupdb
+compound	macos.system	tmutil-delete	echo start && tmutil delete /Volumes/Backup/Backups.backupdb
+subshell	macos.system	tmutil-delete	(tmutil delete /Volumes/Backup/Backups.backupdb)
+simple	macos.system	nvram-clear	nvram -c
+compound	macos.system	nvram-clear	echo start && nvram -c
+subshell	macos.system	nvram-clear	(nvram -c)
+simple	macos.system	nvram-write	nvram boot-args="-v"
+compound	macos.system	nvram-write	echo start && nvram boot-args="-v"
+subshell	macos.system	nvram-write	(nvram boot-args="-v")
+simple	macos.system	nvram-delete	nvram -d boot-args
+compound	macos.system	nvram-delete	echo start && nvram -d boot-args
+subshell	macos.system	nvram-delete	(nvram -d boot-args)
+simple	macos.system	spctl-disable	spctl --master-disable
+compound	macos.system	spctl-disable	echo start && spctl --master-disable
+subshell	macos.system	spctl-disable	(spctl --master-disable)
+simple	macos.system	dscl-delete	dscl . -delete /Users/foo
+compound	macos.system	dscl-delete	echo start && dscl . -delete /Users/foo
+subshell	macos.system	dscl-delete	(dscl . -delete /Users/foo)
+simple	macos.system	fdesetup-disable	fdesetup disable
+compound	macos.system	fdesetup-disable	echo start && fdesetup disable
+subshell	macos.system	fdesetup-disable	(fdesetup disable)
+simple	macos.system	defaults-delete	defaults delete com.apple.finder
+compound	macos.system	defaults-delete	echo start && defaults delete com.apple.finder
+subshell	macos.system	defaults-delete	(defaults delete com.apple.finder)
+simple	macos.system	defaults-write	defaults write com.apple.dock autohide -bool true
+compound	macos.system	defaults-write	echo start && defaults write com.apple.dock autohide -bool true
+subshell	macos.system	defaults-write	(defaults write com.apple.dock autohide -bool true)
+simple	macos.system	systemsetup-modify	systemsetup -settimezone America/New_York
+compound	macos.system	systemsetup-modify	echo start && systemsetup -settimezone America/New_York
+subshell	macos.system	systemsetup-modify	(systemsetup -settimezone America/New_York)

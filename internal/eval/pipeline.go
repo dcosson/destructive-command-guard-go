@@ -12,6 +12,8 @@ import (
 	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/database"
 	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/frameworks"
 	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/kubernetes"
+	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/macos"
+	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/personal"
 	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/platform"
 	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/remote"
 	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/secrets"

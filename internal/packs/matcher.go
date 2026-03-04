@@ -37,6 +37,12 @@ func Name(name string) MatchFunc {
 	})
 }
 
+func AnyName() MatchFunc {
+	return MatchFunc(func(cmd Command) bool {
+		return strings.TrimSpace(cmd.Name) != ""
+	})
+}
+
 func ArgAt(idx int, value string) MatchFunc {
 	want := strings.ToLower(value)
 	return MatchFunc(func(cmd Command) bool {

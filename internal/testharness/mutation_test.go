@@ -20,6 +20,8 @@ var equivalentMutationPrefixes = []string{
 	"containers.",
 	"kubernetes.",
 	"frameworks",
+	"personal.",
+	"macos.",
 	"secrets.",
 	"platform.",
 }
