@@ -1,0 +1,46 @@
+# Golden file: containers.docker pack
+format: v1
+---
+# D1: docker system prune
+command: docker system prune -af
+decision: Deny
+severity: High
+confidence: High
+pack: containers.docker
+rule: docker-system-prune
+---
+# D1: docker rm
+command: docker rm my-container
+decision: Deny
+severity: High
+confidence: High
+pack: containers.docker
+rule: docker-system-prune
+---
+# D1: docker container rm
+command: docker container rm my-container
+decision: Deny
+severity: High
+confidence: High
+pack: containers.docker
+rule: docker-system-prune
+---
+# D1: docker image rm
+command: docker image rm my-image
+decision: Deny
+severity: High
+confidence: High
+pack: containers.docker
+rule: docker-system-prune
+---
+# D1: docker stop
+command: docker stop my-container
+decision: Deny
+severity: High
+confidence: High
+pack: containers.docker
+rule: docker-system-prune
+---
+# Safe: docker ps
+command: docker ps
+decision: Allow

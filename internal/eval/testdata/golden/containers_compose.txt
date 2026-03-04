@@ -1,0 +1,38 @@
+# Golden file: containers.compose pack
+format: v1
+---
+# D1: docker compose down -v
+command: docker compose down -v
+decision: Deny
+severity: High
+confidence: High
+pack: containers.compose
+rule: compose-down-volumes
+---
+# D1: docker-compose down -v
+command: docker-compose down -v
+decision: Deny
+severity: High
+confidence: High
+pack: containers.compose
+rule: compose-down-volumes
+---
+# D1: docker compose rm -f
+command: docker compose rm -f
+decision: Deny
+severity: High
+confidence: High
+pack: containers.compose
+rule: compose-down-volumes
+---
+# D1: docker-compose stop
+command: docker-compose stop
+decision: Deny
+severity: High
+confidence: High
+pack: containers.compose
+rule: compose-down-volumes
+---
+# Safe: compose ps
+command: docker compose ps
+decision: Allow

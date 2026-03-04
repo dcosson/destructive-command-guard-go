@@ -1,0 +1,38 @@
+# Golden file: kubernetes.kubectl pack
+format: v1
+---
+# D1: delete namespace
+command: kubectl delete namespace prod
+decision: Deny
+severity: Critical
+confidence: High
+pack: kubernetes.kubectl
+rule: kubectl-delete-namespace
+---
+# D2: delete deployment
+command: kubectl delete deployment web
+decision: Deny
+severity: High
+confidence: High
+pack: kubernetes.kubectl
+rule: kubectl-delete-workload
+---
+# D3: delete pod catch-all
+command: kubectl delete pod mypod
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: kubernetes.kubectl
+rule: kubectl-delete-resource
+---
+# D4: drain
+command: kubectl drain node-1 --ignore-daemonsets
+decision: Deny
+severity: High
+confidence: High
+pack: kubernetes.kubectl
+rule: kubectl-drain
+---
+# Safe: kubectl get
+command: kubectl get pods
+decision: Allow

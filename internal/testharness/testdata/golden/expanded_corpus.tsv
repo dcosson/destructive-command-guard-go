@@ -1106,3 +1106,28 @@ subshell	core.filesystem	chmod-000	(chmod 000 secret.txt)
 simple	core.filesystem	truncate-zero	truncate -s 0 app.log
 compound	core.filesystem	truncate-zero	echo start && truncate -s 0 app.log
 subshell	core.filesystem	truncate-zero	(truncate -s 0 app.log)
+# Container/Kubernetes pack coverage (dcg-c9c.6)
+simple	containers.docker	docker-system-prune	docker system prune -af
+compound	containers.docker	docker-system-prune	echo start && docker system prune -af
+subshell	containers.docker	docker-system-prune	(docker system prune -af)
+simple	containers.compose	compose-down-volumes	docker compose down -v
+compound	containers.compose	compose-down-volumes	echo start && docker compose down -v
+subshell	containers.compose	compose-down-volumes	(docker compose down -v)
+simple	kubernetes.kubectl	kubectl-delete-namespace	kubectl delete namespace prod
+compound	kubernetes.kubectl	kubectl-delete-namespace	echo start && kubectl delete namespace prod
+subshell	kubernetes.kubectl	kubectl-delete-namespace	(kubectl delete namespace prod)
+simple	kubernetes.kubectl	kubectl-delete-workload	kubectl delete deployment web
+compound	kubernetes.kubectl	kubectl-delete-workload	echo start && kubectl delete deployment web
+subshell	kubernetes.kubectl	kubectl-delete-workload	(kubectl delete deployment web)
+simple	kubernetes.kubectl	kubectl-delete-resource	kubectl delete pod mypod
+compound	kubernetes.kubectl	kubectl-delete-resource	echo start && kubectl delete pod mypod
+subshell	kubernetes.kubectl	kubectl-delete-resource	(kubectl delete pod mypod)
+simple	kubernetes.kubectl	kubectl-drain	kubectl drain node-1 --ignore-daemonsets
+compound	kubernetes.kubectl	kubectl-drain	echo start && kubectl drain node-1 --ignore-daemonsets
+subshell	kubernetes.kubectl	kubectl-drain	(kubectl drain node-1 --ignore-daemonsets)
+simple	kubernetes.helm	helm-uninstall	helm uninstall release
+compound	kubernetes.helm	helm-uninstall	echo start && helm uninstall release
+subshell	kubernetes.helm	helm-uninstall	(helm uninstall release)
+simple	kubernetes.helm	helm-rollback	helm rollback release 2
+compound	kubernetes.helm	helm-rollback	echo start && helm rollback release 2
+subshell	kubernetes.helm	helm-rollback	(helm rollback release 2)

@@ -1,0 +1,30 @@
+# Golden file: kubernetes.helm pack
+format: v1
+---
+# D1: helm uninstall
+command: helm uninstall release
+decision: Deny
+severity: High
+confidence: High
+pack: kubernetes.helm
+rule: helm-uninstall
+---
+# D1: helm delete alias
+command: helm delete release
+decision: Deny
+severity: High
+confidence: High
+pack: kubernetes.helm
+rule: helm-uninstall
+---
+# D2: helm rollback
+command: helm rollback release 2
+decision: Ask
+severity: Medium
+confidence: High
+pack: kubernetes.helm
+rule: helm-rollback
+---
+# Safe: helm list
+command: helm list
+decision: Allow
