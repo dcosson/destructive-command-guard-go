@@ -79,10 +79,12 @@ func (ce *CommandExtractor) walkNodeWithText(node ts.Node, text string, result *
 		cmds, warnings := ce.extractCommandFromChildren(node, text, inPipeline, negated, mergeMode, false)
 		result.Commands = append(result.Commands, cmds...)
 		result.Warnings = append(result.Warnings, warnings...)
+		ce.walkNestedCommandContexts(node, text, result, inPipeline, negated, mergeMode)
 	case "declaration_command":
 		cmds, warnings := ce.extractCommandFromChildren(node, text, inPipeline, negated, mergeMode, true)
 		result.Commands = append(result.Commands, cmds...)
 		result.Warnings = append(result.Warnings, warnings...)
+		ce.walkNestedCommandContexts(node, text, result, inPipeline, negated, mergeMode)
 	case "variable_assignment":
 		ce.handleBareAssignment(text, mergeMode, result)
 	case "pipeline":
@@ -93,6 +95,29 @@ func (ce *CommandExtractor) walkNodeWithText(node ts.Node, text string, result *
 		ce.walkListWithText(node, text, result, inPipeline, negated)
 	default:
 		ce.walkChildrenWithText(node, text, result, inPipeline, negated, false)
+	}
+}
+
+func (ce *CommandExtractor) walkNestedCommandContexts(node ts.Node, text string, result *ParseResult, inPipeline, negated, mergeMode bool) {
+	if node.IsNull() || text == "" {
+		return
+	}
+	texts := reconstructChildTexts(text, node)
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if !child.IsNamed() {
+			continue
+		}
+		childText := ""
+		if i < len(texts) {
+			childText = texts[i]
+		}
+		switch child.Type() {
+		case "command_substitution", "process_substitution":
+			ce.walkNodeWithText(child, childText, result, inPipeline, negated, mergeMode)
+		case "word", "string", "raw_string", "concatenation", "expansion", "simple_expansion":
+			ce.walkNestedCommandContexts(child, childText, result, inPipeline, negated, mergeMode)
+		}
 	}
 }
 

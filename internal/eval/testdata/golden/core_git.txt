@@ -1,0 +1,206 @@
+# Golden file: core.git pack
+format: v1
+---
+# D1: git push --force
+command: git push --force origin main
+decision: Deny
+severity: High
+confidence: High
+pack: core.git
+rule: git-push-force
+---
+# D2: git push --mirror
+command: git push --mirror
+decision: Deny
+severity: High
+confidence: High
+pack: core.git
+rule: git-push-mirror
+---
+# D3: git reset --hard
+command: git reset --hard HEAD~1
+decision: Deny
+severity: High
+confidence: High
+pack: core.git
+rule: git-reset-hard
+---
+# D4: git checkout -- .
+command: git checkout -- .
+decision: Deny
+severity: High
+confidence: High
+pack: core.git
+rule: git-checkout-discard-all
+---
+# D5: git rebase
+decision: Deny
+command: git rebase main
+severity: High
+confidence: Medium
+pack: core.git
+rule: git-rebase
+---
+# D6: git clean -f
+command: git clean -f
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.git
+rule: git-clean-force
+---
+# D7: git clean -fd
+command: git clean -fd
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.git
+rule: git-clean-force-dirs
+---
+# D8: git branch -D
+command: git branch -D old
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.git
+rule: git-branch-force-delete
+---
+# D9: git push --delete
+command: git push origin --delete old
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.git
+rule: git-push-delete
+---
+# D10: git stash drop
+command: git stash drop stash@{0}
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.git
+rule: git-stash-drop
+---
+# D11: git checkout -- file (Low)
+command: git checkout -- app/main.go
+decision: Allow
+severity: Low
+confidence: Medium
+pack: core.git
+rule: git-checkout-discard-file
+---
+# D12: git checkout .
+command: git checkout .
+decision: Deny
+severity: High
+confidence: High
+pack: core.git
+rule: git-checkout-dot
+---
+# D13: git push :branch
+command: git push origin :old
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.git
+rule: git-push-refspec-delete
+---
+# D14: git push +refspec
+command: git push origin +main:main
+decision: Deny
+severity: High
+confidence: Medium
+pack: core.git
+rule: git-push-force-refspec
+---
+# D15: git restore .
+command: git restore .
+decision: Deny
+severity: High
+confidence: High
+pack: core.git
+rule: git-restore-worktree-all
+---
+# D16: git restore --source
+command: git restore --source HEAD~2 app/main.go
+decision: Deny
+severity: High
+confidence: Medium
+pack: core.git
+rule: git-restore-source
+---
+# D17: git reflog expire
+command: git reflog expire --expire=now --all
+decision: Deny
+severity: High
+confidence: High
+pack: core.git
+rule: git-reflog-expire
+---
+# D18: git gc --prune
+decision: Ask
+command: git gc --prune=now
+severity: Medium
+confidence: Medium
+pack: core.git
+rule: git-gc-prune
+---
+# D19: git filter-branch
+command: git filter-branch --tree-filter 'rm secret.txt' HEAD
+decision: Deny
+severity: High
+confidence: Medium
+pack: core.git
+rule: git-filter-branch
+---
+# D20: git restore file (Low)
+command: git restore app/main.go
+decision: Allow
+severity: Low
+confidence: Medium
+pack: core.git
+rule: git-restore-file
+---
+# S1: git push safe
+command: git push origin main
+decision: Allow
+---
+# S2: git push --force-with-lease
+command: git push --force-with-lease origin main
+decision: Allow
+---
+# S3: git branch -d
+command: git branch -d merged
+decision: Allow
+---
+# S4: git reset --soft
+command: git reset --soft HEAD~1
+decision: Allow
+---
+# S5: git rebase --abort
+command: git rebase --abort
+decision: Allow
+---
+# S6: git status
+command: git status
+decision: Allow
+---
+# S7: git log
+command: git log --oneline
+decision: Allow
+---
+# S8: git diff
+command: git diff HEAD~1
+decision: Allow
+---
+# S9: git restore --staged
+command: git restore --staged app/main.go
+decision: Allow
+---
+# S10: git fetch
+command: git fetch origin
+decision: Allow
+---
+# S11: git switch
+command: git switch main
+decision: Allow

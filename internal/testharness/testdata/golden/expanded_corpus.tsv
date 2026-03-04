@@ -1012,3 +1012,97 @@ subshell	database.redis	redis-shutdown	(redis-cli shutdown save)
 simple	database.redis	redis-debug	redis-cli debug segfault
 compound	database.redis	redis-debug	echo testing && redis-cli debug sleep 10
 subshell	database.redis	redis-debug	(redis-cli debug set-active-expire 0)
+# Core pack expansion (dcg-c9c.3) coverage rows
+simple	core.git	git-push-mirror	git push --mirror
+compound	core.git	git-push-mirror	echo start && git push --mirror
+subshell	core.git	git-push-mirror	(git push --mirror)
+simple	core.git	git-reset-hard	git reset --hard HEAD~1
+compound	core.git	git-reset-hard	echo start && git reset --hard HEAD~1
+subshell	core.git	git-reset-hard	(git reset --hard HEAD~1)
+simple	core.git	git-checkout-discard-all	git checkout -- .
+compound	core.git	git-checkout-discard-all	echo start && git checkout -- .
+subshell	core.git	git-checkout-discard-all	(git checkout -- .)
+simple	core.git	git-rebase	git rebase main
+compound	core.git	git-rebase	echo start && git rebase main
+subshell	core.git	git-rebase	(git rebase main)
+simple	core.git	git-clean-force	git clean -f
+compound	core.git	git-clean-force	echo start && git clean -f
+subshell	core.git	git-clean-force	(git clean -f)
+simple	core.git	git-clean-force-dirs	git clean -fd
+compound	core.git	git-clean-force-dirs	echo start && git clean -fd
+subshell	core.git	git-clean-force-dirs	(git clean -fd)
+simple	core.git	git-branch-force-delete	git branch -D stale
+compound	core.git	git-branch-force-delete	echo start && git branch -D stale
+subshell	core.git	git-branch-force-delete	(git branch -D stale)
+simple	core.git	git-push-delete	git push origin --delete stale
+compound	core.git	git-push-delete	echo start && git push origin --delete stale
+subshell	core.git	git-push-delete	(git push origin --delete stale)
+simple	core.git	git-stash-drop	git stash drop stash@{0}
+compound	core.git	git-stash-drop	echo start && git stash drop stash@{0}
+subshell	core.git	git-stash-drop	(git stash drop stash@{0})
+simple	core.git	git-checkout-discard-file	git checkout -- app/main.go
+compound	core.git	git-checkout-discard-file	echo start && git checkout -- app/main.go
+subshell	core.git	git-checkout-discard-file	(git checkout -- app/main.go)
+simple	core.git	git-checkout-dot	git checkout .
+compound	core.git	git-checkout-dot	echo start && git checkout .
+subshell	core.git	git-checkout-dot	(git checkout .)
+simple	core.git	git-push-refspec-delete	git push origin :stale
+compound	core.git	git-push-refspec-delete	echo start && git push origin :stale
+subshell	core.git	git-push-refspec-delete	(git push origin :stale)
+simple	core.git	git-push-force-refspec	git push origin +main:main
+compound	core.git	git-push-force-refspec	echo start && git push origin +main:main
+subshell	core.git	git-push-force-refspec	(git push origin +main:main)
+simple	core.git	git-restore-worktree-all	git restore .
+compound	core.git	git-restore-worktree-all	echo start && git restore .
+subshell	core.git	git-restore-worktree-all	(git restore .)
+simple	core.git	git-restore-source	git restore --source HEAD~2 app/main.go
+compound	core.git	git-restore-source	echo start && git restore --source HEAD~2 app/main.go
+subshell	core.git	git-restore-source	(git restore --source HEAD~2 app/main.go)
+simple	core.git	git-reflog-expire	git reflog expire --expire=now --all
+compound	core.git	git-reflog-expire	echo start && git reflog expire --expire=now --all
+subshell	core.git	git-reflog-expire	(git reflog expire --expire=now --all)
+simple	core.git	git-gc-prune	git gc --prune=now
+compound	core.git	git-gc-prune	echo start && git gc --prune=now
+subshell	core.git	git-gc-prune	(git gc --prune=now)
+simple	core.git	git-filter-branch	git filter-branch --tree-filter 'rm secret.txt' HEAD
+compound	core.git	git-filter-branch	echo start && git filter-branch --tree-filter 'rm secret.txt' HEAD
+subshell	core.git	git-filter-branch	(git filter-branch --tree-filter 'rm secret.txt' HEAD)
+simple	core.git	git-restore-file	git restore app/main.go
+compound	core.git	git-restore-file	echo start && git restore app/main.go
+subshell	core.git	git-restore-file	(git restore app/main.go)
+simple	core.filesystem	rm-rf-root	rm -rf /
+compound	core.filesystem	rm-rf-root	echo start && rm -rf /
+subshell	core.filesystem	rm-rf-root	(rm -rf /)
+simple	core.filesystem	mkfs-any	mkfs.ext4 /dev/sda1
+compound	core.filesystem	mkfs-any	echo start && mkfs.ext4 /dev/sda1
+subshell	core.filesystem	mkfs-any	(mkfs.ext4 /dev/sda1)
+simple	core.filesystem	rm-recursive-force	rm -rf /tmp/build
+compound	core.filesystem	rm-recursive-force	echo start && rm -rf /tmp/build
+subshell	core.filesystem	rm-recursive-force	(rm -rf /tmp/build)
+simple	core.filesystem	dd-write	dd if=/dev/zero of=/dev/sda bs=4M
+compound	core.filesystem	dd-write	echo start && dd if=/dev/zero of=/dev/sda bs=4M
+subshell	core.filesystem	dd-write	(dd if=/dev/zero of=/dev/sda bs=4M)
+simple	core.filesystem	shred-any	shred -vfz file.txt
+compound	core.filesystem	shred-any	echo start && shred -vfz file.txt
+subshell	core.filesystem	shred-any	(shred -vfz file.txt)
+simple	core.filesystem	rm-recursive	rm -r /tmp/build
+compound	core.filesystem	rm-recursive	echo start && rm -r /tmp/build
+subshell	core.filesystem	rm-recursive	(rm -r /tmp/build)
+simple	core.filesystem	chmod-recursive	chmod -R 755 ./app
+compound	core.filesystem	chmod-recursive	echo start && chmod -R 755 ./app
+subshell	core.filesystem	chmod-recursive	(chmod -R 755 ./app)
+simple	core.filesystem	chmod-777	chmod 777 script.sh
+compound	core.filesystem	chmod-777	echo start && chmod 777 script.sh
+subshell	core.filesystem	chmod-777	(chmod 777 script.sh)
+simple	core.filesystem	chown-recursive	chown -R root:root /var/app
+compound	core.filesystem	chown-recursive	echo start && chown -R root:root /var/app
+subshell	core.filesystem	chown-recursive	(chown -R root:root /var/app)
+simple	core.filesystem	mv-to-devnull	mv important.db /dev/null
+compound	core.filesystem	mv-to-devnull	echo start && mv important.db /dev/null
+subshell	core.filesystem	mv-to-devnull	(mv important.db /dev/null)
+simple	core.filesystem	chmod-000	chmod 000 secret.txt
+compound	core.filesystem	chmod-000	echo start && chmod 000 secret.txt
+subshell	core.filesystem	chmod-000	(chmod 000 secret.txt)
+simple	core.filesystem	truncate-zero	truncate -s 0 app.log
+compound	core.filesystem	truncate-zero	echo start && truncate -s 0 app.log
+subshell	core.filesystem	truncate-zero	(truncate -s 0 app.log)

@@ -15,6 +15,8 @@ import (
 // whether the content keywords are present.
 var equivalentMutationPrefixes = []string{
 	"database.",
+	"core.git",
+	"core.filesystem",
 }
 
 func isEquivalentMutation(packID, operator string) bool {

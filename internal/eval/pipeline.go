@@ -2,11 +2,12 @@ package eval
 
 import (
 	"context"
-	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/dcosson/destructive-command-guard-go/internal/envdetect"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
+	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/core"
 	"github.com/dcosson/destructive-command-guard-go/internal/parse"
 )
 
@@ -22,14 +23,18 @@ type Config struct {
 
 // Pipeline evaluates commands against registered rules.
 type Pipeline struct {
-	registry *packs.Registry
-	parser   *parse.BashParser
+	registry  *packs.Registry
+	parser    *parse.BashParser
+	prefilter *PreFilter
+	envDet    *envdetect.Detector
 }
 
 func NewPipeline(registry *packs.Registry) *Pipeline {
 	return &Pipeline{
-		registry: registry,
-		parser:   parse.NewBashParser(),
+		registry:  registry,
+		parser:    parse.NewBashParser(),
+		prefilter: NewPreFilter(registry),
+		envDet:    envdetect.NewDetector(),
 	}
 }
 
@@ -85,7 +90,24 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 		return result
 	}
 
-	isProd := isProduction(command, cfg.CallerEnv)
+	// Pre-filter: fast keyword scan to short-circuit non-destructive commands.
+	filterResult := p.prefilter.Contains(command)
+	if !filterResult.Matched {
+		result.Decision = DecisionAllow
+		return result
+	}
+
+	// Narrow packs to those whose keywords matched the pre-filter.
+	candidateIDs := p.prefilter.CandidatePacks(filterResult.Keywords, cfg.EnabledPacks)
+	if len(candidateIDs) == 0 {
+		result.Decision = DecisionAllow
+		return result
+	}
+	candidateSet := make(map[string]struct{}, len(candidateIDs))
+	for _, id := range candidateIDs {
+		candidateSet[id] = struct{}{}
+	}
+
 	parsed := p.parser.ParseAndExtract(context.Background(), command, 0)
 	result.Warnings = append(result.Warnings, convertParseWarnings(parsed.Warnings)...)
 	if len(parsed.Commands) == 0 {
@@ -93,8 +115,22 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 		return result
 	}
 
+	// Environment detection: global (process env + exported vars).
+	globalEnvResult := p.envDet.DetectProcess(cfg.CallerEnv)
+	exportedEnvResult := p.envDet.DetectExported(parsed.ExportedVars)
+	globalProd := globalEnvResult.IsProduction || exportedEnvResult.IsProduction
+
 	for _, extracted := range parsed.Commands {
+		// Per-command inline environment detection.
+		cmdEnvResult := p.envDet.DetectInline(extracted.InlineEnv)
+		isProd := globalProd || cmdEnvResult.IsProduction
+
 		for _, pack := range activePacks {
+			// Skip packs not in candidate set.
+			if _, ok := candidateSet[pack.ID]; !ok {
+				continue
+			}
+
 			// Safe patterns short-circuit destructive evaluation within a pack.
 			safeMatched := false
 			for _, safe := range pack.Safe {
@@ -113,7 +149,7 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 				}
 				sev := rule.Severity
 				envEscalated := false
-				if rule.EnvSensitive && (isProd || isCommandProduction(extracted)) && sev < int(SeverityCritical) {
+				if rule.EnvSensitive && isProd && sev < int(SeverityCritical) {
 					sev = sev + 1
 					if sev > int(SeverityCritical) {
 						sev = int(SeverityCritical)
@@ -205,41 +241,6 @@ func aggregate(matches []Match) Assessment {
 		}
 	}
 	return best
-}
-
-var prodPattern = regexp.MustCompile(`(?i)\b(prod|production)\b`)
-
-func isProduction(command string, callerEnv []string) bool {
-	if prodPattern.MatchString(command) {
-		return true
-	}
-	for _, kv := range callerEnv {
-		if !strings.Contains(kv, "=") {
-			continue
-		}
-		parts := strings.SplitN(kv, "=", 2)
-		key := strings.ToUpper(parts[0])
-		if key != "RAILS_ENV" && key != "NODE_ENV" && key != "ENVIRONMENT" && key != "APP_ENV" {
-			continue
-		}
-		if strings.EqualFold(parts[1], "production") || strings.EqualFold(parts[1], "prod") {
-			return true
-		}
-	}
-	return false
-}
-
-func isCommandProduction(cmd parse.ExtractedCommand) bool {
-	for key, value := range cmd.InlineEnv {
-		k := strings.ToUpper(key)
-		if k != "RAILS_ENV" && k != "NODE_ENV" && k != "ENVIRONMENT" && k != "APP_ENV" {
-			continue
-		}
-		if strings.EqualFold(value, "production") || strings.EqualFold(value, "prod") {
-			return true
-		}
-	}
-	return false
 }
 
 func convertParseWarnings(in []parse.Warning) []Warning {

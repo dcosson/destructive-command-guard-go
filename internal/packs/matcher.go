@@ -130,6 +130,40 @@ func ArgContains(term string) MatchFunc {
 	})
 }
 
+func ArgPrefix(prefix string) MatchFunc {
+	want := strings.ToLower(prefix)
+	return MatchFunc(func(cmd Command) bool {
+		for _, arg := range cmd.Args {
+			if strings.HasPrefix(strings.ToLower(arg), want) {
+				return true
+			}
+		}
+		for _, arg := range cmd.RawArgs {
+			if strings.HasPrefix(strings.ToLower(arg), want) {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+func ArgContentRegex(pattern string) MatchFunc {
+	re := regexp.MustCompile(pattern)
+	return MatchFunc(func(cmd Command) bool {
+		for _, arg := range cmd.Args {
+			if re.MatchString(arg) {
+				return true
+			}
+		}
+		for _, arg := range cmd.RawArgs {
+			if re.MatchString(arg) {
+				return true
+			}
+		}
+		return false
+	})
+}
+
 func RawTextContains(term string) MatchFunc {
 	want := strings.ToLower(term)
 	return MatchFunc(func(cmd Command) bool {

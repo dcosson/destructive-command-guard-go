@@ -724,7 +724,7 @@ var extractionTests = []extractionTestCase{
 	{
 		name:     "docker rm with subshell",
 		input:    "docker rm $(docker ps -aq)",
-		wantCmds: 1,
+		wantCmds: 2,
 		checkFirst: func(t *testing.T, cmd ExtractedCommand) {
 			assertEqual(t, "Name", cmd.Name, "docker")
 			assertContainsArg(t, cmd.Args, "rm")

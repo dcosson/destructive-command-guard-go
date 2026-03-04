@@ -1,0 +1,118 @@
+# Golden file: core.filesystem pack
+format: v1
+---
+# D1: rm -rf /
+command: rm -rf /
+decision: Deny
+severity: Critical
+confidence: High
+pack: core.filesystem
+rule: rm-rf-root
+---
+# D2: mkfs.ext4
+command: mkfs.ext4 /dev/sda1
+decision: Deny
+severity: Critical
+confidence: High
+pack: core.filesystem
+rule: mkfs-any
+---
+# D3: rm -rf dir
+command: rm -rf /tmp/build
+decision: Deny
+severity: Critical
+confidence: High
+pack: core.filesystem
+rule: rm-recursive-force
+---
+# D4: dd of=
+command: dd if=/dev/zero of=/dev/sda bs=4M
+decision: Deny
+severity: High
+confidence: High
+pack: core.filesystem
+rule: dd-write
+---
+# D5: shred
+command: shred -vfz file.txt
+decision: Deny
+severity: High
+confidence: High
+pack: core.filesystem
+rule: shred-any
+---
+# D6: rm -r
+command: rm -r /tmp/build
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.filesystem
+rule: rm-recursive
+---
+# D7: chmod -R
+command: chmod -R 755 ./app
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.filesystem
+rule: chmod-recursive
+---
+# D8: chmod 777
+command: chmod 777 script.sh
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.filesystem
+rule: chmod-777
+---
+# D9: chown -R
+command: chown -R root:root /var
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.filesystem
+rule: chown-recursive
+---
+# D10: mv to /dev/null
+command: mv important.db /dev/null
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.filesystem
+rule: mv-to-devnull
+---
+# D11: chmod 000
+command: chmod 000 secret.txt
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.filesystem
+rule: chmod-000
+---
+# D12: truncate -s 0
+command: truncate -s 0 app.log
+decision: Ask
+severity: Medium
+confidence: High
+pack: core.filesystem
+rule: truncate-zero
+---
+# S1: rm single file
+command: rm file.txt
+decision: Allow
+---
+# S2: chmod single safe
+command: chmod 644 file.txt
+decision: Allow
+---
+# S3: chown single safe
+command: chown user:group file.txt
+decision: Allow
+---
+# S4: mv safe
+command: mv file.txt backup/
+decision: Allow
+---
+# Edge: dd without of= is safe
+command: dd if=/dev/zero bs=1M count=10
+decision: Allow
