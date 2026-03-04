@@ -70,7 +70,8 @@ test:
 test-integration:
 	go test -tags=e2e ./internal/eval -count=1
 
-# Same as test but with -race detector enabled. Slower but catches data races.
+# Unit test target with -race detector enabled (same package set as `make test`).
+# Does not include integration/e2e/stress/security/mutation/comparison targets.
 test-race:
 	go test ./cmd/dcg-go ./guard ./internal/envdetect ./internal/evalcore ./internal/eval ./internal/parse ./internal/packs/... -count=1 -race
 
@@ -177,7 +178,7 @@ help:
 	@echo "Test (primary):"
 	@echo "  make test               Fast unit tests"
 	@echo "  make test-integration   Heavy integration tests (internal/eval, tagged)"
-	@echo "  make test-race          Full tests with race detector"
+	@echo "  make test-race          Unit tests with race detector (same scope as make test)"
 	@echo ""
 	@echo "Test (extended):"
 	@echo "  make test-e2e           E2E tests (builds binary, subprocess tests)"
