@@ -11,11 +11,12 @@ import (
 
 // Config represents the dcg-go YAML configuration file.
 type Config struct {
-	Policy        string   `yaml:"policy"`
-	Allowlist     []string `yaml:"allowlist"`
-	Blocklist     []string `yaml:"blocklist"`
-	EnabledPacks  []string `yaml:"enabled_packs"`
-	DisabledPacks []string `yaml:"disabled_packs"`
+	DestructivePolicy string   `yaml:"destructive_policy"`
+	PrivacyPolicy     string   `yaml:"privacy_policy"`
+	Allowlist         []string `yaml:"allowlist"`
+	Blocklist         []string `yaml:"blocklist"`
+	EnabledPacks      []string `yaml:"enabled_packs"`
+	DisabledPacks     []string `yaml:"disabled_packs"`
 }
 
 const maxConfigFileSize = 1 << 20 // 1MB
@@ -70,12 +71,20 @@ func loadConfig() Config {
 func (c Config) toOptions() []guard.Option {
 	var opts []guard.Option
 
-	if c.Policy != "" {
-		p, err := parsePolicy(c.Policy)
+	if c.DestructivePolicy != "" {
+		p, err := parsePolicy(c.DestructivePolicy)
 		if err != nil {
-			fmt.Fprintf(stderr, "warning: %v, using default policy\n", err)
+			fmt.Fprintf(stderr, "warning: destructive_policy: %v, using default\n", err)
 		} else {
-			opts = append(opts, guard.WithPolicy(p))
+			opts = append(opts, guard.WithDestructivePolicy(p))
+		}
+	}
+	if c.PrivacyPolicy != "" {
+		p, err := parsePolicy(c.PrivacyPolicy)
+		if err != nil {
+			fmt.Fprintf(stderr, "warning: privacy_policy: %v, using default\n", err)
+		} else {
+			opts = append(opts, guard.WithPrivacyPolicy(p))
 		}
 	}
 	if len(c.Allowlist) > 0 {

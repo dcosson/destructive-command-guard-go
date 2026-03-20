@@ -193,19 +193,19 @@ func RunCorpus(t *testing.T, entries []GoldenEntry, pipeline *eval.Pipeline, cfg
 					e.File, e.Line, e.Command, result.Decision, e.Decision)
 			}
 
-			if e.Severity != "" && result.Assessment != nil {
+			if e.Severity != "" && result.DestructiveAssessment != nil {
 				wantSev := parseGoldenSeverity(e.Severity)
-				if result.Assessment.Severity != wantSev {
+				if result.DestructiveAssessment.Severity != wantSev {
 					t.Errorf("%s:%d: severity = %v, want %s",
-						e.File, e.Line, result.Assessment.Severity, e.Severity)
+						e.File, e.Line, result.DestructiveAssessment.Severity, e.Severity)
 				}
 			}
 
-			if e.Confidence != "" && result.Assessment != nil {
+			if e.Confidence != "" && result.DestructiveAssessment != nil {
 				wantConf := parseGoldenConfidence(e.Confidence)
-				if result.Assessment.Confidence != wantConf {
+				if result.DestructiveAssessment.Confidence != wantConf {
 					t.Errorf("%s:%d: confidence = %v, want %s",
-						e.File, e.Line, result.Assessment.Confidence, e.Confidence)
+						e.File, e.Line, result.DestructiveAssessment.Confidence, e.Confidence)
 				}
 			}
 
@@ -302,7 +302,7 @@ func parseGoldenConfidence(s string) eval.Confidence {
 func TestGoldenCorpus(t *testing.T) {
 	t.Parallel()
 	pipeline := eval.NewPipeline(packs.DefaultRegistry)
-	cfg := eval.Config{Policy: evalcore.InteractivePolicy()}
+	cfg := eval.Config{DestructivePolicy: evalcore.InteractivePolicy(), PrivacyPolicy: evalcore.InteractivePolicy()}
 
 	dir := filepath.Join("..", "eval", "testdata", "golden")
 	entries := LoadCorpus(t, dir)

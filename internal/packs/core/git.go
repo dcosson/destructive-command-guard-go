@@ -97,7 +97,7 @@ func GitPack() packs.Pack {
 				),
 			},
 		},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{
 				ID: "git-push-force",
 				Match: packs.And(

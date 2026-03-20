@@ -87,7 +87,7 @@ func sshPack() packs.Pack {
 				anyArg(isSSHConfigFile),
 			)},
 		},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{ID: "ssh-directory-destructive", Severity: sevCritical, Confidence: confHigh, Reason: "Destructive operation targets the SSH directory", Remediation: "Leave ~/.ssh unchanged and edit only explicit non-key files", Match: packs.And(
 				packs.Or(packs.Name("rm"), packs.Name("chmod"), packs.Name("mv")),
 				anyArg(isSSHDirArg),

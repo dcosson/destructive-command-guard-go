@@ -13,12 +13,13 @@ import (
 
 // Config controls a single pipeline evaluation run.
 type Config struct {
-	Policy        Policy
-	Allowlist     []string
-	Blocklist     []string
-	EnabledPacks  []string
-	DisabledPacks []string
-	CallerEnv     []string
+	DestructivePolicy Policy
+	PrivacyPolicy     Policy
+	Allowlist         []string
+	Blocklist         []string
+	EnabledPacks      []string
+	DisabledPacks     []string
+	CallerEnv         []string
 }
 
 // Pipeline evaluates commands against registered rules.
@@ -52,14 +53,16 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 	for _, pattern := range cfg.Blocklist {
 		if globMatch(pattern, cmd) {
 			result.Decision = DecisionDeny
-			result.Assessment = &Assessment{
+			blAss := Assessment{
 				Severity:   SeverityCritical,
 				Confidence: ConfidenceHigh,
 			}
+			result.DestructiveAssessment = &blAss
 			result.Matches = []Match{
 				{
 					Pack:        "_blocklist",
 					Rule:        pattern,
+					Category:    evalcore.CategoryDestructive,
 					Severity:    SeverityCritical,
 					Confidence:  ConfidenceHigh,
 					Reason:      "Matched blocklist pattern",
@@ -76,11 +79,6 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 			result.Decision = DecisionAllow
 			return result
 		}
-	}
-
-	policy := cfg.Policy
-	if policy == nil {
-		policy = evalcore.InteractivePolicy()
 	}
 
 	activePacks, warnings := p.activePacks(cfg)
@@ -143,7 +141,7 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 				continue
 			}
 
-			for _, rule := range pack.Destructive {
+			for _, rule := range pack.Rules {
 				if rule.Match == nil || !rule.Match.Match(toPackCommand(extracted)) {
 					continue
 				}
@@ -156,9 +154,15 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 					}
 					envEscalated = true
 				}
+				// Zero-category normalization: default to Destructive.
+				cat := rule.Category
+				if cat == 0 {
+					cat = evalcore.CategoryDestructive
+				}
 				result.Matches = append(result.Matches, Match{
 					Pack:         pack.ID,
 					Rule:         rule.ID,
+					Category:     cat,
 					Severity:     Severity(sev),
 					Confidence:   Confidence(rule.Confidence),
 					Reason:       rule.Reason,
@@ -174,9 +178,23 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 		return result
 	}
 
-	agg := aggregate(result.Matches)
-	result.Assessment = &agg
-	result.Decision = policy.Decide(agg)
+	dAgg, pAgg := aggregateByCategory(result.Matches)
+	result.DestructiveAssessment = dAgg
+	result.PrivacyAssessment = pAgg
+
+	dPolicy := cfg.DestructivePolicy
+	if dPolicy == nil {
+		dPolicy = evalcore.InteractivePolicy()
+	}
+	pPolicy := cfg.PrivacyPolicy
+	if pPolicy == nil {
+		pPolicy = evalcore.InteractivePolicy()
+	}
+	pc := evalcore.PolicyConfig{
+		DestructivePolicy: dPolicy,
+		PrivacyPolicy:     pPolicy,
+	}
+	result.Decision = pc.Decide(dAgg, pAgg)
 	return result
 }
 
@@ -223,6 +241,27 @@ func (p *Pipeline) activePacks(cfg Config) ([]packs.Pack, []Warning) {
 		filtered = append(filtered, pk)
 	}
 	return filtered, warnings
+}
+
+func aggregateByCategory(matches []Match) (destructive, privacy *Assessment) {
+	var dMatches, pMatches []Match
+	for _, m := range matches {
+		if m.Category.HasDestructive() {
+			dMatches = append(dMatches, m)
+		}
+		if m.Category.HasPrivacy() {
+			pMatches = append(pMatches, m)
+		}
+	}
+	if len(dMatches) > 0 {
+		a := aggregate(dMatches)
+		destructive = &a
+	}
+	if len(pMatches) > 0 {
+		a := aggregate(pMatches)
+		privacy = &a
+	}
+	return
 }
 
 func aggregate(matches []Match) Assessment {

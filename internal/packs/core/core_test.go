@@ -13,7 +13,7 @@ func TestGitPackInventoryAndReachability(t *testing.T) {
 	if got := len(pk.Safe); got != 10 {
 		t.Fatalf("safe pattern count = %d, want 10", got)
 	}
-	if got := len(pk.Destructive); got != 22 {
+	if got := len(pk.Rules); got != 22 {
 		t.Fatalf("destructive pattern count = %d, want 22", got)
 	}
 
@@ -42,7 +42,7 @@ func TestGitPackInventoryAndReachability(t *testing.T) {
 		"git-restore-file":           "git restore app/main.go",
 	}
 
-	for _, rule := range pk.Destructive {
+	for _, rule := range pk.Rules {
 		cmd, ok := hits[rule.ID]
 		if !ok {
 			t.Fatalf("missing hit probe for destructive rule %q", rule.ID)
@@ -81,7 +81,7 @@ func TestFilesystemPackInventoryAndReachability(t *testing.T) {
 	if got := len(pk.Safe); got != 4 {
 		t.Fatalf("safe pattern count = %d, want 4", got)
 	}
-	if got := len(pk.Destructive); got != 13 {
+	if got := len(pk.Rules); got != 13 {
 		t.Fatalf("destructive pattern count = %d, want 13", got)
 	}
 
@@ -101,7 +101,7 @@ func TestFilesystemPackInventoryAndReachability(t *testing.T) {
 		"truncate-zero":   "truncate -s 0 app.log",
 	}
 
-	for _, rule := range pk.Destructive {
+	for _, rule := range pk.Rules {
 		cmd, ok := hits[rule.ID]
 		if !ok {
 			t.Fatalf("missing hit probe for destructive rule %q", rule.ID)

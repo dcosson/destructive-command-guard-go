@@ -79,7 +79,7 @@ func communicationPack() packs.Pack {
 				packs.Not(packs.ArgContentRegex(osascriptSensitiveAppsRe.String())),
 			)},
 		},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{ID: "osascript-send-message", Severity: sevCritical, Confidence: confHigh, Reason: "osascript can send iMessages automatically", Remediation: "Use read-only AppleScript commands without send operations", Match: packs.And(packs.Name("osascript"), packs.ArgContentRegex(osascriptMessagesRe.String()))},
 			{ID: "osascript-send-email", Severity: sevCritical, Confidence: confHigh, Reason: "osascript can send email automatically through Mail.app", Remediation: "Use read-only AppleScript commands without send operations", Match: packs.And(packs.Name("osascript"), packs.ArgContentRegex(osascriptMailRe.String()))},
 			{ID: "osascript-system-events", Severity: sevCritical, Confidence: confHigh, Reason: "System Events can automate arbitrary GUI actions", Remediation: "Do not allow System Events automation", Match: packs.And(packs.Name("osascript"), packs.ArgContentRegex(osascriptSystemEventsRe.String()))},

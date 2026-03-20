@@ -44,7 +44,7 @@ func TestGrammarCoverage(t *testing.T) {
 		context := context
 		cmd := cmd
 		t.Run(context, func(t *testing.T) {
-			result := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+			result := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			if result.Decision == guard.Allow {
 				t.Fatalf("extractor missed git match in context %s", context)
 			}
@@ -108,7 +108,7 @@ func TestGrammarCoverageAllPacks(t *testing.T) {
 		for i, ctx := range contexts {
 			fullCmd := fmt.Sprintf(ctx, cmd)
 			t.Run(fmt.Sprintf("%s/context-%02d", packID, i), func(t *testing.T) {
-				result := guard.Evaluate(fullCmd, guard.WithPolicy(guard.InteractivePolicy()))
+				result := guard.Evaluate(fullCmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 				if result.Decision == guard.Allow {
 					t.Fatalf("missed %s in context %q command=%q", packID, ctx, fullCmd)
 				}

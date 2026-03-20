@@ -41,7 +41,7 @@ func TestDbFaultDegenerateCommands(t *testing.T) {
 		for i, cmd := range degenerateCmds {
 			cmd := cmd
 			t.Run(fmt.Sprintf("%s/degenerate-%d", id, i), func(t *testing.T) {
-				for _, dp := range pack.Destructive {
+				for _, dp := range pack.Rules {
 					dp := dp
 					func() {
 						defer func() {

@@ -29,7 +29,7 @@ func TestComparisonAgainstUpstream(t *testing.T) {
 
 	results := make([]ComparisonEntry, 0, len(corpus))
 	for _, entry := range corpus {
-		goResult := guard.Evaluate(entry.Command, guard.WithPolicy(guard.InteractivePolicy()))
+		goResult := guard.Evaluate(entry.Command, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		rustResult, err := runUpstream(upstream, entry.Command)
 		if err != nil {
 			t.Fatalf("run upstream for %q: %v", entry.Command, err)

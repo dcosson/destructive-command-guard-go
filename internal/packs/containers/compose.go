@@ -18,7 +18,7 @@ func composePack() packs.Pack {
 				packs.And(packs.Name("docker"), packs.ArgAt(0, "compose"), packs.ArgAt(1, "logs")),
 			)},
 		},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{
 				ID:          "compose-down-volumes",
 				Severity:    sevHigh,

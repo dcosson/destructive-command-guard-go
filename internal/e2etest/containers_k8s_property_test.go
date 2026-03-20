@@ -21,14 +21,14 @@ func TestPropertyEveryContainerK8sDestructivePatternReachable(t *testing.T) {
 		for _, p := range reachability[packID] {
 			byRule[p.rule] = p.command
 		}
-		for _, r := range pk.Destructive {
+		for _, r := range pk.Rules {
 			r := r
 			t.Run(packID+"/"+r.ID, func(t *testing.T) {
 				cmd, ok := byRule[r.ID]
 				if !ok {
 					t.Skipf("no reachability command mapped for %s/%s", packID, r.ID)
 				}
-				got := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+				got := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 				if !hasRuleMatch(got, packID, r.ID) {
 					t.Fatalf("reachability command did not match %s/%s: %q", packID, r.ID, cmd)
 				}
@@ -53,7 +53,7 @@ func TestPropertyContainerK8sMutualExclusion(t *testing.T) {
 			if !HasRegisteredPack(c.packID) {
 				t.Skipf("pack %s not registered", c.packID)
 			}
-			r := guard.Evaluate(c.cmd, guard.WithPolicy(guard.InteractivePolicy()))
+			r := guard.Evaluate(c.cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			for _, m := range r.Matches {
 				if strings.HasPrefix(m.Pack, "containers.") || strings.HasPrefix(m.Pack, "kubernetes.") {
 					if m.Pack != c.packID {
@@ -71,7 +71,7 @@ func TestPropertyContainerK8sSplitEnvSensitivity(t *testing.T) {
 		if !ok {
 			continue
 		}
-		for _, r := range pk.Destructive {
+		for _, r := range pk.Rules {
 			if !r.EnvSensitive {
 				t.Fatalf("%s/%s must be env-sensitive", id, r.ID)
 			}
@@ -82,7 +82,7 @@ func TestPropertyContainerK8sSplitEnvSensitivity(t *testing.T) {
 		if !ok {
 			continue
 		}
-		for _, r := range pk.Destructive {
+		for _, r := range pk.Rules {
 			if r.EnvSensitive {
 				t.Fatalf("%s/%s must NOT be env-sensitive", id, r.ID)
 			}
@@ -105,7 +105,7 @@ func TestPropertyDockerDualSyntaxParity(t *testing.T) {
 		{"docker kill c1", "docker container kill c1"},
 	}
 	for _, p := range pairs {
-		for _, r := range pk.Destructive {
+		for _, r := range pk.Rules {
 			ro := hasRuleMatch(guard.Evaluate(p.old), pk.ID, r.ID)
 			rm := hasRuleMatch(guard.Evaluate(p.mgmt), pk.ID, r.ID)
 			if ro != rm {
@@ -129,7 +129,7 @@ func TestPropertyComposeDualNamingParity(t *testing.T) {
 		{"docker-compose stop", "docker compose stop"},
 	}
 	for _, p := range pairs {
-		for _, r := range pk.Destructive {
+		for _, r := range pk.Rules {
 			rs := hasRuleMatch(guard.Evaluate(p.standalone), pk.ID, r.ID)
 			rp := hasRuleMatch(guard.Evaluate(p.plugin), pk.ID, r.ID)
 			if rs != rp {
@@ -151,7 +151,7 @@ func TestPropertyContainerK8sCrossPackIsolation(t *testing.T) {
 		if !HasRegisteredPack(cmdPack) {
 			continue
 		}
-		res := guard.Evaluate(command, guard.WithPolicy(guard.InteractivePolicy()))
+		res := guard.Evaluate(command, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		for _, other := range packsMap {
 			if other == cmdPack || !HasRegisteredPack(other) {
 				continue
@@ -172,7 +172,7 @@ func TestPropertyKubectlDeleteCatchAllCompleteness(t *testing.T) {
 	resources := []string{"namespace", "deployment", "statefulset", "daemonset", "pvc", "pv", "node", "service", "secret"}
 	for _, res := range resources {
 		cmd := fmt.Sprintf("kubectl delete %s test-resource", res)
-		result := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		result := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		if result.Decision == guard.Allow {
 			t.Fatalf("kubectl catch-all missed resource %s", res)
 		}
@@ -206,7 +206,7 @@ func TestDeterministicContainerK8sExamples(t *testing.T) {
 				t.Skipf("pack %s not registered", c.packID)
 			}
 			for i, cmd := range c.entries {
-				res := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+				res := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 				if res.Decision == guard.Allow {
 					t.Fatalf("entry[%d] expected non-Allow for %s: %q", i, c.packID, cmd)
 				}

@@ -25,7 +25,7 @@ func kubectlPack() packs.Pack {
 			{ID: "kubectl-logs-safe", Match: packs.And(packs.Name("kubectl"), packs.ArgAt(0, "logs"))},
 			{ID: "kubectl-top-safe", Match: packs.And(packs.Name("kubectl"), packs.ArgAt(0, "top"))},
 		},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{
 				ID:           "kubectl-delete-namespace",
 				Severity:     sevCritical,

@@ -81,10 +81,37 @@ type Assessment struct {
 	Confidence Confidence
 }
 
-// Match represents one destructive pattern match.
+// RuleCategory identifies whether a rule guards against destructive operations,
+// privacy violations, or both. Implemented as a bitmask.
+type RuleCategory uint8
+
+const (
+	CategoryDestructive RuleCategory = 1 << iota // 0b01
+	CategoryPrivacy                               // 0b10
+	CategoryBoth = CategoryDestructive | CategoryPrivacy // 0b11
+)
+
+func (c RuleCategory) String() string {
+	switch c {
+	case CategoryDestructive:
+		return "Destructive"
+	case CategoryPrivacy:
+		return "Privacy"
+	case CategoryBoth:
+		return "Both"
+	default:
+		return "Unknown"
+	}
+}
+
+func (c RuleCategory) HasDestructive() bool { return c&CategoryDestructive != 0 }
+func (c RuleCategory) HasPrivacy() bool     { return c&CategoryPrivacy != 0 }
+
+// Match represents one rule pattern match.
 type Match struct {
 	Pack         string
 	Rule         string
+	Category     RuleCategory
 	Severity     Severity
 	Confidence   Confidence
 	Reason       string
@@ -137,11 +164,38 @@ type Warning struct {
 
 // Result contains the full evaluation output.
 type Result struct {
-	Decision   Decision
-	Assessment *Assessment
-	Matches    []Match
-	Warnings   []Warning
-	Command    string
+	Decision              Decision
+	DestructiveAssessment *Assessment
+	PrivacyAssessment     *Assessment
+	Matches               []Match
+	Warnings              []Warning
+	Command               string
+}
+
+// PolicyConfig holds separate policies for each rule category.
+type PolicyConfig struct {
+	DestructivePolicy Policy
+	PrivacyPolicy     Policy
+}
+
+// Decide applies the appropriate policy for each category assessment,
+// then merges decisions (deny > ask > allow).
+func (pc PolicyConfig) Decide(destructive, privacy *Assessment) Decision {
+	dDec := Allow
+	pDec := Allow
+	if destructive != nil {
+		dDec = pc.DestructivePolicy.Decide(*destructive)
+	}
+	if privacy != nil {
+		pDec = pc.PrivacyPolicy.Decide(*privacy)
+	}
+	if dDec == Deny || pDec == Deny {
+		return Deny
+	}
+	if dDec == Ask || pDec == Ask {
+		return Ask
+	}
+	return Allow
 }
 
 // Policy converts an Assessment into a Decision.

@@ -14,7 +14,9 @@ func runTestMode(args []string) error {
 
 	explain := fs.Bool("explain", false, "Show detailed reasoning")
 	jsonOut := fs.Bool("json", false, "Output as JSON")
-	policyName := fs.String("policy", "", "Policy: strict, interactive, permissive")
+	policyName := fs.String("policy", "", "Shorthand: set both destructive and privacy policy")
+	destrPolicyName := fs.String("destructive-policy", "", "Policy for destructive rules: strict, interactive, permissive")
+	privPolicyName := fs.String("privacy-policy", "", "Policy for privacy rules: strict, interactive, permissive")
 	envFlag := fs.Bool("env", false,
 		"Include process environment in detection. "+
 			"Note: without --env, only inline env vars are detected.")
@@ -35,7 +37,21 @@ func runTestMode(args []string) error {
 		if err != nil {
 			return err
 		}
-		opts = append(opts, guard.WithPolicy(p))
+		opts = append(opts, guard.WithDestructivePolicy(p), guard.WithPrivacyPolicy(p))
+	}
+	if *destrPolicyName != "" {
+		p, err := parsePolicy(*destrPolicyName)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, guard.WithDestructivePolicy(p))
+	}
+	if *privPolicyName != "" {
+		p, err := parsePolicy(*privPolicyName)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, guard.WithPrivacyPolicy(p))
 	}
 	if *envFlag {
 		opts = append(opts, guard.WithEnv(environFn()))
@@ -77,9 +93,13 @@ func parsePolicy(name string) (guard.Policy, error) {
 func printTestHuman(result guard.Result, explain bool) error {
 	fmt.Fprintf(stdout, "Command:  %s\n", result.Command)
 	fmt.Fprintf(stdout, "Decision: %s\n", result.Decision)
-	if result.Assessment != nil {
-		fmt.Fprintf(stdout, "Severity: %s\n", result.Assessment.Severity)
-		fmt.Fprintf(stdout, "Confidence: %s\n", result.Assessment.Confidence)
+	if result.DestructiveAssessment != nil {
+		fmt.Fprintf(stdout, "Destructive Severity: %s\n", result.DestructiveAssessment.Severity)
+		fmt.Fprintf(stdout, "Destructive Confidence: %s\n", result.DestructiveAssessment.Confidence)
+	}
+	if result.PrivacyAssessment != nil {
+		fmt.Fprintf(stdout, "Privacy Severity: %s\n", result.PrivacyAssessment.Severity)
+		fmt.Fprintf(stdout, "Privacy Confidence: %s\n", result.PrivacyAssessment.Confidence)
 	}
 	if len(result.Matches) > 0 {
 		fmt.Fprintf(stdout, "\nMatches (%d):\n", len(result.Matches))
@@ -106,12 +126,14 @@ func printTestHuman(result guard.Result, explain bool) error {
 }
 
 type TestResult struct {
-	Command    string              `json:"command"`
-	Decision   string              `json:"decision"`
-	Severity   string              `json:"severity,omitempty"`
-	Confidence string              `json:"confidence,omitempty"`
-	Matches    []TestMatchResult   `json:"matches,omitempty"`
-	Warnings   []TestWarningResult `json:"warnings,omitempty"`
+	Command                  string              `json:"command"`
+	Decision                 string              `json:"decision"`
+	DestructiveSeverity      string              `json:"destructive_severity,omitempty"`
+	DestructiveConfidence    string              `json:"destructive_confidence,omitempty"`
+	PrivacySeverity          string              `json:"privacy_severity,omitempty"`
+	PrivacyConfidence        string              `json:"privacy_confidence,omitempty"`
+	Matches                  []TestMatchResult   `json:"matches,omitempty"`
+	Warnings                 []TestWarningResult `json:"warnings,omitempty"`
 }
 
 type TestMatchResult struct {
@@ -134,9 +156,13 @@ func printTestJSON(result guard.Result) error {
 		Command:  result.Command,
 		Decision: result.Decision.String(),
 	}
-	if result.Assessment != nil {
-		tr.Severity = result.Assessment.Severity.String()
-		tr.Confidence = result.Assessment.Confidence.String()
+	if result.DestructiveAssessment != nil {
+		tr.DestructiveSeverity = result.DestructiveAssessment.Severity.String()
+		tr.DestructiveConfidence = result.DestructiveAssessment.Confidence.String()
+	}
+	if result.PrivacyAssessment != nil {
+		tr.PrivacySeverity = result.PrivacyAssessment.Severity.String()
+		tr.PrivacyConfidence = result.PrivacyAssessment.Confidence.String()
 	}
 	for _, m := range result.Matches {
 		tr.Matches = append(tr.Matches, TestMatchResult{

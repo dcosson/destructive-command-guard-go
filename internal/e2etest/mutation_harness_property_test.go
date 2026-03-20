@@ -15,10 +15,10 @@ func TestPropertyMutationOperatorsDiffer(t *testing.T) {
 
 	sampled := 0
 	for _, pk := range all {
-		if len(pk.Destructive) == 0 {
+		if len(pk.Rules) == 0 {
 			continue
 		}
-		for _, rule := range pk.Destructive {
+		for _, rule := range pk.Rules {
 			hit, miss := selectProbes(pk.ID, rule.ID, corpus)
 			if hit == "" {
 				continue
@@ -56,10 +56,10 @@ func TestPropertyMutationOperatorsDiffer(t *testing.T) {
 
 func TestFaultMutationHarnessIdentityMutation(t *testing.T) {
 	pk, ok := findPack("core.git")
-	if !ok || len(pk.Destructive) == 0 {
+	if !ok || len(pk.Rules) == 0 {
 		t.Skip("core.git destructive rules unavailable")
 	}
-	rule := pk.Destructive[0]
+	rule := pk.Rules[0]
 	hit, miss := selectProbes(pk.ID, rule.ID, loadMutationCorpus())
 	if hit == "" {
 		t.Skip("no hit probe available for selected rule")

@@ -29,8 +29,8 @@ func TestOracleInternalVsPublicEquivalence(t *testing.T) {
 		cmd := cmd
 		t.Run(cmd, func(t *testing.T) {
 			policy := guard.InteractivePolicy()
-			public := guard.Evaluate(cmd, guard.WithPolicy(policy))
-			internal := pipeline.Run(cmd, eval.Config{Policy: policy})
+			public := guard.Evaluate(cmd, guard.WithDestructivePolicy(policy))
+			internal := pipeline.Run(cmd, eval.Config{DestructivePolicy: policy, PrivacyPolicy: policy})
 
 			if public.Decision != internal.Decision {
 				t.Fatalf("decision mismatch command=%q public=%s internal=%s", cmd, public.Decision, internal.Decision)
@@ -38,12 +38,12 @@ func TestOracleInternalVsPublicEquivalence(t *testing.T) {
 			if len(public.Matches) != len(internal.Matches) {
 				t.Fatalf("matches len mismatch command=%q public=%d internal=%d", cmd, len(public.Matches), len(internal.Matches))
 			}
-			if (public.Assessment == nil) != (internal.Assessment == nil) {
+			if (public.DestructiveAssessment == nil) != (internal.DestructiveAssessment == nil) {
 				t.Fatalf("assessment nil mismatch command=%q", cmd)
 			}
-			if public.Assessment != nil && internal.Assessment != nil {
-				if public.Assessment.Severity != internal.Assessment.Severity {
-					t.Fatalf("assessment severity mismatch command=%q public=%s internal=%s", cmd, public.Assessment.Severity, internal.Assessment.Severity)
+			if public.DestructiveAssessment != nil && internal.DestructiveAssessment != nil {
+				if public.DestructiveAssessment.Severity != internal.DestructiveAssessment.Severity {
+					t.Fatalf("assessment severity mismatch command=%q public=%s internal=%s", cmd, public.DestructiveAssessment.Severity, internal.DestructiveAssessment.Severity)
 				}
 			}
 		})
@@ -64,7 +64,7 @@ func TestOracleRustComparisonIfAvailable(t *testing.T) {
 	for _, cmd := range commands {
 		cmd := cmd
 		t.Run(cmd, func(t *testing.T) {
-			goResult := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+			goResult := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			rustDecision, err := guardRunUpstreamDecision(upstream, cmd)
 			if err != nil {
 				t.Fatalf("run upstream: %v", err)
@@ -128,8 +128,8 @@ func BenchmarkEvaluateThroughputMatrix(b *testing.B) {
 		cmd  string
 		opts []guard.Option
 	}{
-		{name: "destructive", cmd: "git push --force", opts: []guard.Option{guard.WithPolicy(guard.InteractivePolicy())}},
-		{name: "safe", cmd: "echo hello", opts: []guard.Option{guard.WithPolicy(guard.InteractivePolicy())}},
+		{name: "destructive", cmd: "git push --force", opts: []guard.Option{guard.WithDestructivePolicy(guard.InteractivePolicy())}},
+		{name: "safe", cmd: "echo hello", opts: []guard.Option{guard.WithDestructivePolicy(guard.InteractivePolicy())}},
 		{name: "allowlist", cmd: "git push --force", opts: []guard.Option{guard.WithAllowlist("git push *")}},
 		{name: "blocklist", cmd: "echo hello", opts: []guard.Option{guard.WithBlocklist("echo *")}},
 		{name: "empty", cmd: "", opts: nil},
@@ -157,7 +157,7 @@ func BenchmarkEvaluateOptionOverhead(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			_ = guard.Evaluate(baseCmd,
-				guard.WithPolicy(guard.StrictPolicy()),
+				guard.WithDestructivePolicy(guard.StrictPolicy()),
 				guard.WithAllowlist("git *"),
 				guard.WithBlocklist("rm -rf *"),
 				guard.WithDisabledPacks("platform.github"),
@@ -184,8 +184,8 @@ func TestStressConcurrentEvaluate(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
 				cmd := commands[(i+j)%len(commands)]
-				result := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
-				if result.Assessment == nil && result.Decision != guard.Allow {
+				result := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
+				if result.DestructiveAssessment == nil && result.Decision != guard.Allow {
 					errCh <- fmt.Errorf("nil assessment with non-allow decision: %s", result.Decision)
 					return
 				}

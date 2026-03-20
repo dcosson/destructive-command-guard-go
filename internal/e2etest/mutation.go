@@ -46,7 +46,7 @@ type mutation struct {
 
 func runMutationAnalysis(pack packs.Pack, corpus []string) MutationReport {
 	report := MutationReport{Pack: pack.ID}
-	for _, rule := range pack.Destructive {
+	for _, rule := range pack.Rules {
 		patternType := "destructive"
 		hit, miss := selectProbes(pack.ID, rule.ID, corpus)
 		for _, m := range generateMutations() {
@@ -272,7 +272,7 @@ func loadMutationCorpus() []string {
 func selectProbes(packID, ruleID string, corpus []string) (hit string, miss string) {
 	miss = "echo harmless"
 	for _, cmd := range corpus {
-		result := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		result := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		if hasMutationMatch(result, packID, ruleID) {
 			if hit == "" {
 				hit = cmd
@@ -352,7 +352,7 @@ func fallbackHitProbe(packID, ruleID string) string {
 		"gh repo delete myrepo --yes",
 	}
 	for _, cmd := range probes {
-		result := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		result := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		if hasMutationMatch(result, packID, ruleID) {
 			return cmd
 		}

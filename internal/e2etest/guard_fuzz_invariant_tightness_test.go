@@ -50,7 +50,7 @@ func TestPropertyFuzzInvariantsTightness(t *testing.T) {
 			result: guard.Result{
 				Decision:   guard.Deny,
 				Command:    "echo hello",
-				Assessment: &guard.Assessment{Severity: guard.Severity(99), Confidence: guard.ConfidenceHigh},
+				DestructiveAssessment: &guard.Assessment{Severity: guard.Severity(99), Confidence: guard.ConfidenceHigh},
 				Matches:    []guard.Match{{Pack: "test.pack", Rule: "test-rule"}},
 			},
 		},
@@ -60,7 +60,7 @@ func TestPropertyFuzzInvariantsTightness(t *testing.T) {
 			result: guard.Result{
 				Decision:   guard.Deny,
 				Command:    "echo hello",
-				Assessment: &guard.Assessment{Severity: guard.High, Confidence: guard.ConfidenceHigh},
+				DestructiveAssessment: &guard.Assessment{Severity: guard.High, Confidence: guard.ConfidenceHigh},
 				Matches:    []guard.Match{{Pack: "", Rule: ""}},
 			},
 		},
@@ -70,7 +70,7 @@ func TestPropertyFuzzInvariantsTightness(t *testing.T) {
 			result: guard.Result{
 				Decision:   guard.Deny,
 				Command:    long,
-				Assessment: &guard.Assessment{Severity: guard.High, Confidence: guard.ConfidenceHigh},
+				DestructiveAssessment: &guard.Assessment{Severity: guard.High, Confidence: guard.ConfidenceHigh},
 				Matches:    []guard.Match{{Pack: "test.pack", Rule: "test-rule"}},
 			},
 		},
@@ -105,20 +105,20 @@ func guardFirstInvariantViolation(command string, result guard.Result) string {
 	}
 
 	// INV-4: nil assessment implies allow and no matches.
-	if result.Assessment == nil {
+	if result.DestructiveAssessment == nil {
 		if result.Decision != guard.Allow || len(result.Matches) > 0 {
 			return "INV-4"
 		}
 	}
 
 	// INV-5: matches implies assessment.
-	if len(result.Matches) > 0 && result.Assessment == nil {
+	if len(result.Matches) > 0 && result.DestructiveAssessment == nil {
 		return "INV-5"
 	}
 
 	// INV-6: assessment severity valid.
-	if result.Assessment != nil {
-		switch result.Assessment.Severity {
+	if result.DestructiveAssessment != nil {
+		switch result.DestructiveAssessment.Severity {
 		case guard.Indeterminate, guard.Low, guard.Medium, guard.High, guard.Critical:
 		default:
 			return "INV-6"
@@ -136,7 +136,7 @@ func guardFirstInvariantViolation(command string, result guard.Result) string {
 	}
 
 	// INV-8: oversized input should not escalate beyond indeterminate.
-	if len(command) > parse.MaxInputSize && result.Assessment != nil && result.Assessment.Severity > guard.Indeterminate {
+	if len(command) > parse.MaxInputSize && result.DestructiveAssessment != nil && result.DestructiveAssessment.Severity > guard.Indeterminate {
 		return "INV-8"
 	}
 

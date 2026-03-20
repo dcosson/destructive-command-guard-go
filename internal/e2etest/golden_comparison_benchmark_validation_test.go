@@ -152,7 +152,7 @@ func TestBenchmarkStability(t *testing.T) {
 			name: "evaluate-destructive",
 			fn: func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
-					_ = guard.Evaluate("git push --force", guard.WithPolicy(guard.InteractivePolicy()))
+					_ = guard.Evaluate("git push --force", guard.WithDestructivePolicy(guard.InteractivePolicy()))
 				}
 			},
 		},

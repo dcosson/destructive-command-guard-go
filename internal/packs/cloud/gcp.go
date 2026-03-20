@@ -11,7 +11,7 @@ func gcpPack() packs.Pack {
 		Safe: []packs.Rule{
 			{ID: "gcp-list-safe", Match: packs.And(packs.Name("gcloud"), packs.ArgContains("list"))},
 		},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{ID: "gcp-project-delete", Severity: sevCritical, Confidence: confHigh, EnvSensitive: true, Reason: "gcloud projects delete removes the project and all project resources", Remediation: "Delete specific resources instead of deleting the project", Match: packs.And(packs.Name("gcloud"), packs.ArgSubsequence("projects", "delete"))},
 		},
 	}

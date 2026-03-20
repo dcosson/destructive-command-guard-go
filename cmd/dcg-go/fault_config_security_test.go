@@ -73,8 +73,8 @@ func TestFaultAdversarialConfigParse(t *testing.T) {
 		{name: "yaml-anchors", content: "a: &a [*a, *a, *a, *a]", wantError: false},
 		{name: "very-long-value", content: "allowlist:\n  - \"" + strings.Repeat("x", 100_000) + "\"", wantError: false},
 		{name: "special-chars", content: `allowlist: ["git; rm -rf /"]`, wantError: false},
-		{name: "policy-int", content: "policy: 42", wantError: false},
-		{name: "policy-list", content: "policy: [strict, interactive]", wantError: true},
+		{name: "policy-int", content: "destructive_policy: 42", wantError: false},
+		{name: "policy-list", content: "destructive_policy: [strict, interactive]", wantError: true},
 	}
 
 	for _, tc := range cases {

@@ -63,7 +63,7 @@ func TestFaultGoldenFileMissingPack(t *testing.T) {
 func TestOracleGoldenCrossValidation(t *testing.T) {
 	entries := loadGuardDecisionGoldenEntries(t)
 	for _, e := range entries {
-		res := guard.Evaluate(e.command, guard.WithPolicy(guard.InteractivePolicy()))
+		res := guard.Evaluate(e.command, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		if got := res.Decision.String(); got != e.decision {
 			t.Fatalf("golden mismatch command=%q got=%s want=%s", e.command, got, e.decision)
 		}
@@ -88,8 +88,8 @@ func TestStressConcurrentGoldenCorpusEvaluation(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := w; i < len(entries); i += workers {
-				r := guard.Evaluate(entries[i].Command, guard.WithPolicy(guard.InteractivePolicy()))
-				if r.Assessment == nil && r.Decision != guard.Allow {
+				r := guard.Evaluate(entries[i].Command, guard.WithDestructivePolicy(guard.InteractivePolicy()))
+				if r.DestructiveAssessment == nil && r.Decision != guard.Allow {
 					errCh <- fmt.Errorf("entry[%d] nil assessment with non-allow decision=%s", i, r.Decision)
 					return
 				}
@@ -119,7 +119,7 @@ func TestStressHighVolumeFuzzSeedRunner(t *testing.T) {
 	for i := 0; i < total; i++ {
 		cmd := seeds[i%len(seeds)]
 		r := guard.Evaluate(cmd)
-		if r.Assessment == nil && r.Decision != guard.Allow {
+		if r.DestructiveAssessment == nil && r.Decision != guard.Allow {
 			t.Fatalf("seed[%d] nil assessment with non-allow decision=%s", i, r.Decision)
 		}
 	}
@@ -151,8 +151,8 @@ func TestStressSustainedLoadMemoryPressure(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < perGoroutine; j++ {
 				cmd := commands[(i*perGoroutine+j)%len(commands)]
-				r := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
-				if r.Assessment == nil && r.Decision != guard.Allow {
+				r := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
+				if r.DestructiveAssessment == nil && r.Decision != guard.Allow {
 					errCh <- fmt.Errorf("goroutine=%d iter=%d nil assessment with %s", i, j, r.Decision)
 					return
 				}
@@ -228,7 +228,7 @@ func TestSecurityFuzzCorpusClean(t *testing.T) {
 
 func TestSecurityGoldenFileNotExecuted(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "executed")
-	_ = guard.Evaluate(fmt.Sprintf("touch %s", marker), guard.WithPolicy(guard.InteractivePolicy()))
+	_ = guard.Evaluate(fmt.Sprintf("touch %s", marker), guard.WithDestructivePolicy(guard.InteractivePolicy()))
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("marker file unexpectedly exists: %s", marker)
 	}
@@ -241,7 +241,7 @@ func TestSecurityNoSubprocessExecutionWithEmptyPath(t *testing.T) {
 	entries := loadExpandedGoldenEntries(t)
 	t.Setenv("PATH", "")
 	for _, e := range entries {
-		_ = guard.Evaluate(e.Command, guard.WithPolicy(guard.InteractivePolicy()))
+		_ = guard.Evaluate(e.Command, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 	}
 }
 

@@ -14,7 +14,7 @@ func helmPack() packs.Pack {
 			{ID: "helm-get-safe", Match: packs.And(packs.Name("helm"), packs.ArgAt(0, "get"))},
 			{ID: "helm-template-safe", Match: packs.And(packs.Name("helm"), packs.ArgAt(0, "template"))},
 		},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{
 				ID:           "helm-uninstall",
 				Severity:     sevHigh,

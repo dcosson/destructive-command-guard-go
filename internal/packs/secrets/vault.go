@@ -26,7 +26,7 @@ func vaultPack() packs.Pack {
 			{ID: "vault-policy-safe", Match: packs.And(packs.Name("vault"), packs.ArgAt(0, "policy"), packs.Or(packs.ArgAt(1, "read"), packs.ArgAt(1, "list")))},
 			{ID: "vault-audit-safe", Match: packs.And(packs.Name("vault"), packs.ArgAt(0, "audit"), packs.ArgAt(1, "list"))},
 		},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{ID: "vault-secrets-disable", Severity: sevCritical, Confidence: confHigh, EnvSensitive: true, Reason: "vault secrets disable removes a mounted secrets engine and stored secret data", Remediation: "Leave the engine mounted and restrict access with policy changes", Match: packs.And(packs.Name("vault"), packs.ArgAt(0, "secrets"), packs.ArgAt(1, "disable"))},
 			{ID: "vault-auth-disable", Severity: sevHigh, Confidence: confHigh, EnvSensitive: true, Reason: "vault auth disable removes an authentication method", Remediation: "Keep auth methods enabled and narrow policy permissions", Match: packs.And(packs.Name("vault"), packs.ArgAt(0, "auth"), packs.ArgAt(1, "disable"))},
 			{ID: "vault-token-revoke", Severity: sevHigh, Confidence: confHigh, EnvSensitive: true, Reason: "vault token revoke invalidates active tokens immediately", Remediation: "Use short token TTLs instead of bulk token revocation", Match: packs.And(packs.Name("vault"), packs.ArgAt(0, "token"), packs.ArgAt(1, "revoke"))},

@@ -25,7 +25,7 @@ func TestFaultInfraCloudNilFields(t *testing.T) {
 	}
 	for i, c := range cmds {
 		t.Run(fmt.Sprintf("degenerate-%d", i), func(t *testing.T) {
-			_ = guard.Evaluate(c, guard.WithPolicy(guard.InteractivePolicy()))
+			_ = guard.Evaluate(c, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		})
 	}
 }
@@ -43,7 +43,7 @@ func TestFaultArgAtOutOfBounds(t *testing.T) {
 	}
 	for i, c := range shortCmds {
 		t.Run(fmt.Sprintf("short-%d", i), func(t *testing.T) {
-			_ = guard.Evaluate(c, guard.WithPolicy(guard.InteractivePolicy()))
+			_ = guard.Evaluate(c, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		})
 	}
 }
@@ -56,7 +56,7 @@ func TestFaultAnsibleModuleArgs(t *testing.T) {
 		"ansible all -a 'rm -rf /tmp'",
 	}
 	for _, c := range cases {
-		_ = guard.Evaluate(c, guard.WithPolicy(guard.InteractivePolicy()))
+		_ = guard.Evaluate(c, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 	}
 }
 
@@ -72,9 +72,9 @@ func TestOracleInfraCloudPolicyMonotonicity(t *testing.T) {
 	}
 	restrict := map[guard.Decision]int{guard.Allow: 0, guard.Ask: 1, guard.Deny: 2}
 	for _, c := range commands {
-		strict := guard.Evaluate(c, guard.WithPolicy(guard.StrictPolicy()))
-		inter := guard.Evaluate(c, guard.WithPolicy(guard.InteractivePolicy()))
-		perm := guard.Evaluate(c, guard.WithPolicy(guard.PermissivePolicy()))
+		strict := guard.Evaluate(c, guard.WithDestructivePolicy(guard.StrictPolicy()))
+		inter := guard.Evaluate(c, guard.WithDestructivePolicy(guard.InteractivePolicy()))
+		perm := guard.Evaluate(c, guard.WithDestructivePolicy(guard.PermissivePolicy()))
 		sr, ir, pr := restrict[strict.Decision], restrict[inter.Decision], restrict[perm.Decision]
 		if sr < ir || ir < pr {
 			t.Fatalf("policy monotonicity violated for %q: strict=%s inter=%s perm=%s", c, strict.Decision, inter.Decision, perm.Decision)
@@ -112,9 +112,9 @@ func TestOracleCrossCloudConsistency(t *testing.T) {
 				if !HasRegisteredPack(packID) {
 					continue
 				}
-				r := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
-				if r.Assessment != nil {
-					severities = append(severities, r.Assessment.Severity)
+				r := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
+				if r.DestructiveAssessment != nil {
+					severities = append(severities, r.DestructiveAssessment.Severity)
 				}
 			}
 			if len(severities) < 2 {
@@ -145,13 +145,13 @@ func TestOracleIaCConsistency(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rt := guard.Evaluate(tc.tf, guard.WithPolicy(guard.InteractivePolicy()))
-			rp := guard.Evaluate(tc.pl, guard.WithPolicy(guard.InteractivePolicy()))
-			if rt.Assessment == nil || rp.Assessment == nil {
+			rt := guard.Evaluate(tc.tf, guard.WithDestructivePolicy(guard.InteractivePolicy()))
+			rp := guard.Evaluate(tc.pl, guard.WithDestructivePolicy(guard.InteractivePolicy()))
+			if rt.DestructiveAssessment == nil || rp.DestructiveAssessment == nil {
 				t.Fatalf("expected both commands to be assessed")
 			}
-			if rt.Assessment.Severity != rp.Assessment.Severity {
-				t.Fatalf("severity mismatch tf=%s pulumi=%s", rt.Assessment.Severity, rp.Assessment.Severity)
+			if rt.DestructiveAssessment.Severity != rp.DestructiveAssessment.Severity {
+				t.Fatalf("severity mismatch tf=%s pulumi=%s", rt.DestructiveAssessment.Severity, rp.DestructiveAssessment.Severity)
 			}
 		})
 	}
@@ -174,7 +174,7 @@ func TestStressConcurrentInfraCloudMatching(t *testing.T) {
 			defer wg.Done()
 			cmd := commands[idx%len(commands)]
 			for j := 0; j < 300; j++ {
-				_ = guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+				_ = guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			}
 		}(i)
 	}
@@ -202,7 +202,7 @@ func TestStressHighVolumeInfraCloudCommands(t *testing.T) {
 		go func(worker int) {
 			defer wg.Done()
 			for i := worker; i < len(commands); i += 16 {
-				_ = guard.Evaluate(commands[i], guard.WithPolicy(guard.InteractivePolicy()))
+				_ = guard.Evaluate(commands[i], guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			}
 		}(w)
 	}
@@ -228,7 +228,7 @@ func TestSecuritySubcommandEvasion(t *testing.T) {
 			if !HasRegisteredPack(tt.packID) {
 				t.Skipf("pack %s not registered", tt.packID)
 			}
-			res := guard.Evaluate(tt.command, guard.WithPolicy(guard.InteractivePolicy()))
+			res := guard.Evaluate(tt.command, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			gotDeny := res.Decision == guard.Deny || res.Decision == guard.Ask
 			if gotDeny != tt.wantDeny {
 				t.Fatalf("got deny-like=%v want=%v for %q", gotDeny, tt.wantDeny, tt.command)
@@ -250,7 +250,7 @@ func TestSecurityAnsibleContentInjection(t *testing.T) {
 		{"ansible all -m file -a 'path=/tmp state=present'", false},
 	}
 	for _, tt := range tests {
-		res := guard.Evaluate(tt.cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		res := guard.Evaluate(tt.cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		gotDeny := res.Decision == guard.Deny || res.Decision == guard.Ask
 		if gotDeny != tt.wantDeny {
 			t.Fatalf("ansible injection case %q got deny-like=%v want=%v", tt.cmd, gotDeny, tt.wantDeny)
@@ -276,13 +276,13 @@ func TestSecurityEnvSensitivityPreConditions(t *testing.T) {
 			if !HasRegisteredPack(s.packID) {
 				t.Skipf("pack %s not registered", s.packID)
 			}
-			without := guard.Evaluate(s.cmd, guard.WithPolicy(guard.InteractivePolicy()))
-			with := guard.Evaluate(s.cmd, guard.WithPolicy(guard.InteractivePolicy()), guard.WithEnv([]string{"ENVIRONMENT=production"}))
-			if without.Assessment == nil || with.Assessment == nil {
+			without := guard.Evaluate(s.cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
+			with := guard.Evaluate(s.cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()), guard.WithEnv([]string{"ENVIRONMENT=production"}))
+			if without.DestructiveAssessment == nil || with.DestructiveAssessment == nil {
 				t.Skip("no assessment produced in current registry for this sample")
 			}
-			if with.Assessment.Severity < without.Assessment.Severity {
-				t.Fatalf("env escalation regressed severity: without=%s with=%s", without.Assessment.Severity, with.Assessment.Severity)
+			if with.DestructiveAssessment.Severity < without.DestructiveAssessment.Severity {
+				t.Fatalf("env escalation regressed severity: without=%s with=%s", without.DestructiveAssessment.Severity, with.DestructiveAssessment.Severity)
 			}
 		})
 	}
@@ -298,7 +298,7 @@ func TestSecurityNoUnexpectedHeapGrowthInInfraCloudBurst(t *testing.T) {
 			if i%2 == 0 {
 				cmd = "aws ec2 terminate-instances --instance-ids i-123"
 			}
-			_ = guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+			_ = guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		}
 		runtime.GC()
 		var ms runtime.MemStats
@@ -397,7 +397,7 @@ func BenchmarkInfraCloudGoldenCorpusThroughput(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, c := range corpus {
-			_ = guard.Evaluate(c, guard.WithPolicy(guard.InteractivePolicy()))
+			_ = guard.Evaluate(c, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		}
 	}
 }
@@ -407,7 +407,7 @@ func BenchmarkInfraCloudAWSFullPackEvalNoMatchWorstCase(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		_ = guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 	}
 }
 
@@ -418,7 +418,7 @@ func benchGuardEvalCommands(b *testing.B, commands map[string]string) {
 		b.Run(name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				_ = guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+				_ = guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			}
 		})
 	}

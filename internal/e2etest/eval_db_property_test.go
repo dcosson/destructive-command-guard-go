@@ -35,7 +35,7 @@ func TestDbPropertyEnvSensitivityConsistency(t *testing.T) {
 				t.Fatalf("pack %s not found", id)
 			}
 			hasEnvSensitive := false
-			for _, dp := range pack.Destructive {
+			for _, dp := range pack.Rules {
 				if dp.EnvSensitive {
 					hasEnvSensitive = true
 					break
@@ -53,7 +53,7 @@ func TestDbPropertyEnvSensitivityConsistency(t *testing.T) {
 	if sqlitePack == nil {
 		t.Fatal("database.sqlite not found")
 	}
-	for _, dp := range sqlitePack.Destructive {
+	for _, dp := range sqlitePack.Rules {
 		if dp.EnvSensitive {
 			t.Errorf("sqlite3 pattern %s should not be env-sensitive", dp.ID)
 		}
@@ -203,7 +203,7 @@ func TestDbPropertyCrossPackIsolation(t *testing.T) {
 				if pack == nil {
 					t.Fatalf("pack %s not found", otherPackID)
 				}
-				for _, dp := range pack.Destructive {
+				for _, dp := range pack.Rules {
 					if dp.Match != nil && matchRuleCommand(dp, cmd) {
 						t.Errorf("%s command triggers %s/%s",
 							cmdPackID, otherPackID, dp.ID)
@@ -225,7 +225,7 @@ func TestDbPropertyDestructiveRuleFields(t *testing.T) {
 		if pack == nil {
 			t.Fatalf("pack %s not found", id)
 		}
-		for _, dp := range pack.Destructive {
+		for _, dp := range pack.Rules {
 			dp := dp
 			t.Run(id+"/"+dp.ID, func(t *testing.T) {
 				if dp.ID == "" {
@@ -322,7 +322,7 @@ func TestDbPropertyDestructiveReachability(t *testing.T) {
 			})
 		}
 		// Verify every rule has a reachability command
-		for _, dp := range pack.Destructive {
+		for _, dp := range pack.Rules {
 			if _, ok := rules[dp.ID]; !ok {
 				t.Errorf("pack %s rule %s has no reachability command", packID, dp.ID)
 			}

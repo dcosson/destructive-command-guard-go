@@ -64,7 +64,7 @@ func FilesystemPack() packs.Pack {
 				),
 			},
 		},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{
 				ID: "rm-rf-root",
 				Match: packs.And(

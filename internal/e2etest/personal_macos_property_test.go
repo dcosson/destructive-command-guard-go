@@ -28,7 +28,7 @@ func TestPropertyPersonalPackReachability(t *testing.T) {
 			if !HasRegisteredPack(tc.pack) {
 				t.Skipf("pack %s not registered", tc.pack)
 			}
-			res := guard.Evaluate(tc.cmd, guard.WithPolicy(guard.InteractivePolicy()))
+			res := guard.Evaluate(tc.cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			if !hasRuleMatch(res, tc.pack, tc.rule) {
 				t.Fatalf("expected %s/%s for %q; got %+v", tc.pack, tc.rule, tc.cmd, res.Matches)
 			}
@@ -47,7 +47,7 @@ func TestPropertyPersonalSSHSafePaths(t *testing.T) {
 		"grep Host ~/.ssh/config",
 	}
 	for _, cmd := range safe {
-		res := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		res := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		if res.Decision != guard.Allow {
 			t.Fatalf("expected allow for safe ssh command %q, got %s", cmd, res.Decision)
 		}
@@ -68,12 +68,12 @@ func TestPropertyPersonalFilesSeverityTiers(t *testing.T) {
 		{"cat ~/Documents/notes.txt", guard.Medium, "personal-files-access"},
 	}
 	for _, tc := range tiers {
-		res := guard.Evaluate(tc.cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		res := guard.Evaluate(tc.cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		if !hasRuleMatch(res, "personal.files", tc.rule) {
 			t.Fatalf("expected rule %s for %q", tc.rule, tc.cmd)
 		}
-		if res.Assessment == nil || res.Assessment.Severity != tc.severity {
-			t.Fatalf("severity mismatch for %q: got=%v want=%v", tc.cmd, res.Assessment, tc.severity)
+		if res.DestructiveAssessment == nil || res.DestructiveAssessment.Severity != tc.severity {
+			t.Fatalf("severity mismatch for %q: got=%v want=%v", tc.cmd, res.DestructiveAssessment, tc.severity)
 		}
 	}
 }
@@ -108,7 +108,7 @@ func TestPropertyMacOSDeterministicRules(t *testing.T) {
 		{"macos.system", "defaults-write", "defaults write com.apple.dock autohide -bool true"},
 	}
 	for _, tc := range cases {
-		res := guard.Evaluate(tc.cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		res := guard.Evaluate(tc.cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		if !hasRuleMatch(res, tc.pack, tc.rule) {
 			t.Fatalf("expected %s/%s for %q", tc.pack, tc.rule, tc.cmd)
 		}

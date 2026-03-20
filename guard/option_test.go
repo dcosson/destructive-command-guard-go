@@ -4,11 +4,17 @@ import "testing"
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := defaultConfig()
-	if cfg.policy == nil {
-		t.Fatal("default policy is nil")
+	if cfg.destructivePolicy == nil {
+		t.Fatal("default destructive policy is nil")
 	}
-	if got := cfg.policy.Decide(Assessment{Severity: Medium}); got != Ask {
-		t.Fatalf("default policy medium decision = %v, want %v", got, Ask)
+	if got := cfg.destructivePolicy.Decide(Assessment{Severity: Medium}); got != Ask {
+		t.Fatalf("default destructive policy medium decision = %v, want %v", got, Ask)
+	}
+	if cfg.privacyPolicy == nil {
+		t.Fatal("default privacy policy is nil")
+	}
+	if got := cfg.privacyPolicy.Decide(Assessment{Severity: Medium}); got != Ask {
+		t.Fatalf("default privacy policy medium decision = %v, want %v", got, Ask)
 	}
 	if cfg.allowlist != nil {
 		t.Fatalf("default allowlist = %#v, want nil", cfg.allowlist)
@@ -29,10 +35,18 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestOptionsApplyInOrder(t *testing.T) {
 	cfg := defaultConfig()
-	WithPolicy(PermissivePolicy())(&cfg)
-	WithPolicy(StrictPolicy())(&cfg)
-	if got := cfg.policy.Decide(Assessment{Severity: Medium}); got != Deny {
-		t.Fatalf("later WithPolicy should win, got %v want %v", got, Deny)
+	WithDestructivePolicy(PermissivePolicy())(&cfg)
+	WithDestructivePolicy(StrictPolicy())(&cfg)
+	if got := cfg.destructivePolicy.Decide(Assessment{Severity: Medium}); got != Deny {
+		t.Fatalf("later WithDestructivePolicy should win, got %v want %v", got, Deny)
+	}
+}
+
+func TestWithPrivacyPolicyApplies(t *testing.T) {
+	cfg := defaultConfig()
+	WithPrivacyPolicy(StrictPolicy())(&cfg)
+	if got := cfg.privacyPolicy.Decide(Assessment{Severity: Medium}); got != Deny {
+		t.Fatalf("WithPrivacyPolicy(Strict) medium = %v, want %v", got, Deny)
 	}
 }
 

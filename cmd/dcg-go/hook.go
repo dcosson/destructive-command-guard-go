@@ -106,6 +106,17 @@ func decisionToHookDecision(d guard.Decision) string {
 	}
 }
 
+func categoryPrefix(cat guard.RuleCategory) string {
+	switch cat {
+	case guard.CategoryPrivacy:
+		return "[privacy] "
+	case guard.CategoryBoth:
+		return "[destructive+privacy] "
+	default:
+		return "[destructive] "
+	}
+}
+
 func buildReason(result guard.Result) string {
 	if len(result.Matches) == 0 {
 		return ""
@@ -117,7 +128,7 @@ func buildReason(result guard.Result) string {
 		}
 	}
 
-	reason := best.Reason
+	reason := categoryPrefix(best.Category) + best.Reason
 	if best.Remediation != "" {
 		reason += ". Suggestion: " + best.Remediation
 	}

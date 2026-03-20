@@ -9,7 +9,7 @@ func redisPack() packs.Pack {
 		Description: "Redis destructive operations via redis-cli",
 		Keywords:    []string{"redis-cli"},
 		Safe:        []packs.Rule{{ID: "redis-cli-readonly-safe"}, {ID: "redis-cli-interactive-safe"}},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{ID: "redis-flushall", Severity: sevHigh, Confidence: confHigh, Reason: "FLUSHALL removes every key from all Redis databases", Remediation: "Use FLUSHDB to limit deletion to one database", EnvSensitive: true, Match: func(cmd packs.Command) bool { return hasAll(cmd, "redis-cli", "flushall") }},
 			{ID: "redis-flushdb", Severity: sevHigh, Confidence: confHigh, Reason: "FLUSHDB removes every key from the current Redis database", Remediation: "Delete only required keys with DEL or UNLINK", EnvSensitive: true, Match: func(cmd packs.Command) bool { return hasAll(cmd, "redis-cli", "flushdb") }},
 			{ID: "redis-key-delete", Severity: sevMedium, Confidence: confMedium, Reason: "DEL and UNLINK remove the specified keys", Remediation: "Delete a smaller key set per command", EnvSensitive: true, Match: func(cmd packs.Command) bool {

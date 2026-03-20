@@ -15,7 +15,8 @@ func TestConfigLoading(t *testing.T) {
 	dir := t.TempDir()
 	configFile := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(configFile, []byte(`
-policy: strict
+destructive_policy: strict
+privacy_policy: interactive
 allowlist:
   - "git status *"
 blocklist:
@@ -28,8 +29,11 @@ disabled_packs:
 
 	t.Setenv("DCG_CONFIG", configFile)
 	cfg := loadConfig()
-	if cfg.Policy != "strict" {
-		t.Fatalf("policy = %q", cfg.Policy)
+	if cfg.DestructivePolicy != "strict" {
+		t.Fatalf("destructive_policy = %q", cfg.DestructivePolicy)
+	}
+	if cfg.PrivacyPolicy != "interactive" {
+		t.Fatalf("privacy_policy = %q", cfg.PrivacyPolicy)
 	}
 	if len(cfg.Allowlist) != 1 || cfg.Allowlist[0] != "git status *" {
 		t.Fatalf("allowlist = %#v", cfg.Allowlist)
@@ -65,8 +69,11 @@ func TestConfigMissingDefault(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("DCG_CONFIG", "")
 	cfg := loadConfig()
-	if cfg.Policy != "" {
-		t.Fatalf("policy = %q, want empty", cfg.Policy)
+	if cfg.DestructivePolicy != "" {
+		t.Fatalf("destructive_policy = %q, want empty", cfg.DestructivePolicy)
+	}
+	if cfg.PrivacyPolicy != "" {
+		t.Fatalf("privacy_policy = %q, want empty", cfg.PrivacyPolicy)
 	}
 	if cfg.Allowlist != nil {
 		t.Fatalf("allowlist = %#v, want nil", cfg.Allowlist)
@@ -118,14 +125,15 @@ func TestConfigToOptions(t *testing.T) {
 	defer reset()
 
 	cfg := Config{
-		Policy:        "strict",
-		Allowlist:     []string{"git status *"},
-		Blocklist:     []string{"rm -rf /"},
-		DisabledPacks: []string{"platform.github"},
+		DestructivePolicy: "strict",
+		PrivacyPolicy:     "interactive",
+		Allowlist:         []string{"git status *"},
+		Blocklist:         []string{"rm -rf /"},
+		DisabledPacks:     []string{"platform.github"},
 	}
 	opts := cfg.toOptions()
-	if len(opts) != 4 {
-		t.Fatalf("opts len = %d, want 4", len(opts))
+	if len(opts) != 5 {
+		t.Fatalf("opts len = %d, want 5", len(opts))
 	}
 }
 
@@ -134,13 +142,13 @@ func TestConfigToOptionsInvalidPolicyWarns(t *testing.T) {
 	defer reset()
 
 	cfg := Config{
-		Policy: "invalid",
+		DestructivePolicy: "invalid",
 	}
 	opts := cfg.toOptions()
 	if len(opts) != 0 {
 		t.Fatalf("opts len = %d, want 0", len(opts))
 	}
-	if !strings.Contains(stderr.(*bytes.Buffer).String(), "warning: unknown policy") {
+	if !strings.Contains(stderr.(*bytes.Buffer).String(), "warning: destructive_policy:") {
 		t.Fatalf("stderr = %q", stderr.(*bytes.Buffer).String())
 	}
 }

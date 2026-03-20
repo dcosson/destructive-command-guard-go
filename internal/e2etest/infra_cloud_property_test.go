@@ -31,14 +31,14 @@ func TestPropertyEveryInfraCloudDestructivePatternReachable(t *testing.T) {
 		for _, p := range pairs {
 			byRule[p.rule] = p.command
 		}
-		for _, dp := range pack.Destructive {
+		for _, dp := range pack.Rules {
 			dp := dp
 			t.Run(packID+"/"+dp.ID, func(t *testing.T) {
 				cmd, ok := byRule[dp.ID]
 				if !ok {
 					t.Fatalf("missing reachability command for %s/%s", packID, dp.ID)
 				}
-				result := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+				result := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 				if !hasRuleMatch(result, packID, dp.ID) {
 					t.Fatalf("reachability command did not match %s/%s: %q", packID, dp.ID, cmd)
 				}
@@ -66,7 +66,7 @@ func TestPropertyInfraCloudMutualExclusion(t *testing.T) {
 			if !HasRegisteredPack(tool.packID) {
 				t.Skipf("pack %s not registered", tool.packID)
 			}
-			result := guard.Evaluate(tool.cmd, guard.WithPolicy(guard.InteractivePolicy()))
+			result := guard.Evaluate(tool.cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			for _, m := range result.Matches {
 				if strings.HasPrefix(m.Pack, "infrastructure.") || strings.HasPrefix(m.Pack, "cloud.") {
 					if m.Pack != tool.packID {
@@ -94,7 +94,7 @@ func TestPropertyInfraCloudUniversalEnvSensitivity(t *testing.T) {
 			t.Run(packID, func(t *testing.T) { t.Skipf("pack %s not registered", packID) })
 			continue
 		}
-		for _, dp := range pack.Destructive {
+		for _, dp := range pack.Rules {
 			dp := dp
 			t.Run(packID+"/"+dp.ID, func(t *testing.T) {
 				if !dp.EnvSensitive {
@@ -156,7 +156,7 @@ func TestPropertyInfraCloudArgAtCorrectness(t *testing.T) {
 			if !HasRegisteredPack(tc.toolID) {
 				t.Skipf("pack %s not registered", tc.toolID)
 			}
-			result := guard.Evaluate(tc.cmd, guard.WithPolicy(guard.InteractivePolicy()))
+			result := guard.Evaluate(tc.cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			if result.Decision == guard.Allow {
 				t.Fatalf("expected non-Allow for tool %s command %q", tc.toolID, tc.cmd)
 			}
@@ -212,7 +212,7 @@ func findPack(id string) (packs.Pack, bool) {
 }
 
 func findRule(pack packs.Pack, id string) (packs.Rule, bool) {
-	for _, r := range pack.Destructive {
+	for _, r := range pack.Rules {
 		if r.ID == id {
 			return r, true
 		}
@@ -246,7 +246,7 @@ func TestDeterministicInfraCloudExamples(t *testing.T) {
 	for _, ex := range examples {
 		ex := ex
 		t.Run(ex.tool, func(t *testing.T) {
-			result := guard.Evaluate(ex.cmd, guard.WithPolicy(guard.InteractivePolicy()))
+			result := guard.Evaluate(ex.cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			t.Logf("%s => decision=%s matches=%d", ex.cmd, result.Decision, len(result.Matches))
 		})
 	}
@@ -258,7 +258,7 @@ func TestInfraCloudReachabilityCountHint(t *testing.T) {
 	count := 0
 	for _, p := range packs.DefaultRegistry.All() {
 		if strings.HasPrefix(p.ID, "infrastructure.") || strings.HasPrefix(p.ID, "cloud.") {
-			count += len(p.Destructive)
+			count += len(p.Rules)
 		}
 	}
 	t.Logf("infra/cloud destructive pattern count in current registry: %d (plan target: 58)", count)
@@ -280,7 +280,7 @@ func TestInfraCloudMutualExclusionSmoke(t *testing.T) {
 	}
 	signatures := map[string]struct{}{}
 	for _, cmd := range cmds {
-		r := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		r := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		var key strings.Builder
 		for _, m := range r.Matches {
 			key.WriteString(fmt.Sprintf("%s/%s;", m.Pack, m.Rule))

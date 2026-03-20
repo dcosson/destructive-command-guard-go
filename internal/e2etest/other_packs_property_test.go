@@ -20,14 +20,14 @@ func TestPropertyEveryOtherPackDestructivePatternReachable(t *testing.T) {
 		for _, r := range reach[packID] {
 			byRule[r.rule] = r.command
 		}
-		for _, dp := range pk.Destructive {
+		for _, dp := range pk.Rules {
 			dp := dp
 			t.Run(packID+"/"+dp.ID, func(t *testing.T) {
 				cmd, ok := byRule[dp.ID]
 				if !ok {
 					t.Skipf("missing reachability command for %s/%s", packID, dp.ID)
 				}
-				res := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+				res := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 				if !hasRuleMatch(res, packID, dp.ID) {
 					t.Fatalf("reachability command did not match %s/%s: %q", packID, dp.ID, cmd)
 				}
@@ -51,7 +51,7 @@ func TestPropertyOtherPackMutualExclusion(t *testing.T) {
 			if !HasRegisteredPack(tc.packID) {
 				t.Skipf("pack %s not registered", tc.packID)
 			}
-			res := guard.Evaluate(tc.cmd, guard.WithPolicy(guard.InteractivePolicy()))
+			res := guard.Evaluate(tc.cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			for _, m := range res.Matches {
 				if strings.HasPrefix(m.Pack, "frameworks") || strings.HasPrefix(m.Pack, "secrets.") ||
 					strings.HasPrefix(m.Pack, "remote.") || strings.HasPrefix(m.Pack, "platform.") {
@@ -70,7 +70,7 @@ func TestPropertyOtherPackEnvSensitivitySplit(t *testing.T) {
 		if !ok {
 			continue
 		}
-		for _, r := range pk.Destructive {
+		for _, r := range pk.Rules {
 			if !r.EnvSensitive {
 				t.Fatalf("%s/%s should be env-sensitive", id, r.ID)
 			}
@@ -81,7 +81,7 @@ func TestPropertyOtherPackEnvSensitivitySplit(t *testing.T) {
 		if !ok {
 			continue
 		}
-		for _, r := range pk.Destructive {
+		for _, r := range pk.Rules {
 			if r.EnvSensitive {
 				t.Fatalf("%s/%s should NOT be env-sensitive", id, r.ID)
 			}
@@ -95,7 +95,7 @@ func TestPropertyOtherPackConfidenceLevelsValid(t *testing.T) {
 		if !ok {
 			continue
 		}
-		for _, r := range pk.Destructive {
+		for _, r := range pk.Rules {
 			if r.Confidence < int(guard.ConfidenceLow) || r.Confidence > int(guard.ConfidenceHigh) {
 				t.Fatalf("%s/%s has invalid confidence %d", packID, r.ID, r.Confidence)
 			}
@@ -117,8 +117,8 @@ func TestPropertyDualInvocationParity(t *testing.T) {
 		{"artisan migrate:reset", "php artisan migrate:reset"},
 	}
 	for _, p := range pairs {
-		r1 := guard.Evaluate(p.direct, guard.WithPolicy(guard.InteractivePolicy()))
-		r2 := guard.Evaluate(p.prefx, guard.WithPolicy(guard.InteractivePolicy()))
+		r1 := guard.Evaluate(p.direct, guard.WithDestructivePolicy(guard.InteractivePolicy()))
+		r2 := guard.Evaluate(p.prefx, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		if (r1.Decision == guard.Allow) != (r2.Decision == guard.Allow) {
 			t.Fatalf("dual invocation parity mismatch direct=%q prefixed=%q", p.direct, p.prefx)
 		}
@@ -140,7 +140,7 @@ func TestPropertyColonDelimitedExactMatching(t *testing.T) {
 		"artisan migrate:fres",
 	}
 	for _, cmd := range partials {
-		res := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		res := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		if res.Decision != guard.Allow {
 			t.Fatalf("partial subcommand should be safe: %q => %s", cmd, res.Decision)
 		}
@@ -183,7 +183,7 @@ func TestPropertyFrameworkToolIsolation(t *testing.T) {
 	}
 	// Any single command should not produce matches for all tools simultaneously.
 	for _, cmd := range wrongToolCmds {
-		res := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		res := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		toolSeen := map[string]bool{}
 		for _, m := range res.Matches {
 			switch {
@@ -260,7 +260,7 @@ func TestDeterministicOtherPacksExamples(t *testing.T) {
 				t.Skipf("pack %s not registered", s.packID)
 			}
 			for i, cmd := range s.cmds {
-				r := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+				r := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 				if !hasPackMatch(r, s.packID) {
 					t.Logf("case %d not covered by current %s patterns, skipping strict decision check: %q", i, s.packID, cmd)
 					continue

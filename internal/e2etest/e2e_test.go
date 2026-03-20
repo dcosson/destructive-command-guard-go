@@ -32,13 +32,13 @@ func TestE2ERealWorldScenarios(t *testing.T) {
 	for _, sc := range scenarios {
 		sc := sc
 		t.Run(sc.name, func(t *testing.T) {
-			result := guard.Evaluate(sc.command, guard.WithPolicy(guard.InteractivePolicy()))
+			result := guard.Evaluate(sc.command, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			if result.Decision != sc.wantDecision {
 				t.Fatalf("decision mismatch for %q: got %s want %s", sc.command, result.Decision, sc.wantDecision)
 			}
-			if sc.wantDecision != guard.Allow && result.Assessment != nil &&
-				result.Assessment.Severity < sc.wantMinSev {
-				t.Fatalf("severity too low for %q: got %s want >= %s", sc.command, result.Assessment.Severity, sc.wantMinSev)
+			if sc.wantDecision != guard.Allow && result.DestructiveAssessment != nil &&
+				result.DestructiveAssessment.Severity < sc.wantMinSev {
+				t.Fatalf("severity too low for %q: got %s want >= %s", sc.command, result.DestructiveAssessment.Severity, sc.wantMinSev)
 			}
 		})
 	}
@@ -89,7 +89,7 @@ func TestE2EPolicyVariations(t *testing.T) {
 			sc := sc
 			exp := exp
 			t.Run(sc.name+"/"+exp.name, func(t *testing.T) {
-				result := guard.Evaluate(sc.cmd, guard.WithPolicy(exp.policy))
+				result := guard.Evaluate(sc.cmd, guard.WithDestructivePolicy(exp.policy))
 				if result.Decision != exp.want {
 					t.Fatalf("policy %s mismatch for %q: got %s want %s", exp.name, sc.cmd, result.Decision, exp.want)
 				}

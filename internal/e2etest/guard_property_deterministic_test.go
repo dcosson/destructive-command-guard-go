@@ -14,7 +14,7 @@ func TestPropertyEvaluateDeterminismWithOptions(t *testing.T) {
 		opts []guard.Option
 	}{
 		{name: "empty", cmd: "", opts: nil},
-		{name: "whitespace", cmd: "   ", opts: []guard.Option{guard.WithPolicy(guard.StrictPolicy())}},
+		{name: "whitespace", cmd: "   ", opts: []guard.Option{guard.WithDestructivePolicy(guard.StrictPolicy())}},
 		{name: "allowlist+blocklist", cmd: "git push --force", opts: []guard.Option{guard.WithAllowlist("*"), guard.WithBlocklist("git push *")}},
 		{name: "disabled packs", cmd: "git push --force", opts: allPacksDisabledOpts()},
 		{name: "enabled unknown", cmd: "echo hello", opts: []guard.Option{guard.WithPacks("does.not.exist")}},
@@ -38,12 +38,12 @@ func TestPropertyEvaluateDeterminismWithOptions(t *testing.T) {
 			if len(r1.Warnings) != len(r2.Warnings) {
 				t.Fatalf("warnings len mismatch: %d vs %d", len(r1.Warnings), len(r2.Warnings))
 			}
-			if (r1.Assessment == nil) != (r2.Assessment == nil) {
-				t.Fatalf("assessment nil mismatch: %#v vs %#v", r1.Assessment, r2.Assessment)
+			if (r1.DestructiveAssessment == nil) != (r2.DestructiveAssessment == nil) {
+				t.Fatalf("assessment nil mismatch: %#v vs %#v", r1.DestructiveAssessment, r2.DestructiveAssessment)
 			}
-			if r1.Assessment != nil {
-				if *r1.Assessment != *r2.Assessment {
-					t.Fatalf("assessment mismatch: %#v vs %#v", *r1.Assessment, *r2.Assessment)
+			if r1.DestructiveAssessment != nil {
+				if *r1.DestructiveAssessment != *r2.DestructiveAssessment {
+					t.Fatalf("assessment mismatch: %#v vs %#v", *r1.DestructiveAssessment, *r2.DestructiveAssessment)
 				}
 			}
 		})
@@ -53,7 +53,7 @@ func TestPropertyEvaluateDeterminismWithOptions(t *testing.T) {
 func TestPropertyResultCommandPreserved(t *testing.T) {
 	commands := []string{"", "   ", "git status", "rm -rf / && echo done", "命令", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
 	for _, cmd := range commands {
-		res := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		res := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		if res.Command != cmd {
 			t.Fatalf("result command=%q want=%q", res.Command, cmd)
 		}
@@ -63,11 +63,11 @@ func TestPropertyResultCommandPreserved(t *testing.T) {
 func TestPropertyAssessmentMatchConsistency(t *testing.T) {
 	commands := []string{"git push --force", "git status", "echo hello", "rm -rf /"}
 	for _, cmd := range commands {
-		res := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
-		if len(res.Matches) > 0 && res.Assessment == nil {
+		res := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
+		if len(res.Matches) > 0 && res.DestructiveAssessment == nil {
 			t.Fatalf("matches present but assessment nil for %q", cmd)
 		}
-		if res.Assessment == nil {
+		if res.DestructiveAssessment == nil {
 			if res.Decision != guard.Allow {
 				t.Fatalf("nil assessment must imply allow for %q; got %s", cmd, res.Decision)
 			}
@@ -123,7 +123,7 @@ func TestDeterministicPacksMetadataCopyIsolation(t *testing.T) {
 	if len(p1) != len(p2) {
 		t.Fatalf("packs length changed across calls: %d vs %d", len(p1), len(p2))
 	}
-	if !slices.EqualFunc(p1, p2, func(a, b guard.PackInfo) bool { return a.ID == b.ID && a.Name == b.Name && a.SafeCount == b.SafeCount && a.DestrCount == b.DestrCount }) {
+	if !slices.EqualFunc(p1, p2, func(a, b guard.PackInfo) bool { return a.ID == b.ID && a.Name == b.Name && a.DestructiveCount == b.DestructiveCount && a.PrivacyCount == b.PrivacyCount && a.BothCount == b.BothCount }) {
 		t.Fatalf("pack metadata changed across sequential calls")
 	}
 	if len(p1[0].Keywords) > 0 {

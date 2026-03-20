@@ -4,11 +4,14 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 )
 
 // Rule is a single pack rule.
 type Rule struct {
 	ID           string
+	Category     evalcore.RuleCategory
 	Severity     int
 	Confidence   int
 	Reason       string
@@ -24,7 +27,7 @@ type Pack struct {
 	Description     string
 	Keywords        []string
 	Safe            []Rule
-	Destructive     []Rule
+	Rules           []Rule
 	HasEnvSensitive bool
 }
 
@@ -83,7 +86,7 @@ func hasEnvSensitive(p Pack) bool {
 	if p.HasEnvSensitive {
 		return true
 	}
-	for _, r := range p.Destructive {
+	for _, r := range p.Rules {
 		if r.EnvSensitive {
 			return true
 		}

@@ -31,7 +31,7 @@ func runPacksMode(args []string) error {
 			fmt.Fprintf(stdout, "  %-25s %s\n", "", wrapLine(p.Description, contentCol, wrapWidth))
 		}
 		fmt.Fprintf(stdout, "  %-25s %s\n", "", formatKeywords(p.Keywords))
-		fmt.Fprintf(stdout, "  %-25s %d safe, %d destructive patterns\n", "", p.SafeCount, p.DestrCount)
+		fmt.Fprintf(stdout, "  %-25s %d destructive, %d privacy, %d both\n", "", p.DestructiveCount, p.PrivacyCount, p.BothCount)
 		fmt.Fprintln(stdout)
 	}
 	return nil

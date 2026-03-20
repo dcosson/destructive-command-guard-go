@@ -24,7 +24,7 @@ func TestFaultContainerK8sNilFields(t *testing.T) {
 	}
 	for i, c := range cmds {
 		t.Run(fmt.Sprintf("degenerate-%d", i), func(t *testing.T) {
-			_ = guard.Evaluate(c, guard.WithPolicy(guard.InteractivePolicy()))
+			_ = guard.Evaluate(c, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		})
 	}
 }
@@ -43,7 +43,7 @@ func TestFaultContainerK8sArgAtOutOfBounds(t *testing.T) {
 	}
 	for i, c := range shortCmds {
 		t.Run(fmt.Sprintf("short-%d", i), func(t *testing.T) {
-			_ = guard.Evaluate(c, guard.WithPolicy(guard.InteractivePolicy()))
+			_ = guard.Evaluate(c, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		})
 	}
 }
@@ -62,8 +62,8 @@ func TestFaultDockerComposeKeywordOverlap(t *testing.T) {
 	}
 	for i, c := range dockerCmds {
 		t.Run(fmt.Sprintf("docker-cmd-%d", i), func(t *testing.T) {
-			res := guard.Evaluate(c, guard.WithPolicy(guard.InteractivePolicy()))
-			for _, dp := range composePack.Destructive {
+			res := guard.Evaluate(c, guard.WithDestructivePolicy(guard.InteractivePolicy()))
+			for _, dp := range composePack.Rules {
 				if hasRuleMatch(res, composePack.ID, dp.ID) {
 					t.Fatalf("docker command matched compose pattern %s", dp.ID)
 				}
@@ -78,8 +78,8 @@ func TestFaultDockerComposeKeywordOverlap(t *testing.T) {
 	}
 	for i, c := range composeCmds {
 		t.Run(fmt.Sprintf("compose-plugin-%d", i), func(t *testing.T) {
-			res := guard.Evaluate(c, guard.WithPolicy(guard.InteractivePolicy()))
-			for _, dp := range dockerPack.Destructive {
+			res := guard.Evaluate(c, guard.WithDestructivePolicy(guard.InteractivePolicy()))
+			for _, dp := range dockerPack.Rules {
 				if hasRuleMatch(res, dockerPack.ID, dp.ID) {
 					t.Fatalf("compose command matched docker pattern %s", dp.ID)
 				}
@@ -98,9 +98,9 @@ func TestOracleContainerK8sPolicyMonotonicity(t *testing.T) {
 	}
 	restrict := map[guard.Decision]int{guard.Allow: 0, guard.Ask: 1, guard.Deny: 2}
 	for _, c := range commands {
-		strict := guard.Evaluate(c, guard.WithPolicy(guard.StrictPolicy()))
-		inter := guard.Evaluate(c, guard.WithPolicy(guard.InteractivePolicy()))
-		perm := guard.Evaluate(c, guard.WithPolicy(guard.PermissivePolicy()))
+		strict := guard.Evaluate(c, guard.WithDestructivePolicy(guard.StrictPolicy()))
+		inter := guard.Evaluate(c, guard.WithDestructivePolicy(guard.InteractivePolicy()))
+		perm := guard.Evaluate(c, guard.WithDestructivePolicy(guard.PermissivePolicy()))
 		sr, ir, pr := restrict[strict.Decision], restrict[inter.Decision], restrict[perm.Decision]
 		if sr < ir || ir < pr {
 			t.Fatalf("policy monotonicity violated for %q: strict=%s inter=%s perm=%s", c, strict.Decision, inter.Decision, perm.Decision)
@@ -142,9 +142,9 @@ func TestOracleContainerK8sOrchestratorConsistency(t *testing.T) {
 				if !HasRegisteredPack(packID) {
 					continue
 				}
-				res := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
-				if res.Assessment != nil {
-					severities = append(severities, res.Assessment.Severity)
+				res := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
+				if res.DestructiveAssessment != nil {
+					severities = append(severities, res.DestructiveAssessment.Severity)
 				}
 			}
 			if len(severities) < 2 {
@@ -175,7 +175,7 @@ func TestOracleContainerK8sCrossPackConsistency(t *testing.T) {
 			if !HasRegisteredPack(cmdPack) {
 				t.Skipf("pack %s not registered", cmdPack)
 			}
-			res := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+			res := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			for _, m := range res.Matches {
 				if m.Pack == cmdPack {
 					continue
@@ -203,7 +203,7 @@ func TestStressConcurrentContainerK8sMatching(t *testing.T) {
 			defer wg.Done()
 			cmd := commands[idx%len(commands)]
 			for j := 0; j < 300; j++ {
-				_ = guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+				_ = guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			}
 		}(i)
 	}
@@ -229,7 +229,7 @@ func TestStressHighVolumeContainerK8sCommands(t *testing.T) {
 		go func(worker int) {
 			defer wg.Done()
 			for i := worker; i < len(commands); i += workers {
-				_ = guard.Evaluate(commands[i], guard.WithPolicy(guard.InteractivePolicy()))
+				_ = guard.Evaluate(commands[i], guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			}
 		}(w)
 	}
@@ -254,7 +254,7 @@ func TestSecurityDockerSyntaxEvasion(t *testing.T) {
 			if !HasRegisteredPack(tt.packID) {
 				t.Skipf("pack %s not registered", tt.packID)
 			}
-			res := guard.Evaluate(tt.command, guard.WithPolicy(guard.InteractivePolicy()))
+			res := guard.Evaluate(tt.command, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			if res.Decision == guard.Allow {
 				t.Fatalf("expected deny-like decision for %q, got %s", tt.command, res.Decision)
 			}
@@ -287,7 +287,7 @@ func TestSecurityKubectlDeleteResourceEscalation(t *testing.T) {
 	for _, tt := range highImpact {
 		t.Run(tt.resource, func(t *testing.T) {
 			cmd := fmt.Sprintf("kubectl delete %s test", tt.resource)
-			res := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+			res := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			matched := false
 			for _, m := range res.Matches {
 				if m.Pack != pk.ID {
@@ -313,7 +313,7 @@ func TestSecurityKubectlDeleteResourceEscalation(t *testing.T) {
 	for _, resource := range generic {
 		t.Run("generic-"+resource, func(t *testing.T) {
 			cmd := fmt.Sprintf("kubectl delete %s test", resource)
-			res := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+			res := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			matched := false
 			for _, m := range res.Matches {
 				if m.Pack != pk.ID {
@@ -384,7 +384,7 @@ func TestSecurityNoUnexpectedHeapGrowthInContainerK8sBurst(t *testing.T) {
 			case 3:
 				cmd = "helm uninstall release"
 			}
-			_ = guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+			_ = guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		}
 		runtime.GC()
 		var ms runtime.MemStats
@@ -459,7 +459,7 @@ func BenchmarkContainerK8sGoldenCorpusThroughput(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, c := range corpus {
-			_ = guard.Evaluate(c, guard.WithPolicy(guard.InteractivePolicy()))
+			_ = guard.Evaluate(c, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		}
 	}
 }
@@ -469,6 +469,6 @@ func BenchmarkContainerK8sDockerFullPackEvalNoMatchWorstCase(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		_ = guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 	}
 }

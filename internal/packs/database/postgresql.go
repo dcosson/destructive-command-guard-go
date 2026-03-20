@@ -15,7 +15,7 @@ func postgresqlPack() packs.Pack {
 			{ID: "psql-interactive-safe"},
 			{ID: "pg-restore-safe"},
 		},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{ID: "psql-drop-database", Severity: sevHigh, Confidence: confHigh, Reason: "DROP DATABASE permanently removes the database and all contained data", Remediation: "Drop specific schemas or tables instead of dropping the database", EnvSensitive: true, Match: func(cmd packs.Command) bool { return hasAll(cmd, "psql") && reDropDatabase.MatchString(cmd.RawText) }},
 			{ID: "dropdb", Severity: sevHigh, Confidence: confHigh, Reason: "dropdb permanently removes the database and all contained data", Remediation: "Drop specific schemas or tables instead of dropping the database", EnvSensitive: true, Match: func(cmd packs.Command) bool { return hasAll(cmd, "dropdb") }},
 			{ID: "psql-drop-table", Severity: sevHigh, Confidence: confHigh, Reason: "DROP TABLE permanently removes the table and all rows", Remediation: "Delete only required rows with DELETE ... WHERE", EnvSensitive: true, Match: func(cmd packs.Command) bool { return hasAll(cmd, "psql") && reDropTable.MatchString(cmd.RawText) }},

@@ -44,7 +44,7 @@ func frameworksPack() packs.Pack {
 			)},
 			{ID: "mix-safe", Match: packs.And(packs.Name("mix"), packs.Or(packs.ArgAt(0, "test"), packs.ArgAt(0, "deps.get"), packs.ArgAt(0, "compile"), packs.ArgAt(0, "phx.routes")))},
 		},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{ID: "rails-db-drop", Severity: sevHigh, Confidence: confHigh, EnvSensitive: true, Reason: "rails db:drop removes the configured database", Remediation: "Use db:migrate for schema changes instead of dropping the database", Match: packs.And(packs.Name("rails"), packs.ArgAt(0, "db:drop"))},
 			{ID: "rails-db-reset", Severity: sevHigh, Confidence: confHigh, EnvSensitive: true, Reason: "rails db:reset drops and recreates the database", Remediation: "Use db:migrate for incremental schema changes", Match: packs.And(packs.Name("rails"), packs.ArgAt(0, "db:reset"))},
 			{ID: "rake-db-drop-all", Severity: sevCritical, Confidence: confHigh, EnvSensitive: true, Reason: "rake db:drop:all removes all configured databases", Remediation: "Use db:migrate for incremental schema changes", Match: packs.And(packs.Name("rake"), packs.ArgAt(0, "db:drop:all"))},

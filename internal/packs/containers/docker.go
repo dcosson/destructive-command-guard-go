@@ -28,7 +28,7 @@ func dockerPack() packs.Pack {
 			{ID: "docker-pull-push-safe", Match: packs.And(packs.Name("docker"), packs.Or(packs.ArgAt(0, "pull"), packs.ArgAt(0, "push")))},
 			{ID: "docker-run-exec-safe", Match: packs.And(packs.Name("docker"), packs.Or(packs.ArgAt(0, "run"), packs.ArgAt(0, "exec")))},
 		},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{
 				ID:          "docker-system-prune",
 				Severity:    sevHigh,

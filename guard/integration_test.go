@@ -30,8 +30,8 @@ func TestIntegrationRmRf(t *testing.T) {
 	if result.Decision != guard.Deny {
 		t.Fatalf("decision = %v, want %v", result.Decision, guard.Deny)
 	}
-	if result.Assessment == nil || result.Assessment.Severity != guard.Critical {
-		t.Fatalf("assessment = %#v, want critical", result.Assessment)
+	if result.DestructiveAssessment == nil || result.DestructiveAssessment.Severity != guard.Critical {
+		t.Fatalf("assessment = %#v, want critical", result.DestructiveAssessment)
 	}
 }
 
@@ -49,8 +49,8 @@ func TestIntegrationEnvEscalation(t *testing.T) {
 	if result.Decision != guard.Deny {
 		t.Fatalf("decision = %v, want %v", result.Decision, guard.Deny)
 	}
-	if result.Assessment == nil || result.Assessment.Severity != guard.Critical {
-		t.Fatalf("assessment = %#v, want critical", result.Assessment)
+	if result.DestructiveAssessment == nil || result.DestructiveAssessment.Severity != guard.Critical {
+		t.Fatalf("assessment = %#v, want critical", result.DestructiveAssessment)
 	}
 	if len(result.Matches) > 0 && !result.Matches[0].EnvEscalated {
 		t.Fatalf("expected env escalation on first match")
@@ -102,8 +102,8 @@ func TestIntegrationWithEnvProcessEnv(t *testing.T) {
 	if result.Decision != guard.Deny {
 		t.Fatalf("decision = %v, want %v", result.Decision, guard.Deny)
 	}
-	if result.Assessment == nil || result.Assessment.Severity != guard.Critical {
-		t.Fatalf("assessment = %#v, want critical", result.Assessment)
+	if result.DestructiveAssessment == nil || result.DestructiveAssessment.Severity != guard.Critical {
+		t.Fatalf("assessment = %#v, want critical", result.DestructiveAssessment)
 	}
 	if len(result.Matches) > 0 && !result.Matches[0].EnvEscalated {
 		t.Fatalf("expected env escalation on first match")
@@ -135,8 +135,8 @@ func TestIntegrationMultiMatchCompound(t *testing.T) {
 	if len(result.Matches) < 2 {
 		t.Fatalf("matches len = %d, want >=2", len(result.Matches))
 	}
-	if result.Assessment == nil || result.Assessment.Severity != guard.Critical {
-		t.Fatalf("assessment = %#v, want critical", result.Assessment)
+	if result.DestructiveAssessment == nil || result.DestructiveAssessment.Severity != guard.Critical {
+		t.Fatalf("assessment = %#v, want critical", result.DestructiveAssessment)
 	}
 }
 
@@ -161,7 +161,7 @@ func TestIntegrationResultFieldsPopulated(t *testing.T) {
 		t.Fatalf("command = %q, want %q", result.Command, command)
 	}
 	if result.Decision != guard.Allow {
-		if result.Assessment == nil {
+		if result.DestructiveAssessment == nil {
 			t.Fatal("assessment must be non-nil for non-Allow decisions")
 		}
 		if len(result.Matches) == 0 {
@@ -192,7 +192,7 @@ func TestIntegrationGoldenFileCorpus(t *testing.T) {
 	entries := loadGoldenEntries(t, filepath.Join("testdata", "golden", "commands.txt"))
 	for _, e := range entries {
 		t.Run(e.command, func(t *testing.T) {
-			result := guard.Evaluate(e.command, guard.WithPolicy(guard.InteractivePolicy()))
+			result := guard.Evaluate(e.command, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			if result.Decision.String() != e.decision {
 				t.Fatalf("decision=%s want=%s command=%q", result.Decision.String(), e.decision, e.command)
 			}

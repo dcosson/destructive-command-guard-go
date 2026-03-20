@@ -24,7 +24,7 @@ func privacyPack() packs.Pack {
 		Safe: []packs.Rule{
 			{ID: "security-find-cert", Match: packs.And(packs.Name("security"), packs.Or(packs.ArgAt(0, "find-certificate"), packs.ArgAt(0, "verify-cert"), packs.ArgAt(0, "cms")))},
 		},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{ID: "keychain-read-password", Severity: sevCritical, Confidence: confHigh, Reason: "Reading keychain passwords exposes credential secrets", Remediation: "Use non-secret metadata lookups instead of password retrieval", Match: packs.And(packs.Name("security"), packs.Or(packs.ArgAt(0, "find-generic-password"), packs.ArgAt(0, "find-internet-password")))},
 			{ID: "keychain-dump", Severity: sevCritical, Confidence: confHigh, Reason: "Dumping/exporting keychain exposes stored credentials", Remediation: "Do not dump or export keychain", Match: packs.And(packs.Name("security"), packs.Or(packs.ArgAt(0, "dump-keychain"), packs.ArgAt(0, "export")))},
 			{ID: "messages-db-access", Severity: sevHigh, Confidence: confHigh, Reason: "Command accesses iMessage database", Remediation: "Do not access personal messages", Match: packs.And(packs.AnyName(), packs.ArgContentRegex(messagesDbRe.String()))},

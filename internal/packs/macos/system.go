@@ -17,7 +17,7 @@ func systemPack() packs.Pack {
 			{ID: "diskutil-info", Match: packs.And(packs.Name("diskutil"), packs.Or(packs.ArgAt(0, "info"), packs.ArgAt(0, "list")))},
 			{ID: "diskutil-apfs-list", Match: packs.And(packs.Name("diskutil"), packs.ArgAt(0, "apfs"), packs.ArgAt(1, "list"))},
 		},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{ID: "csrutil-disable", Severity: sevCritical, Confidence: confHigh, Reason: "Disabling SIP weakens core OS protections", Remediation: "Do not disable SIP", Match: packs.And(packs.Name("csrutil"), packs.ArgAt(0, "disable"))},
 			{ID: "diskutil-erase", Severity: sevCritical, Confidence: confHigh, Reason: "Disk erase/repartition causes irreversible data loss", Remediation: "Do not erase or repartition disks", Match: packs.And(
 				packs.Name("diskutil"),

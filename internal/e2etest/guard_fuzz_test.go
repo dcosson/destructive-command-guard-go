@@ -83,7 +83,7 @@ func guardVerifyInvariants(t *testing.T, command string, result guard.Result) {
 		t.Fatalf("INV-3: whitespace command got %s want Allow", result.Decision)
 	}
 
-	if result.Assessment == nil {
+	if result.DestructiveAssessment == nil {
 		if result.Decision != guard.Allow {
 			t.Fatalf("INV-4: nil assessment with %s decision", result.Decision)
 		}
@@ -92,15 +92,15 @@ func guardVerifyInvariants(t *testing.T, command string, result guard.Result) {
 		}
 	}
 
-	if len(result.Matches) > 0 && result.Assessment == nil {
+	if len(result.Matches) > 0 && result.DestructiveAssessment == nil {
 		t.Fatalf("INV-5: %d matches but nil assessment", len(result.Matches))
 	}
 
-	if result.Assessment != nil {
-		switch result.Assessment.Severity {
+	if result.DestructiveAssessment != nil {
+		switch result.DestructiveAssessment.Severity {
 		case guard.Indeterminate, guard.Low, guard.Medium, guard.High, guard.Critical:
 		default:
-			t.Fatalf("INV-6: invalid severity %d", result.Assessment.Severity)
+			t.Fatalf("INV-6: invalid severity %d", result.DestructiveAssessment.Severity)
 		}
 	}
 
@@ -113,8 +113,8 @@ func guardVerifyInvariants(t *testing.T, command string, result guard.Result) {
 		}
 	}
 
-	if len(command) > parse.MaxInputSize && result.Assessment != nil && result.Assessment.Severity > guard.Indeterminate {
-		t.Fatalf("INV-8: oversized input (%d) got severity %s", len(command), result.Assessment.Severity)
+	if len(command) > parse.MaxInputSize && result.DestructiveAssessment != nil && result.DestructiveAssessment.Severity > guard.Indeterminate {
+		t.Fatalf("INV-8: oversized input (%d) got severity %s", len(command), result.DestructiveAssessment.Severity)
 	}
 }
 

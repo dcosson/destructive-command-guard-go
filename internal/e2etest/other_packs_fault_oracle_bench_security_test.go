@@ -29,7 +29,7 @@ func TestFaultOtherPacksMalformedCommands(t *testing.T) {
 	}
 	for i, cmd := range malformed {
 		t.Run(fmt.Sprintf("malformed-%d", i), func(t *testing.T) {
-			_ = guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+			_ = guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		})
 	}
 }
@@ -43,7 +43,7 @@ func TestFaultOtherPacksUnicodeArguments(t *testing.T) {
 	}
 	for i, cmd := range unicodeCmds {
 		t.Run(fmt.Sprintf("unicode-%d", i), func(t *testing.T) {
-			res := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+			res := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			for _, m := range res.Matches {
 				switch m.Pack {
 				case "frameworks", "secrets.vault", "remote.rsync", "platform.github":
@@ -64,9 +64,9 @@ func TestOracleOtherPacksPolicyMonotonicity(t *testing.T) {
 	}
 	restrict := map[guard.Decision]int{guard.Allow: 0, guard.Ask: 1, guard.Deny: 2}
 	for _, c := range commands {
-		strict := guard.Evaluate(c, guard.WithPolicy(guard.StrictPolicy()))
-		inter := guard.Evaluate(c, guard.WithPolicy(guard.InteractivePolicy()))
-		perm := guard.Evaluate(c, guard.WithPolicy(guard.PermissivePolicy()))
+		strict := guard.Evaluate(c, guard.WithDestructivePolicy(guard.StrictPolicy()))
+		inter := guard.Evaluate(c, guard.WithDestructivePolicy(guard.InteractivePolicy()))
+		perm := guard.Evaluate(c, guard.WithDestructivePolicy(guard.PermissivePolicy()))
 		sr, ir, pr := restrict[strict.Decision], restrict[inter.Decision], restrict[perm.Decision]
 		if sr < ir || ir < pr {
 			t.Fatalf("policy monotonicity violated for %q: strict=%s inter=%s perm=%s", c, strict.Decision, inter.Decision, perm.Decision)
@@ -122,12 +122,12 @@ func TestStressHighVolumeOtherPacks(t *testing.T) {
 	commands := generateOtherPackCommandStream(100_000)
 	results := make([]guard.Result, len(commands))
 	for i, cmd := range commands {
-		results[i] = guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		results[i] = guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 	}
 
 	for i := 0; i < 1000; i++ {
 		idx := i * 100
-		r2 := guard.Evaluate(commands[idx], guard.WithPolicy(guard.InteractivePolicy()))
+		r2 := guard.Evaluate(commands[idx], guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		if results[idx].Decision != r2.Decision {
 			t.Fatalf("non-deterministic decision at index=%d cmd=%q first=%s second=%s", idx, commands[idx], results[idx].Decision, r2.Decision)
 		}
@@ -146,7 +146,7 @@ func TestStressConcurrentOtherPacks(t *testing.T) {
 		go func(worker int) {
 			defer wg.Done()
 			for j := worker; j < len(commands); j += workers {
-				_ = guard.Evaluate(commands[j], guard.WithPolicy(guard.InteractivePolicy()))
+				_ = guard.Evaluate(commands[j], guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			}
 		}(i)
 	}
@@ -165,7 +165,7 @@ func TestSecurityNoSecretLeakage(t *testing.T) {
 	}
 	sensitiveFragments := []string{"stripe", "credentials", "production-admin", "api-keys"}
 	for _, cmd := range sensitiveCommands {
-		res := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		res := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		for _, m := range res.Matches {
 			if m.Pack != "secrets.vault" {
 				continue
@@ -194,7 +194,7 @@ func TestSecurityVaultS2NotClauses(t *testing.T) {
 		"vault audit disable file/",
 	}
 	for _, cmd := range destructive {
-		res := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		res := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		if res.Decision == guard.Allow {
 			t.Fatalf("vault destructive operation unexpectedly allowed: %q", cmd)
 		}
@@ -210,7 +210,7 @@ func TestSecurityVaultS2NotClauses(t *testing.T) {
 		"vault audit list",
 	}
 	for _, cmd := range safe {
-		res := guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		res := guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		if res.Decision != guard.Allow {
 			t.Fatalf("vault safe inspect operation unexpectedly blocked: %q => %s", cmd, res.Decision)
 		}
@@ -221,13 +221,13 @@ func TestSecurityFrameworkEnvEscalation(t *testing.T) {
 	if !HasRegisteredPack("frameworks") {
 		t.Skip("frameworks pack not registered")
 	}
-	base := guard.Evaluate("rails db:reset", guard.WithPolicy(guard.InteractivePolicy()))
-	prod := guard.Evaluate("RAILS_ENV=production rails db:reset", guard.WithPolicy(guard.InteractivePolicy()))
-	if base.Assessment == nil || prod.Assessment == nil {
+	base := guard.Evaluate("rails db:reset", guard.WithDestructivePolicy(guard.InteractivePolicy()))
+	prod := guard.Evaluate("RAILS_ENV=production rails db:reset", guard.WithDestructivePolicy(guard.InteractivePolicy()))
+	if base.DestructiveAssessment == nil || prod.DestructiveAssessment == nil {
 		t.Skip("frameworks command not assessed in current registry")
 	}
-	if prod.Assessment.Severity < base.Assessment.Severity {
-		t.Fatalf("env escalation regressed severity: base=%s prod=%s", base.Assessment.Severity, prod.Assessment.Severity)
+	if prod.DestructiveAssessment.Severity < base.DestructiveAssessment.Severity {
+		t.Fatalf("env escalation regressed severity: base=%s prod=%s", base.DestructiveAssessment.Severity, prod.DestructiveAssessment.Severity)
 	}
 }
 
@@ -238,7 +238,7 @@ func TestSecurityNoUnexpectedHeapGrowthInOtherPacksBurst(t *testing.T) {
 	run := func(n int) uint64 {
 		commands := generateOtherPackCommandStream(n)
 		for _, cmd := range commands {
-			_ = guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+			_ = guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		}
 		runtime.GC()
 		var ms runtime.MemStats
@@ -308,7 +308,7 @@ func BenchmarkOtherPacksGoldenCorpusThroughput(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, c := range corpus {
-			_ = guard.Evaluate(c, guard.WithPolicy(guard.InteractivePolicy()))
+			_ = guard.Evaluate(c, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		}
 	}
 }
@@ -318,7 +318,7 @@ func BenchmarkOtherPacksFrameworksFullPackEvalNoMatchWorstCase(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = guard.Evaluate(cmd, guard.WithPolicy(guard.InteractivePolicy()))
+		_ = guard.Evaluate(cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 	}
 }
 

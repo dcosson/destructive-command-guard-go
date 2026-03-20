@@ -29,14 +29,14 @@ func TestGoldenCoverageAllPatterns(t *testing.T) {
 		if e.Pack == "-" || e.Rule == "-" || e.Pack == "" || e.Rule == "" {
 			continue
 		}
-		result := guard.Evaluate(e.Command, guard.WithPolicy(guard.InteractivePolicy()))
+		result := guard.Evaluate(e.Command, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		if hasMatch(result, e.Pack, e.Rule) {
 			coverage[e.Pack+"."+e.Rule]++
 		}
 	}
 
 	for _, p := range packs.DefaultRegistry.All() {
-		for _, r := range p.Destructive {
+		for _, r := range p.Rules {
 			key := p.ID + "." + r.ID
 			count := coverage[key]
 			if count < 3 {

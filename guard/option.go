@@ -4,23 +4,31 @@ package guard
 type Option func(*evalConfig)
 
 type evalConfig struct {
-	policy        Policy
-	allowlist     []string
-	blocklist     []string
-	enabledPacks  []string
-	disabledPacks []string
-	callerEnv     []string
+	destructivePolicy Policy
+	privacyPolicy     Policy
+	allowlist         []string
+	blocklist         []string
+	enabledPacks      []string
+	disabledPacks     []string
+	callerEnv         []string
 }
 
 func defaultConfig() evalConfig {
 	return evalConfig{
-		policy: InteractivePolicy(),
+		destructivePolicy: InteractivePolicy(),
+		privacyPolicy:     InteractivePolicy(),
 	}
 }
 
-func WithPolicy(p Policy) Option {
+func WithDestructivePolicy(p Policy) Option {
 	return func(c *evalConfig) {
-		c.policy = p
+		c.destructivePolicy = p
+	}
+}
+
+func WithPrivacyPolicy(p Policy) Option {
+	return func(c *evalConfig) {
+		c.privacyPolicy = p
 	}
 }
 

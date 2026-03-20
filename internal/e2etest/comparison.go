@@ -132,10 +132,10 @@ func abs(v int) int {
 }
 
 func severityString(result guard.Result) string {
-	if result.Assessment == nil {
+	if result.DestructiveAssessment == nil {
 		return ""
 	}
-	return result.Assessment.Severity.String()
+	return result.DestructiveAssessment.Severity.String()
 }
 
 func runUpstream(binary, command string) (UpstreamResult, error) {

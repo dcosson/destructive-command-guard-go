@@ -12,8 +12,11 @@ func TestEvaluateEmptyCommand(t *testing.T) {
 	if result.Decision != guard.Allow {
 		t.Fatalf("decision = %v, want %v", result.Decision, guard.Allow)
 	}
-	if result.Assessment != nil {
-		t.Fatalf("assessment = %#v, want nil", result.Assessment)
+	if result.DestructiveAssessment != nil {
+		t.Fatalf("destructive assessment = %#v, want nil", result.DestructiveAssessment)
+	}
+	if result.PrivacyAssessment != nil {
+		t.Fatalf("privacy assessment = %#v, want nil", result.PrivacyAssessment)
 	}
 	if len(result.Matches) != 0 {
 		t.Fatalf("matches len = %d, want 0", len(result.Matches))
@@ -35,7 +38,7 @@ func TestEvaluateSafeCommand(t *testing.T) {
 }
 
 func TestEvaluateDestructiveCommand(t *testing.T) {
-	result := guard.Evaluate("git push --force", guard.WithPolicy(guard.InteractivePolicy()))
+	result := guard.Evaluate("git push --force", guard.WithDestructivePolicy(guard.InteractivePolicy()))
 	if len(result.Matches) > 0 {
 		if result.Decision == guard.Allow {
 			t.Fatalf("decision = %v, want non-Allow", result.Decision)
@@ -47,14 +50,14 @@ func TestEvaluateDestructiveCommand(t *testing.T) {
 }
 
 func TestEvaluateWithStrictPolicy(t *testing.T) {
-	result := guard.Evaluate("git push --force", guard.WithPolicy(guard.StrictPolicy()))
+	result := guard.Evaluate("git push --force", guard.WithDestructivePolicy(guard.StrictPolicy()))
 	if len(result.Matches) > 0 && result.Decision != guard.Deny {
 		t.Fatalf("decision = %v, want %v", result.Decision, guard.Deny)
 	}
 }
 
 func TestEvaluateWithPermissivePolicy(t *testing.T) {
-	result := guard.Evaluate("git push --force", guard.WithPolicy(guard.PermissivePolicy()))
+	result := guard.Evaluate("git push --force", guard.WithDestructivePolicy(guard.PermissivePolicy()))
 	if len(result.Matches) > 0 && result.Decision != guard.Ask {
 		t.Fatalf("decision = %v, want %v", result.Decision, guard.Ask)
 	}
@@ -105,14 +108,14 @@ func TestEvaluateConcurrentSafety(t *testing.T) {
 	for range goroutines {
 		go func() {
 			defer wg.Done()
-			_ = guard.Evaluate("git push --force", guard.WithPolicy(guard.InteractivePolicy()))
+			_ = guard.Evaluate("git push --force", guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		}()
 	}
 	wg.Wait()
 }
 
 func TestEvaluateWithNilPolicyOptionDoesNotPanic(t *testing.T) {
-	result := guard.Evaluate("git push --force", guard.WithPolicy(nil))
+	result := guard.Evaluate("git push --force", guard.WithDestructivePolicy(nil))
 	if len(result.Matches) > 0 && result.Decision == guard.Allow {
 		t.Fatalf("decision = %v, want non-Allow when matches exist", result.Decision)
 	}

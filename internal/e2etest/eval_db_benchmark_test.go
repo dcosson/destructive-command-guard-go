@@ -129,7 +129,7 @@ func BenchmarkSQLitePackMatch(b *testing.B) {
 
 func BenchmarkDbGoldenCorpus(b *testing.B) {
 	pipeline := eval.NewPipeline(packs.DefaultRegistry)
-	cfg := eval.Config{Policy: evalcore.InteractivePolicy()}
+	cfg := eval.Config{DestructivePolicy: evalcore.InteractivePolicy(), PrivacyPolicy: evalcore.InteractivePolicy()}
 
 	entries := LoadCorpus(b, filepath.Join("..", "eval", "testdata", "golden"))
 	var dbEntries []GoldenEntry
@@ -212,7 +212,7 @@ func TestStressConcurrentDbMatching(t *testing.T) {
 					if pack == nil {
 						continue
 					}
-					for _, dp := range pack.Destructive {
+					for _, dp := range pack.Rules {
 						if dp.Match != nil {
 							matchRuleCommand(dp, cmd)
 						}
@@ -232,7 +232,7 @@ func TestStressHighVolumeDbCommands(t *testing.T) {
 	}
 
 	pipeline := eval.NewPipeline(packs.DefaultRegistry)
-	cfg := eval.Config{Policy: evalcore.InteractivePolicy()}
+	cfg := eval.Config{DestructivePolicy: evalcore.InteractivePolicy(), PrivacyPolicy: evalcore.InteractivePolicy()}
 
 	commands := []string{
 		`psql -c "DROP TABLE users"`,

@@ -99,15 +99,15 @@ func TestDeterministicConfigPathPrecedence(t *testing.T) {
 	}
 
 	explicit := filepath.Join(t.TempDir(), "custom.yaml")
-	if err := os.WriteFile(explicit, []byte("policy: strict\n"), 0o644); err != nil {
+	if err := os.WriteFile(explicit, []byte("destructive_policy: strict\n"), 0o644); err != nil {
 		t.Fatalf("write explicit config: %v", err)
 	}
 
 	t.Setenv("HOME", home)
 	t.Setenv("DCG_CONFIG", explicit)
 	cfg := loadConfig()
-	if cfg.Policy != "strict" {
-		t.Fatalf("explicit DCG_CONFIG should win; got policy=%q", cfg.Policy)
+	if cfg.DestructivePolicy != "strict" {
+		t.Fatalf("explicit DCG_CONFIG should win; got destructive_policy=%q", cfg.DestructivePolicy)
 	}
 }
 

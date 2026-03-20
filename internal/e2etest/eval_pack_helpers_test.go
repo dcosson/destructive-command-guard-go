@@ -29,9 +29,9 @@ func dbPack(id string) *packs.Pack {
 
 // findRuleByID returns the destructive rule with the given ID, or nil.
 func findRuleByID(pack *packs.Pack, id string) *packs.Rule {
-	for i := range pack.Destructive {
-		if pack.Destructive[i].ID == id {
-			return &pack.Destructive[i]
+	for i := range pack.Rules {
+		if pack.Rules[i].ID == id {
+			return &pack.Rules[i]
 		}
 	}
 	return nil
@@ -50,7 +50,7 @@ func matchPackDestructive(pack *packs.Pack, cmd string) string {
 			Flags:   extracted.Flags,
 			RawText: extracted.RawText,
 		}
-		for _, rule := range pack.Destructive {
+		for _, rule := range pack.Rules {
 			if rule.Match != nil && rule.Match.Match(pc) {
 				return rule.ID
 			}

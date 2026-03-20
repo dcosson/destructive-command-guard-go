@@ -48,7 +48,7 @@ func BenchmarkMatchCommand(b *testing.B) {
 		{"compound", "echo start && git push --force && rm -rf /tmp/build"},
 	}
 
-	cfg := eval.Config{Policy: evalcore.InteractivePolicy()}
+	cfg := eval.Config{DestructivePolicy: evalcore.InteractivePolicy(), PrivacyPolicy: evalcore.InteractivePolicy()}
 	for _, tc := range commands {
 		tc := tc
 		b.Run(tc.name, func(b *testing.B) {

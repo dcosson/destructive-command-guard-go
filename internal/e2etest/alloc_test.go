@@ -26,7 +26,7 @@ func TestAllocationsEvaluate(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			allocs := testing.AllocsPerRun(100, func() {
-				_ = guard.Evaluate(tc.cmd, guard.WithPolicy(guard.InteractivePolicy()))
+				_ = guard.Evaluate(tc.cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))
 			})
 			t.Logf("%s: %.0f allocs/op", tc.name, allocs)
 			if allocs > tc.maxAllocs {
@@ -43,7 +43,7 @@ func TestNoMemoryLeakUnderLoad(t *testing.T) {
 
 	run := func(n int) uint64 {
 		for i := 0; i < n; i++ {
-			_ = guard.Evaluate("git push --force && rm -rf /tmp/e2e", guard.WithPolicy(guard.InteractivePolicy()))
+			_ = guard.Evaluate("git push --force && rm -rf /tmp/e2e", guard.WithDestructivePolicy(guard.InteractivePolicy()))
 		}
 		runtime.GC()
 		var m runtime.MemStats

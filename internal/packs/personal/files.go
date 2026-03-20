@@ -35,7 +35,7 @@ func filesPack() packs.Pack {
 		Keywords: []string{
 			"Desktop", "Documents", "Downloads", "Pictures", "Music", "Videos", "Mobile Documents",
 		},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{ID: "personal-files-delete", Severity: sevCritical, Confidence: confHigh, Reason: "Command removes content in a personal file directory", Remediation: "Delete explicit files instead of deleting personal directories", Match: packs.And(
 				packs.Or(packs.Name("rm"), packs.Name("shred"), packs.Name("srm"), packs.Name("unlink")),
 				packs.ArgContentRegex(personalPathRe.String()),

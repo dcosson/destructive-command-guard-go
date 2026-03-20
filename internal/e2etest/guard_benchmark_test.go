@@ -13,11 +13,11 @@ func BenchmarkEvaluateFullPipeline(b *testing.B) {
 		cmd  string
 		opts []guard.Option
 	}{
-		{"git_force", "git push --force origin main", []guard.Option{guard.WithPolicy(guard.InteractivePolicy())}},
-		{"rm_root", "rm -rf /", []guard.Option{guard.WithPolicy(guard.InteractivePolicy())}},
-		{"safe_echo", "echo hello", []guard.Option{guard.WithPolicy(guard.InteractivePolicy())}},
-		{"safe_git", "git status", []guard.Option{guard.WithPolicy(guard.InteractivePolicy())}},
-		{"env_inline", "RAILS_ENV=production rails db:reset", []guard.Option{guard.WithPolicy(guard.InteractivePolicy())}},
+		{"git_force", "git push --force origin main", []guard.Option{guard.WithDestructivePolicy(guard.InteractivePolicy())}},
+		{"rm_root", "rm -rf /", []guard.Option{guard.WithDestructivePolicy(guard.InteractivePolicy())}},
+		{"safe_echo", "echo hello", []guard.Option{guard.WithDestructivePolicy(guard.InteractivePolicy())}},
+		{"safe_git", "git status", []guard.Option{guard.WithDestructivePolicy(guard.InteractivePolicy())}},
+		{"env_inline", "RAILS_ENV=production rails db:reset", []guard.Option{guard.WithDestructivePolicy(guard.InteractivePolicy())}},
 		{"env_process", "rails db:reset", []guard.Option{guard.WithEnv([]string{"RAILS_ENV=production"})}},
 		{"allowlisted", "git push --force", []guard.Option{guard.WithAllowlist("git push *")}},
 		{"blocklisted", "echo safe", []guard.Option{guard.WithBlocklist("echo *")}},

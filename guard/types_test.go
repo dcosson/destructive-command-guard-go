@@ -83,8 +83,11 @@ func TestZeroValueResultIsAllow(t *testing.T) {
 	if r.Decision != Allow {
 		t.Fatalf("zero-value result decision = %v, want %v", r.Decision, Allow)
 	}
-	if r.Assessment != nil {
-		t.Fatalf("zero-value result assessment = %+v, want nil", r.Assessment)
+	if r.DestructiveAssessment != nil {
+		t.Fatalf("zero-value result destructive assessment = %+v, want nil", r.DestructiveAssessment)
+	}
+	if r.PrivacyAssessment != nil {
+		t.Fatalf("zero-value result privacy assessment = %+v, want nil", r.PrivacyAssessment)
 	}
 	if len(r.Matches) != 0 {
 		t.Fatalf("zero-value result matches len = %d, want 0", len(r.Matches))

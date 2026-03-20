@@ -31,7 +31,7 @@ func TestDbComparisonUpstreamRust(t *testing.T) {
 	}
 
 	pipeline := eval.NewPipeline(packs.DefaultRegistry)
-	cfg := eval.Config{Policy: evalcore.InteractivePolicy()}
+	cfg := eval.Config{DestructivePolicy: evalcore.InteractivePolicy(), PrivacyPolicy: evalcore.InteractivePolicy()}
 
 	corpus := []string{
 		// PostgreSQL
@@ -159,7 +159,7 @@ func TestDbComparisonCrossDatabaseConsistency(t *testing.T) {
 				if pack == nil {
 					t.Fatalf("pack %s not found", packID)
 				}
-				for _, dp := range pack.Destructive {
+				for _, dp := range pack.Rules {
 					if dp.Match != nil && matchRuleCommand(dp, cmd) {
 						severities = append(severities, dp.Severity)
 						confidences = append(confidences, dp.Confidence)
@@ -192,9 +192,9 @@ func TestDbComparisonPolicyMonotonicity(t *testing.T) {
 	t.Parallel()
 
 	pipeline := eval.NewPipeline(packs.DefaultRegistry)
-	strictCfg := eval.Config{Policy: evalcore.StrictPolicy()}
-	interCfg := eval.Config{Policy: evalcore.InteractivePolicy()}
-	permCfg := eval.Config{Policy: evalcore.PermissivePolicy()}
+	strictCfg := eval.Config{DestructivePolicy: evalcore.StrictPolicy(), PrivacyPolicy: evalcore.StrictPolicy()}
+	interCfg := eval.Config{DestructivePolicy: evalcore.InteractivePolicy(), PrivacyPolicy: evalcore.InteractivePolicy()}
+	permCfg := eval.Config{DestructivePolicy: evalcore.PermissivePolicy(), PrivacyPolicy: evalcore.PermissivePolicy()}
 
 	restrictiveness := map[eval.Decision]int{
 		eval.DecisionAllow: 0,

@@ -7,7 +7,7 @@ import (
 )
 
 func TestFaultEvaluateNilAndInvalidOptions(t *testing.T) {
-	_ = guard.Evaluate("git push --force", guard.WithPolicy(nil))
+	_ = guard.Evaluate("git push --force", guard.WithDestructivePolicy(nil))
 	_ = guard.Evaluate("ls", nil)
 	_ = guard.Evaluate("ls", guard.WithAllowlist(), guard.WithBlocklist())
 	res := guard.Evaluate("ls", guard.WithPacks("nonexistent.pack"))

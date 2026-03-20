@@ -9,7 +9,7 @@ func mongodbPack() packs.Pack {
 		Description: "MongoDB destructive operations via mongosh, mongo, mongos, mongodump, mongorestore",
 		Keywords:    []string{"mongo", "mongosh", "mongos", "mongodump", "mongorestore"},
 		Safe:        []packs.Rule{{ID: "mongodump-safe"}, {ID: "mongosh-readonly-safe"}, {ID: "mongosh-interactive-safe"}},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{ID: "mongo-drop-database", Severity: sevHigh, Confidence: confHigh, Reason: "db.dropDatabase() permanently removes the database and all collections", Remediation: "Drop specific collections instead of dropping the database", EnvSensitive: true, Match: func(cmd packs.Command) bool {
 				return hasAny(cmd, "mongosh", "mongo", "mongos") && !hasAny(cmd, "mongodump", "mongorestore") && reMongoDropDB.MatchString(cmd.RawText)
 			}},

@@ -14,7 +14,7 @@ func mysqlPack() packs.Pack {
 			{ID: "mysql-interactive-safe"},
 			{ID: "mysqladmin-readonly-safe"},
 		},
-		Destructive: []packs.Rule{
+		Rules: []packs.Rule{
 			{ID: "mysql-drop-database", Severity: sevHigh, Confidence: confHigh, Reason: "DROP DATABASE permanently removes the database and all tables", Remediation: "Drop specific tables instead of dropping the database", EnvSensitive: true, Match: func(cmd packs.Command) bool {
 				return hasAll(cmd, "mysql") && !hasAny(cmd, "mysqldump", "mysqladmin") && reDropDatabase.MatchString(cmd.RawText)
 			}},
