@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Build
+        run: make build
+
+      - name: Lint
+        run: make lint
+
+      - name: Unit tests
+        run: make test
+
+      - name: Integration tests
+        run: make test-integration
+
+      - name: E2E tests
+        run: make test-e2e
+
+      - name: Race detector
+        run: make test-race
+
+  extended:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Stress tests
+        run: make test-stress
+
+      - name: Security tests
+        run: make test-security
+
+      - name: Mutation tests
+        run: make test-mutation
+
+      - name: Benchmarks
+        run: make bench
