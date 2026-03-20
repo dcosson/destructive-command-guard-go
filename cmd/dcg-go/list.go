@@ -95,8 +95,8 @@ func runListRules(args []string) error {
 	printGroup := func(label string, rs []guard.RuleInfo) {
 		fmt.Fprintf(stdout, "%s (%d):\n", label, len(rs))
 		for _, r := range rs {
-			prefix := fmt.Sprintf("  %-40s (%s) ", r.ID, r.PackID)
-			fmt.Fprintf(stdout, "%s%s\n", prefix, wrapLine(r.Reason, len(prefix), wrapWidth))
+			fmt.Fprintf(stdout, "  %-40s (%s)\n", r.ID, r.PackID)
+			fmt.Fprintf(stdout, "%s%s\n", contIndent, wrapLine(r.Reason, contentCol, wrapWidth))
 		}
 		fmt.Fprintln(stdout)
 	}
