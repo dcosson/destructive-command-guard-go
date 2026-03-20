@@ -1,5 +1,5 @@
-.PHONY: build clean deps lint test test-integration test-e2e test-stress \
-       test-security test-mutation test-comparison \
+.PHONY: build clean deps lint test test-integration test-e2e test-external \
+       test-stress test-security test-mutation test-comparison \
        test-ci-tier1 test-ci-tier2 test-ci-tier3 test-all \
        bench bench-full test-race help
 
@@ -89,6 +89,13 @@ test-e2e:
 	go test ./internal/e2etest -run '^TestE2E' -count=1 -v
 
 # --------------------------------------------------------------------------- #
+# Tests — external (builds binary, tests CLI as black box)
+# --------------------------------------------------------------------------- #
+
+test-external:
+	go test ./tests/external -count=1 -v
+
+# --------------------------------------------------------------------------- #
 # Tests — stress, security, benchmarks (longer-running)
 # --------------------------------------------------------------------------- #
 
@@ -163,7 +170,7 @@ bench-full:
 
 # Run everything: unit, integration, e2e, stress, security, mutation, bench.
 # Does NOT include comparison tests (needs UPSTREAM_BINARY).
-test-all: test test-integration test-e2e test-stress test-security test-mutation bench
+test-all: test test-integration test-e2e test-external test-stress test-security test-mutation bench
 
 # --------------------------------------------------------------------------- #
 # Help
@@ -185,6 +192,7 @@ help:
 	@echo ""
 	@echo "Test (extended):"
 	@echo "  make test-e2e           E2E tests (builds binary, subprocess tests)"
+	@echo "  make test-external      External tests (builds binary, policy/CLI validation)"
 	@echo "  make test-stress        Stress tests (concurrent, memory, timeouts)"
 	@echo "  make test-security      Security tests (evasion, heap, isolation)"
 	@echo "  make test-mutation      Mutation testing harness"

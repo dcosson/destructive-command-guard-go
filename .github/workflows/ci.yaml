@@ -31,6 +31,9 @@ jobs:
       - name: E2E tests
         run: make test-e2e
 
+      - name: External tests
+        run: make test-external
+
       - name: Race detector
         run: make test-race
 
