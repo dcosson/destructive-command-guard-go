@@ -1,6 +1,3 @@
-// Package external runs black-box tests against the compiled dcg-go binary.
-// These tests build the real binary and invoke it as a subprocess, validating
-// CLI output and exit codes with various policy configurations.
 package external
 
 import (
@@ -11,15 +8,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 )
 
-var (
-	binaryOnce sync.Once
-	binaryPath string
-	buildErr   error
-)
+var binaryPath string
 
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "dcg-external-test")
@@ -39,12 +31,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func binary(t *testing.T) string {
-	t.Helper()
-	return binaryPath
-}
-
-type testResult struct {
+type cliResult struct {
 	Command               string `json:"command"`
 	Decision              string `json:"decision"`
 	DestructiveSeverity   string `json:"destructive_severity,omitempty"`
@@ -53,10 +40,10 @@ type testResult struct {
 	PrivacyConfidence     string `json:"privacy_confidence,omitempty"`
 }
 
-func runTest(t *testing.T, bin string, args ...string) (testResult, int) {
+func runCLI(t *testing.T, args ...string) (cliResult, int) {
 	t.Helper()
 	fullArgs := append([]string{"test", "--json"}, args...)
-	cmd := exec.Command(bin, fullArgs...)
+	cmd := exec.Command(binaryPath, fullArgs...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -69,7 +56,7 @@ func runTest(t *testing.T, bin string, args ...string) (testResult, int) {
 			t.Fatalf("run error: %v\nstderr: %s", err, stderr.String())
 		}
 	}
-	var result testResult
+	var result cliResult
 	if stdout.Len() > 0 {
 		if jsonErr := json.Unmarshal(stdout.Bytes(), &result); jsonErr != nil {
 			t.Fatalf("invalid JSON output: %v\nraw: %s", jsonErr, stdout.String())
@@ -79,25 +66,22 @@ func runTest(t *testing.T, bin string, args ...string) (testResult, int) {
 }
 
 // Exit codes: 0=Allow, 2=Deny, 3=Ask
-const (
-	exitAllow = 0
-	exitDeny  = 2
-	exitAsk   = 3
-)
-
-func TestExternalSafeCommands(t *testing.T) {
-	bin := binary(t)
-	safe := []string{
-		"echo hello",
-		"git status",
-		"ls -la",
-		"cat README.md",
-		"pwd",
+func wantExit(decision string) int {
+	switch decision {
+	case "Deny":
+		return 2
+	case "Ask":
+		return 3
+	default:
+		return 0
 	}
-	for _, cmd := range safe {
+}
+
+func TestBinarySafeCommands(t *testing.T) {
+	for _, cmd := range SafeCommands {
 		t.Run(cmd, func(t *testing.T) {
-			result, exit := runTest(t, bin, cmd)
-			if exit != exitAllow {
+			result, exit := runCLI(t, cmd)
+			if exit != 0 {
 				t.Fatalf("expected exit 0 (Allow), got %d for %q", exit, cmd)
 			}
 			if result.Decision != "Allow" {
@@ -107,103 +91,68 @@ func TestExternalSafeCommands(t *testing.T) {
 	}
 }
 
-func TestExternalDestructiveDefaultPolicy(t *testing.T) {
-	bin := binary(t)
-	// Default policy is Interactive — High severity should Ask.
-	cases := []struct {
-		cmd      string
-		wantExit int
-		wantDec  string
-	}{
-		{"rm -rf /", exitDeny, "Deny"},       // Critical → Deny
-		{"git push --force", exitAsk, "Ask"}, // High → Ask
-		{"echo hello", exitAllow, "Allow"},   // No match → Allow
-	}
-	for _, tc := range cases {
-		t.Run(tc.cmd, func(t *testing.T) {
-			result, exit := runTest(t, bin, tc.cmd)
-			if exit != tc.wantExit {
-				t.Fatalf("exit=%d want=%d for %q (decision=%s)", exit, tc.wantExit, tc.cmd, result.Decision)
+func TestBinaryDefaultPolicy(t *testing.T) {
+	for _, tc := range DefaultPolicyCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, exit := runCLI(t, tc.Command)
+			want := wantExit(tc.WantDecision)
+			if exit != want {
+				t.Fatalf("exit=%d want=%d for %q (decision=%s)", exit, want, tc.Command, result.Decision)
 			}
-			if result.Decision != tc.wantDec {
-				t.Fatalf("decision=%s want=%s for %q", result.Decision, tc.wantDec, tc.cmd)
+			if result.Decision != tc.WantDecision {
+				t.Fatalf("decision=%s want=%s for %q", result.Decision, tc.WantDecision, tc.Command)
 			}
 		})
 	}
 }
 
-func TestExternalPolicyVariations(t *testing.T) {
-	bin := binary(t)
-	// git push --force is High severity, Destructive category.
-	cmd := "git push --force"
-	cases := []struct {
-		policy   string
-		wantExit int
-		wantDec  string
-	}{
-		{"allow-all", exitAllow, "Allow"},
-		{"permissive", exitAllow, "Allow"}, // Permissive allows High
-		{"moderate", exitDeny, "Deny"},     // Moderate denies High
-		{"strict", exitDeny, "Deny"},       // Strict denies all
-		{"interactive", exitAsk, "Ask"},    // Interactive asks for High
-	}
-	for _, tc := range cases {
-		t.Run(tc.policy, func(t *testing.T) {
-			result, exit := runTest(t, bin, "--destructive-policy", tc.policy, cmd)
-			if exit != tc.wantExit {
-				t.Fatalf("exit=%d want=%d for policy=%s (decision=%s)", exit, tc.wantExit, tc.policy, result.Decision)
+func TestBinaryPolicyVariations(t *testing.T) {
+	for _, tc := range PolicyVariations {
+		t.Run(tc.Policy, func(t *testing.T) {
+			result, exit := runCLI(t, "--destructive-policy", tc.Policy, PolicyVariationCommand)
+			want := wantExit(tc.WantDecision)
+			if exit != want {
+				t.Fatalf("exit=%d want=%d for policy=%s (decision=%s)", exit, want, tc.Policy, result.Decision)
 			}
-			if result.Decision != tc.wantDec {
-				t.Fatalf("decision=%s want=%s for policy=%s", result.Decision, tc.wantDec, tc.policy)
+			if result.Decision != tc.WantDecision {
+				t.Fatalf("decision=%s want=%s for policy=%s", result.Decision, tc.WantDecision, tc.Policy)
 			}
 		})
 	}
 }
 
-func TestExternalDualPolicySplit(t *testing.T) {
-	bin := binary(t)
-
-	// Destructive-permissive + privacy-strict:
-	// git push --force (destructive High) should be allowed by permissive.
+func TestBinaryDualPolicySplit(t *testing.T) {
 	t.Run("destructive-allowed-by-permissive", func(t *testing.T) {
-		result, exit := runTest(t, bin,
+		result, exit := runCLI(t,
 			"--destructive-policy", "permissive",
 			"--privacy-policy", "strict",
 			"git push --force")
-		if exit != exitAllow {
+		if exit != 0 {
 			t.Fatalf("expected Allow for destructive-permissive, got exit=%d decision=%s", exit, result.Decision)
 		}
 	})
 
-	// Destructive-permissive + privacy-strict:
-	// Critical destructive command should still be denied.
 	t.Run("critical-denied-even-permissive", func(t *testing.T) {
-		result, exit := runTest(t, bin,
+		result, exit := runCLI(t,
 			"--destructive-policy", "permissive",
 			"--privacy-policy", "strict",
 			"rm -rf /")
-		if exit != exitDeny {
+		if exit != 2 {
 			t.Fatalf("expected Deny for critical, got exit=%d decision=%s", exit, result.Decision)
 		}
 	})
 
-	// Policy shorthand sets both.
 	t.Run("policy-shorthand-sets-both", func(t *testing.T) {
-		result, exit := runTest(t, bin,
-			"--policy", "strict",
-			"git push --force")
-		if exit != exitDeny {
+		result, exit := runCLI(t, "--policy", "strict", "git push --force")
+		if exit != 2 {
 			t.Fatalf("expected Deny for strict, got exit=%d decision=%s", exit, result.Decision)
 		}
 	})
 }
 
-func TestExternalPerCategoryAssessments(t *testing.T) {
-	bin := binary(t)
-
-	// Destructive command should have destructive assessment, no privacy assessment.
+func TestBinaryPerCategoryAssessments(t *testing.T) {
 	t.Run("destructive-only", func(t *testing.T) {
-		result, _ := runTest(t, bin, "git push --force")
+		result, _ := runCLI(t, "git push --force")
 		if result.DestructiveSeverity == "" {
 			t.Fatal("expected destructive severity for destructive command")
 		}
@@ -213,9 +162,8 @@ func TestExternalPerCategoryAssessments(t *testing.T) {
 	})
 }
 
-func TestExternalListPacks(t *testing.T) {
-	bin := binary(t)
-	cmd := exec.Command(bin, "list", "packs", "--json")
+func TestBinaryListPacks(t *testing.T) {
+	cmd := exec.Command(binaryPath, "list", "packs", "--json")
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
@@ -228,7 +176,6 @@ func TestExternalListPacks(t *testing.T) {
 	if len(packs) == 0 {
 		t.Fatal("expected non-empty packs list")
 	}
-	// Verify core.git exists.
 	found := false
 	for _, p := range packs {
 		if p["ID"] == "core.git" {
@@ -241,9 +188,8 @@ func TestExternalListPacks(t *testing.T) {
 	}
 }
 
-func TestExternalListRules(t *testing.T) {
-	bin := binary(t)
-	cmd := exec.Command(bin, "list", "rules", "--json")
+func TestBinaryListRules(t *testing.T) {
+	cmd := exec.Command(binaryPath, "list", "rules", "--json")
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
@@ -256,7 +202,6 @@ func TestExternalListRules(t *testing.T) {
 	if len(rules) < 100 {
 		t.Fatalf("expected 100+ rules, got %d", len(rules))
 	}
-	// Verify category field exists.
 	for _, r := range rules[:5] {
 		if _, ok := r["Category"]; !ok {
 			t.Fatalf("missing Category field in rule: %v", r)
@@ -264,8 +209,7 @@ func TestExternalListRules(t *testing.T) {
 	}
 }
 
-func TestExternalHookMode(t *testing.T) {
-	bin := binary(t)
+func TestBinaryHookMode(t *testing.T) {
 	cases := []struct {
 		name     string
 		input    string
@@ -279,7 +223,7 @@ func TestExternalHookMode(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cmd := exec.Command(bin)
+			cmd := exec.Command(binaryPath)
 			cmd.Stdin = strings.NewReader(tc.input)
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout = &stdout
@@ -314,8 +258,7 @@ func TestExternalHookMode(t *testing.T) {
 	}
 }
 
-func TestExternalTestMode(t *testing.T) {
-	bin := binary(t)
+func TestBinaryTestMode(t *testing.T) {
 	tests := []struct {
 		name         string
 		args         []string
@@ -328,10 +271,9 @@ func TestExternalTestMode(t *testing.T) {
 		{"explain-mode", []string{"test", "--explain", "git push --force"}, 3, "Reason:"},
 		{"policy-override-permissive", []string{"test", "--policy", "permissive", "git push --force"}, 0, "Decision: Allow"},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := exec.Command(bin, tt.args...)
+			cmd := exec.Command(binaryPath, tt.args...)
 			var stdout bytes.Buffer
 			cmd.Stdout = &stdout
 			err := cmd.Run()
@@ -351,11 +293,9 @@ func TestExternalTestMode(t *testing.T) {
 	}
 }
 
-func TestExternalVersionAndHelp(t *testing.T) {
-	bin := binary(t)
-
+func TestBinaryVersionAndHelp(t *testing.T) {
 	t.Run("version", func(t *testing.T) {
-		out, err := exec.Command(bin, "version").Output()
+		out, err := exec.Command(binaryPath, "version").Output()
 		if err != nil {
 			t.Fatalf("version failed: %v", err)
 		}
@@ -365,7 +305,7 @@ func TestExternalVersionAndHelp(t *testing.T) {
 	})
 
 	t.Run("help", func(t *testing.T) {
-		out, err := exec.Command(bin, "help").Output()
+		out, err := exec.Command(binaryPath, "help").Output()
 		if err != nil {
 			t.Fatalf("help failed: %v", err)
 		}
