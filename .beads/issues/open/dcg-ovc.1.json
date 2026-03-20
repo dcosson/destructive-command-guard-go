@@ -1,0 +1,34 @@
+{
+  "id": "dcg-ovc.1",
+  "title": "rule-categories-foundation",
+  "description": "Implement foundational types and pipeline changes for dual-category rules from docs/plans/06-rule-categories.md.\n\nSections: §4.1, §4.2, §4.3, §4.4, §4.5, §4.6, §4.7, §4.11\n\nKey deliverables:\n- RuleCategory bitmask type (CategoryDestructive, CategoryPrivacy, CategoryBoth) in internal/evalcore\n- PolicyConfig struct with Decide() method implementing deny\u003eask\u003eallow merge\n- Updated Match struct with Category field\n- Updated Result struct replacing Assessment with DestructiveAssessment/PrivacyAssessment\n- Pack.Destructive renamed to Pack.Rules (update all callers: pipeline.go, registry.go, guard.go, pack definitions)\n- Rule.Category field added to internal/packs Rule struct\n- aggregateByCategory function in internal/eval\n- Pipeline.Run updated for dual-policy evaluation path\n- eval.Config with DestructivePolicy/PrivacyPolicy (replacing single Policy)\n- guard.WithDestructivePolicy/WithPrivacyPolicy options (replacing WithPolicy)\n- defaultConfig() sets both policies to InteractivePolicy()\n- Zero-category normalization at match construction (§4.11)\n- Unit tests for all of the above including zero-category regression test\n\nReferences:\n- Plan: docs/plans/06-rule-categories.md §4.1-4.7, §4.11",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-ovc",
+  "dependencies": [
+    {
+      "id": "dcg-ovc",
+      "type": "parent-child"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-ovc.2",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-ovc.3",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg",
+    "batch=6",
+    "plan-doc=06-rule-categories"
+  ],
+  "created_at": "2026-03-19T22:21:07.544403-07:00",
+  "updated_at": "2026-03-19T22:21:07.544403-07:00"
+}
