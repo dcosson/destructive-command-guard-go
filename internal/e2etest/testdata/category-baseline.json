@@ -1,0 +1,142 @@
+{
+  "total_destructive": 116,
+  "total_privacy": 7,
+  "total_both": 18,
+  "packs": {
+    "cloud.aws": {
+      "destructive": 1,
+      "privacy": 0,
+      "both": 0
+    },
+    "cloud.azure": {
+      "destructive": 1,
+      "privacy": 0,
+      "both": 0
+    },
+    "cloud.cloudformation": {
+      "destructive": 1,
+      "privacy": 0,
+      "both": 0
+    },
+    "cloud.gcp": {
+      "destructive": 1,
+      "privacy": 0,
+      "both": 0
+    },
+    "containers.compose": {
+      "destructive": 1,
+      "privacy": 0,
+      "both": 0
+    },
+    "containers.docker": {
+      "destructive": 1,
+      "privacy": 0,
+      "both": 0
+    },
+    "core.filesystem": {
+      "destructive": 13,
+      "privacy": 0,
+      "both": 0
+    },
+    "core.git": {
+      "destructive": 22,
+      "privacy": 0,
+      "both": 0
+    },
+    "database.mongodb": {
+      "destructive": 6,
+      "privacy": 0,
+      "both": 0
+    },
+    "database.mysql": {
+      "destructive": 8,
+      "privacy": 0,
+      "both": 0
+    },
+    "database.postgresql": {
+      "destructive": 10,
+      "privacy": 0,
+      "both": 0
+    },
+    "database.redis": {
+      "destructive": 6,
+      "privacy": 0,
+      "both": 0
+    },
+    "database.sqlite": {
+      "destructive": 5,
+      "privacy": 0,
+      "both": 0
+    },
+    "frameworks": {
+      "destructive": 7,
+      "privacy": 0,
+      "both": 0
+    },
+    "infrastructure.ansible": {
+      "destructive": 1,
+      "privacy": 0,
+      "both": 0
+    },
+    "infrastructure.pulumi": {
+      "destructive": 4,
+      "privacy": 0,
+      "both": 0
+    },
+    "infrastructure.terraform": {
+      "destructive": 4,
+      "privacy": 0,
+      "both": 0
+    },
+    "kubernetes.helm": {
+      "destructive": 2,
+      "privacy": 0,
+      "both": 0
+    },
+    "kubernetes.kubectl": {
+      "destructive": 4,
+      "privacy": 0,
+      "both": 0
+    },
+    "macos.communication": {
+      "destructive": 1,
+      "privacy": 0,
+      "both": 8
+    },
+    "macos.privacy": {
+      "destructive": 0,
+      "privacy": 5,
+      "both": 0
+    },
+    "macos.system": {
+      "destructive": 3,
+      "privacy": 0,
+      "both": 10
+    },
+    "personal.files": {
+      "destructive": 4,
+      "privacy": 1,
+      "both": 0
+    },
+    "personal.ssh": {
+      "destructive": 1,
+      "privacy": 1,
+      "both": 0
+    },
+    "platform.github": {
+      "destructive": 3,
+      "privacy": 0,
+      "both": 0
+    },
+    "remote.rsync": {
+      "destructive": 1,
+      "privacy": 0,
+      "both": 0
+    },
+    "secrets.vault": {
+      "destructive": 5,
+      "privacy": 0,
+      "both": 0
+    }
+  }
+}

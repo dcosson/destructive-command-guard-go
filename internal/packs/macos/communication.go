@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
 )
 
@@ -80,15 +81,15 @@ func communicationPack() packs.Pack {
 			)},
 		},
 		Rules: []packs.Rule{
-			{ID: "osascript-send-message", Severity: sevCritical, Confidence: confHigh, Reason: "osascript can send iMessages automatically", Remediation: "Use read-only AppleScript commands without send operations", Match: packs.And(packs.Name("osascript"), packs.ArgContentRegex(osascriptMessagesRe.String()))},
-			{ID: "osascript-send-email", Severity: sevCritical, Confidence: confHigh, Reason: "osascript can send email automatically through Mail.app", Remediation: "Use read-only AppleScript commands without send operations", Match: packs.And(packs.Name("osascript"), packs.ArgContentRegex(osascriptMailRe.String()))},
-			{ID: "osascript-system-events", Severity: sevCritical, Confidence: confHigh, Reason: "System Events can automate arbitrary GUI actions", Remediation: "Do not allow System Events automation", Match: packs.And(packs.Name("osascript"), packs.ArgContentRegex(osascriptSystemEventsRe.String()))},
-			{ID: "osascript-sensitive-app", Severity: sevHigh, Confidence: confHigh, Reason: "osascript targets sensitive macOS applications", Remediation: "Use native CLI tooling instead of app automation scripts", Match: packs.And(packs.Name("osascript"), packs.ArgContentRegex(osascriptSensitiveAppsRe.String()))},
-			{ID: "shortcuts-run", Severity: sevHigh, Confidence: confHigh, Reason: "shortcuts run executes automation actions with side effects", Remediation: "Use direct CLI commands for required operations", Match: packs.And(packs.Name("shortcuts"), packs.ArgAt(0, "run"))},
-			{ID: "automator-run", Severity: sevHigh, Confidence: confMedium, Reason: "automator executes workflows with arbitrary side effects", Remediation: "Use direct CLI commands for required operations", Match: packs.And(packs.Name("automator"), packs.Not(packs.Or(packs.Flags("--help"), packs.Flags("-h"), packs.Flags("--version"))))},
+			{ID: "osascript-send-message", Category: evalcore.CategoryBoth, Severity: sevCritical, Confidence: confHigh, Reason: "osascript can send iMessages automatically", Remediation: "Use read-only AppleScript commands without send operations", Match: packs.And(packs.Name("osascript"), packs.ArgContentRegex(osascriptMessagesRe.String()))},
+			{ID: "osascript-send-email", Category: evalcore.CategoryBoth, Severity: sevCritical, Confidence: confHigh, Reason: "osascript can send email automatically through Mail.app", Remediation: "Use read-only AppleScript commands without send operations", Match: packs.And(packs.Name("osascript"), packs.ArgContentRegex(osascriptMailRe.String()))},
+			{ID: "osascript-system-events", Category: evalcore.CategoryBoth, Severity: sevCritical, Confidence: confHigh, Reason: "System Events can automate arbitrary GUI actions", Remediation: "Do not allow System Events automation", Match: packs.And(packs.Name("osascript"), packs.ArgContentRegex(osascriptSystemEventsRe.String()))},
+			{ID: "osascript-sensitive-app", Category: evalcore.CategoryBoth, Severity: sevHigh, Confidence: confHigh, Reason: "osascript targets sensitive macOS applications", Remediation: "Use native CLI tooling instead of app automation scripts", Match: packs.And(packs.Name("osascript"), packs.ArgContentRegex(osascriptSensitiveAppsRe.String()))},
+			{ID: "shortcuts-run", Category: evalcore.CategoryBoth, Severity: sevHigh, Confidence: confHigh, Reason: "shortcuts run executes automation actions with side effects", Remediation: "Use direct CLI commands for required operations", Match: packs.And(packs.Name("shortcuts"), packs.ArgAt(0, "run"))},
+			{ID: "automator-run", Category: evalcore.CategoryBoth, Severity: sevHigh, Confidence: confMedium, Reason: "automator executes workflows with arbitrary side effects", Remediation: "Use direct CLI commands for required operations", Match: packs.And(packs.Name("automator"), packs.Not(packs.Or(packs.Flags("--help"), packs.Flags("-h"), packs.Flags("--version"))))},
 			{ID: "osascript-finder-destructive", Severity: sevHigh, Confidence: confHigh, Reason: "osascript performs destructive Finder operations", Remediation: "Use non-destructive file queries instead of Finder delete operations", Match: packs.And(packs.Name("osascript"), packs.ArgContentRegex(osascriptFinderDestRe.String()))},
-			{ID: "open-terminal", Severity: sevHigh, Confidence: confMedium, Reason: "Opening Terminal/iTerm may bypass guard supervision", Remediation: "Do not spawn external terminals from automated flows", Match: openTerminal},
-			{ID: "osascript-jxa-catchall", Severity: sevMedium, Confidence: confLow, Reason: "osascript JavaScript mode can automate applications with side effects", Remediation: "Use explicit shell commands instead of JXA automation", Match: jxaCatchAll},
+			{ID: "open-terminal", Category: evalcore.CategoryBoth, Severity: sevHigh, Confidence: confMedium, Reason: "Opening Terminal/iTerm may bypass guard supervision", Remediation: "Do not spawn external terminals from automated flows", Match: openTerminal},
+			{ID: "osascript-jxa-catchall", Category: evalcore.CategoryBoth, Severity: sevMedium, Confidence: confLow, Reason: "osascript JavaScript mode can automate applications with side effects", Remediation: "Use explicit shell commands instead of JXA automation", Match: jxaCatchAll},
 		},
 	}
 }

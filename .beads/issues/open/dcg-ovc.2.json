@@ -2,7 +2,7 @@
   "id": "dcg-ovc.2",
   "title": "rule-categories-tagging",
   "description": "Tag all existing rules with RuleCategory and regenerate golden files. From docs/plans/06-rule-categories.md.\n\nSections: §6.1, §6.2, §8 (Validation Tests)\n\nKey deliverables:\n- Add Category field to every rule across all pack files (~12 pack files)\n  - Most rules: CategoryDestructive (default, majority of rules)\n  - Privacy rules: personal.ssh, personal.files, macos.privacy (see Appendix)\n  - Both rules: macos.system, macos.communication (see Appendix)\n- CI category-count validation test against checked-in baseline (testdata/category-baseline.json)\n- Registry validation test: every rule has non-zero Category\n- Regenerate all golden files with new Category field in Match\n- Unit tests for category assignments\n\nReferences:\n- Plan: docs/plans/06-rule-categories.md §6.1, §6.2, §8 (Validation Tests), Appendix\n- Depends on: dcg-ovc.1 (foundation types and Pack.Rules rename)",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
   "parent": "dcg-ovc",
@@ -29,6 +29,7 @@
     "batch=6",
     "plan-doc=06-rule-categories"
   ],
+  "assignee": "coder-2-fog",
   "created_at": "2026-03-19T22:21:18.00031-07:00",
-  "updated_at": "2026-03-19T22:21:18.00031-07:00"
+  "updated_at": "2026-03-19T22:54:44.348982-07:00"
 }

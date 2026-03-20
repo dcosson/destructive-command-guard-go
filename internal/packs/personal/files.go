@@ -3,6 +3,7 @@ package personal
 import (
 	"regexp"
 
+	"github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
 )
 
@@ -53,7 +54,7 @@ func filesPack() packs.Pack {
 				packs.Or(packs.Name("sed"), packs.Name("tee"), packs.Name("dd")),
 				packs.ArgContentRegex(personalPathRe.String()),
 			)},
-			{ID: "personal-files-access", Severity: sevMedium, Confidence: confMedium, Reason: "Command reads files in a personal directory", Remediation: "Use project-local files instead of personal directories", Match: packs.And(
+			{ID: "personal-files-access", Category: evalcore.CategoryPrivacy, Severity: sevMedium, Confidence: confMedium, Reason: "Command reads files in a personal directory", Remediation: "Use project-local files instead of personal directories", Match: packs.And(
 				packs.AnyName(),
 				packs.ArgContentRegex(personalPathRe.String()),
 			)},

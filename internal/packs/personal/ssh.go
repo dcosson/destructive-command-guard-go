@@ -4,6 +4,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
 )
 
@@ -92,7 +93,7 @@ func sshPack() packs.Pack {
 				packs.Or(packs.Name("rm"), packs.Name("chmod"), packs.Name("mv")),
 				anyArg(isSSHDirArg),
 			)},
-			{ID: "ssh-private-key-access", Severity: sevHigh, Confidence: confHigh, Reason: "Command accesses a private SSH key", Remediation: "Use public key material instead of private key files", Match: packs.And(
+			{ID: "ssh-private-key-access", Category: evalcore.CategoryPrivacy, Severity: sevHigh, Confidence: confHigh, Reason: "Command accesses a private SSH key", Remediation: "Use public key material instead of private key files", Match: packs.And(
 				packs.AnyName(),
 				anyArg(isSSHPrivateKey),
 				packs.Not(anyArg(isSSHPublicKey)),
