@@ -28,7 +28,7 @@ private data."
 
 An audit of all rules across all packs shows a clean separation. Counts are
 derived from the per-pack breakdown below (the authoritative source); a CI
-validation test (see §7) must enforce these counts against the live registry
+validation test (see §8) must enforce these counts against the live registry
 to prevent drift.
 
 | Category | Count | Examples |
@@ -196,7 +196,8 @@ type Rule struct {
 ```
 
 All callers of `pack.Destructive` (pipeline.go, registry.go, guard.go, pack
-definitions, tests) must be updated to `pack.Rules`.
+definitions, tests) must be updated to `pack.Rules`. This supersedes plan
+02's pipeline code which references `pack.Destructive` (see §5).
 
 Rules with `Category == 0` (unset) are normalized to `CategoryDestructive` at
 match construction time. See §4.11 for the mandatory normalization point that
@@ -379,6 +380,12 @@ in §3.3 (the lane that determined the final decision takes priority):
 When a "both" rule triggers and both lanes contribute to the decision, the
 category prefix should be `[destructive+privacy]`.
 
+**Hook JSON output**: The Claude Code hook protocol only consumes
+`permissionDecision` and `permissionDecisionReason` — there is no mechanism
+to pass structured category metadata. The `[category]` prefix in the reason
+string is sufficient for now. If the hook protocol is extended in the future,
+per-category assessments could be added to the JSON output.
+
 ### 4.10 CLI: Replace `packs` Command with `list` Command
 
 The existing `dcg-go packs` command is replaced by `dcg-go list` with two
@@ -428,10 +435,23 @@ Supports `--json` for machine-readable output.
 
 #### Guard Package Changes
 
-The existing `guard.Packs()` function and `PackInfo` struct are updated to
-include per-category counts (replacing the current `SafeCount`/`DestrCount`
-with `DestructiveCount`/`PrivacyCount`/`BothCount`). A new `guard.Rules()`
-function is added returning `[]RuleInfo`:
+The `PackInfo` struct replaces `SafeCount`/`DestrCount` with per-category
+counts:
+
+```go
+type PackInfo struct {
+    ID               string
+    Name             string
+    Description      string
+    Keywords         []string
+    DestructiveCount int
+    PrivacyCount     int
+    BothCount        int
+    HasEnvSensitive  bool
+}
+```
+
+A new `guard.Rules()` function is added returning `[]RuleInfo`:
 
 ```go
 type RuleInfo struct {
@@ -473,16 +493,35 @@ result.Matches = append(result.Matches, Match{
 ```
 
 A regression test must verify that a rule with `Category == 0` is treated as
-`CategoryDestructive` and does not bypass both aggregation lanes (see §7).
+`CategoryDestructive` and does not bypass both aggregation lanes (see §8).
 
 **Note on blocklist/allowlist**: These short-circuit before category
 aggregation — blocklist always returns Deny, allowlist always returns Allow.
 Their synthetic Match objects get `CategoryDestructive` via normalization, but
 this is cosmetic since the dual-policy pipeline is never reached.
 
-## 5. Implementation Plan
+## 5. Cross-Document Updates
 
-### 5.1 Rule Tagging
+This plan changes types and interfaces defined in earlier plan docs. These
+docs are now stale for the affected types and should be updated during
+implementation:
+
+- **00-architecture.md**: `Result` struct (remove `Assessment`, add
+  `DestructiveAssessment`/`PrivacyAssessment`), `Policy` usage note,
+  component diagram (add category partition step), `WithPolicy` → dual
+  options, `Match` struct (add `Category`)
+- **02-matching-framework.md**: Pipeline steps 11-12 (`policy.Decide` call
+  sites become `PolicyConfig.Decide`), `Result` type definition, `Config`
+  struct, `pack.Destructive` → `pack.Rules` in pipeline code
+- **04-api-and-cli.md**: `guard.Result` definition, `guard.WithPolicy` →
+  dual options, test mode output (add category prefix), packs mode → list
+  command, config YAML schema
+
+The earlier docs remain correct for everything not listed here.
+
+## 6. Implementation Plan
+
+### 6.1 Rule Tagging
 
 Every existing rule gets a `Category` field. Based on the audit:
 
@@ -495,13 +534,13 @@ Every existing rule gets a `Category` field. Based on the audit:
 
 A validation test ensures every rule has a non-zero category.
 
-### 5.2 Golden File Updates
+### 6.2 Golden File Updates
 
 Golden files include match data. The Match struct gains a Category field, so
 golden files will need regeneration. This is mechanical — run the golden update
 tool.
 
-## 6. Package / Import Structure
+## 7. Package / Import Structure
 
 No new packages needed. Changes are additive within existing packages:
 
@@ -515,7 +554,7 @@ cmd/dcg-go/           ← Config with dual policies, buildReason with category p
 
 Import flow is unchanged — no new cycles.
 
-## 7. Testing Strategy
+## 8. Testing Strategy
 
 ### Unit Tests
 
@@ -556,7 +595,7 @@ Import flow is unchanged — no new cycles.
 Regenerate all golden files after adding Category to Match. Verify diffs are
 only the added field.
 
-## 8. Sequence Diagram: Dual-Policy Evaluation
+## 9. Sequence Diagram: Dual-Policy Evaluation
 
 ```mermaid
 sequenceDiagram
@@ -577,7 +616,7 @@ sequenceDiagram
     Pipeline-->>Caller: Result{Decision: Deny,<br/>PrivacyAssessment: {High, High}}
 ```
 
-## 9. Future Directions
+## 10. Future Directions
 
 The bitmask approach naturally extends if we ever need categories beyond
 destructive/privacy (e.g., "network", "system-config"). Not proposing this
@@ -589,7 +628,7 @@ now, but the design doesn't preclude it.
 
 Rules requiring explicit non-default category tagging (all others default to
 `CategoryDestructive`). **This list must be verified against the live registry
-at implementation time** — the CI validation test (§7) is the authoritative
+at implementation time** — the CI validation test (§8) is the authoritative
 source of truth post-merge.
 
 ### CategoryPrivacy
@@ -646,3 +685,12 @@ source of truth post-merge.
 | 3 | tall-vale | P2 | Test mode `--policy` flag not addressed | Incorporated | §4.8 adds `--destructive-policy`/`--privacy-policy` flags and `--policy` shorthand |
 | 4 | tall-vale | P2 | Open Questions §9 is stale | Incorporated | §9 resolved: Q1/Q2 answered by §4.8/§4.10, Q3 kept as future directions |
 | 5 | tall-vale | P3 | Blocklist matches get implicit CategoryDestructive | Incorporated | §4.11 adds note that blocklist/allowlist bypass dual-policy pipeline |
+
+## Seam Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | tall-vale | P1 | Architecture/plan 02/04 define `Result.Assessment` which plan 06 removes | Incorporated | §5 added cross-document update tracking list |
+| 2 | tall-vale | P1 | Plan 02 pipeline code references `pack.Destructive` renamed to `pack.Rules` | Incorporated | §4.2 notes plan 02 is superseded; §5 tracks the update |
+| 3 | tall-vale | P2 | Hook JSON output lacks structured category metadata | Incorporated | §4.9 documents hook protocol limitation and reason-string-only approach |
+| 4 | tall-vale | P3 | `PackInfo` struct changes not fully specified | Incorporated | §4.10 now shows full `PackInfo` struct with per-category counts |
