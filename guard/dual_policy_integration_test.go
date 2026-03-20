@@ -38,12 +38,12 @@ func TestDualPolicyBothCategoriesStrictestWins(t *testing.T) {
 }
 
 func TestDualPolicyDefaultBothInteractive(t *testing.T) {
-	// Default policies (both interactive) should behave like old single policy.
+	// Default policies (both interactive) should Ask for high-severity.
 	result := guard.Evaluate("git push --force")
 	if len(result.Matches) > 0 {
-		// High severity + interactive → Deny
-		if result.Decision != guard.Deny {
-			t.Fatalf("default dual-interactive should Deny high-severity, got %v", result.Decision)
+		// High severity + interactive → Ask
+		if result.Decision != guard.Ask {
+			t.Fatalf("default dual-interactive should Ask on high-severity, got %v", result.Decision)
 		}
 	}
 }

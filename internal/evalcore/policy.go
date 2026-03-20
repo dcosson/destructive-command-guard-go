@@ -1,45 +1,62 @@
 package evalcore
 
-// StrictPolicy denies Medium+ and Indeterminate.
-func StrictPolicy() Policy { return strictPolicy{} }
+// AllowAllPolicy allows everything regardless of severity.
+func AllowAllPolicy() Policy { return allowAllPolicy{} }
 
-type strictPolicy struct{}
+type allowAllPolicy struct{}
 
-func (strictPolicy) Decide(a Assessment) Decision {
-	if a.Severity >= Medium || a.Severity == Indeterminate {
+func (allowAllPolicy) Decide(a Assessment) Decision { return Allow }
+
+// PermissivePolicy allows up to High, denies Critical.
+func PermissivePolicy() Policy { return permissivePolicy{} }
+
+type permissivePolicy struct{}
+
+func (permissivePolicy) Decide(a Assessment) Decision {
+	if a.Severity >= Critical {
 		return Deny
 	}
 	return Allow
 }
 
-// InteractivePolicy asks on Medium and Indeterminate, denies High+.
+// ModeratePolicy allows up to Medium, denies High+.
+func ModeratePolicy() Policy { return moderatePolicy{} }
+
+type moderatePolicy struct{}
+
+func (moderatePolicy) Decide(a Assessment) Decision {
+	if a.Severity >= High {
+		return Deny
+	}
+	return Allow
+}
+
+// StrictPolicy allows only Low, denies everything else including Indeterminate.
+func StrictPolicy() Policy { return strictPolicy{} }
+
+type strictPolicy struct{}
+
+func (strictPolicy) Decide(a Assessment) Decision {
+	if a.Severity == Low {
+		return Allow
+	}
+	return Deny
+}
+
+// InteractivePolicy asks the user for Indeterminate, Medium, and High.
+// Allows Low. Denies Critical.
 func InteractivePolicy() Policy { return interactivePolicy{} }
 
 type interactivePolicy struct{}
 
 func (interactivePolicy) Decide(a Assessment) Decision {
 	switch {
-	case a.Severity >= High:
-		return Deny
-	case a.Severity == Medium || a.Severity == Indeterminate:
-		return Ask
-	default:
-		return Allow
-	}
-}
-
-// PermissivePolicy denies Critical and asks on High.
-func PermissivePolicy() Policy { return permissivePolicy{} }
-
-type permissivePolicy struct{}
-
-func (permissivePolicy) Decide(a Assessment) Decision {
-	switch {
 	case a.Severity == Critical:
 		return Deny
-	case a.Severity == High:
-		return Ask
-	default:
+	case a.Severity == Low:
 		return Allow
+	default:
+		// Indeterminate, Medium, High → Ask
+		return Ask
 	}
 }

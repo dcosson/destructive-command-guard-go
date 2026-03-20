@@ -57,9 +57,10 @@ func TestEvaluateWithStrictPolicy(t *testing.T) {
 }
 
 func TestEvaluateWithPermissivePolicy(t *testing.T) {
+	// git push --force is High severity; permissive allows up to High.
 	result := guard.Evaluate("git push --force", guard.WithDestructivePolicy(guard.PermissivePolicy()))
-	if len(result.Matches) > 0 && result.Decision != guard.Ask {
-		t.Fatalf("decision = %v, want %v", result.Decision, guard.Ask)
+	if len(result.Matches) > 0 && result.Decision != guard.Allow {
+		t.Fatalf("decision = %v, want %v", result.Decision, guard.Allow)
 	}
 }
 

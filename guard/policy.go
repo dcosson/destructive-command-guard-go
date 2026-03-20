@@ -2,11 +2,17 @@ package guard
 
 import "github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 
-// StrictPolicy denies Medium+ and Indeterminate.
+// AllowAllPolicy allows everything regardless of severity.
+func AllowAllPolicy() Policy { return evalcore.AllowAllPolicy() }
+
+// PermissivePolicy allows up to High, denies Critical.
+func PermissivePolicy() Policy { return evalcore.PermissivePolicy() }
+
+// ModeratePolicy allows up to Medium, denies High+.
+func ModeratePolicy() Policy { return evalcore.ModeratePolicy() }
+
+// StrictPolicy allows only Low, denies everything else including Indeterminate.
 func StrictPolicy() Policy { return evalcore.StrictPolicy() }
 
-// InteractivePolicy asks on Medium and Indeterminate, denies High+.
+// InteractivePolicy asks the user for Indeterminate, Medium, and High. Allows Low. Denies Critical.
 func InteractivePolicy() Policy { return evalcore.InteractivePolicy() }
-
-// PermissivePolicy denies Critical and asks on High.
-func PermissivePolicy() Policy { return evalcore.PermissivePolicy() }

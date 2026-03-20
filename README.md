@@ -111,7 +111,8 @@ Use `guard.Evaluate` directly in Go code:
 import "github.com/dcosson/destructive-command-guard-go/guard"
 
 result := guard.Evaluate("rm -rf /",
-    guard.WithPolicy(guard.InteractivePolicy()),
+    guard.WithDestructivePolicy(guard.ModeratePolicy()),
+    guard.WithPrivacyPolicy(guard.StrictPolicy()),
 )
 
 switch result.Decision {
@@ -125,15 +126,15 @@ case guard.Allow:
 ```
 
 Each match includes the rule category and severity that contributed to the
-decision. The result also keeps destructive and privacy assessments separate,
-then merges them into the final `Allow` / `Ask` / `Deny` decision.
+decision. The result keeps destructive and privacy assessments separate,
+then merges them into the final `Allow` / `Ask` / `Deny` decision (the
+strictest decision from either category wins).
 
 ### Options
 
 ```go
-guard.WithPolicy(p Policy)              // Set both destructive and privacy policies
-guard.WithDestructivePolicy(p Policy)   // Set only the destructive policy
-guard.WithPrivacyPolicy(p Policy)       // Set only the privacy policy
+guard.WithDestructivePolicy(p Policy)   // Set the destructive policy
+guard.WithPrivacyPolicy(p Policy)       // Set the privacy policy
 guard.WithAllowlist("git push *")       // Glob patterns to always allow
 guard.WithBlocklist("rm -rf /*")        // Glob patterns to always deny
 guard.WithPacks("core.git")             // Only evaluate specific packs
@@ -143,14 +144,26 @@ guard.WithEnv(os.Environ())             // Pass environment for context-aware ru
 
 ### Policies
 
-Policies are applied independently to the destructive assessment and the privacy
-assessment, then merged into one final decision.
+You set a separate policy for destructive rules and privacy rules. Each
+policy converts a severity assessment into an `Allow`, `Deny`, or `Ask`
+decision. The two decisions are then merged: the strictest one wins
+(`Deny` > `Ask` > `Allow`).
+
+This lets you configure different risk tolerances for each category. For
+example, you might be comfortable with destructive commands (you know what
+you're doing) but want strict protection against anything touching private
+data.
 
 | Policy | Indeterminate | Low | Medium | High | Critical |
 |--------|:---:|:---:|:---:|:---:|:---:|
+| **Allow All** | Allow | Allow | Allow | Allow | Allow |
+| **Permissive** | Allow | Allow | Allow | Allow | Deny |
+| **Moderate** | Allow | Allow | Allow | Deny | Deny |
 | **Strict** | Deny | Allow | Deny | Deny | Deny |
-| **Interactive** (default) | Ask | Allow | Ask | Deny | Deny |
-| **Permissive** | Allow | Allow | Allow | Ask | Deny |
+| **Interactive** (default) | Ask | Allow | Ask | Ask | Deny |
+
+Only **Interactive** ever returns `Ask`. All other policies return only
+`Allow` or `Deny`.
 
 ### Result
 
@@ -272,12 +285,21 @@ Tests follow a prefix-based naming convention that maps to Makefile targets:
 ### Configuration
 
 `dcg-go` looks for a YAML config file at `~/.config/dcg-go/config.yaml`
-(override with `DCG_CONFIG` env var). Config supports:
+(override with `DCG_CONFIG` env var):
 
-- Default policy selection
-- Allowlist/blocklist patterns
-- Pack enable/disable
-- Environment variable passthrough
+```yaml
+destructive_policy: moderate    # allow-all, permissive, moderate, strict, interactive
+privacy_policy: strict
+allowlist:
+  - "git status *"
+blocklist:
+  - "rm -rf /*"
+enabled_packs:
+  - core.git
+  - core.filesystem
+disabled_packs:
+  - frameworks
+```
 
 ## License
 

@@ -79,14 +79,18 @@ func runTestMode(args []string) error {
 
 func parsePolicy(name string) (guard.Policy, error) {
 	switch name {
+	case "allow-all":
+		return guard.AllowAllPolicy(), nil
+	case "permissive":
+		return guard.PermissivePolicy(), nil
+	case "moderate":
+		return guard.ModeratePolicy(), nil
 	case "strict":
 		return guard.StrictPolicy(), nil
 	case "interactive":
 		return guard.InteractivePolicy(), nil
-	case "permissive":
-		return guard.PermissivePolicy(), nil
 	default:
-		return nil, fmt.Errorf("unknown policy: %s (valid: strict, interactive, permissive)", name)
+		return nil, fmt.Errorf("unknown policy: %s (valid: allow-all, permissive, moderate, strict, interactive)", name)
 	}
 }
 
