@@ -70,6 +70,7 @@ type PackInfo struct {
 	DestructiveCount int
 	PrivacyCount     int
 	BothCount        int
+	SeverityCounts   map[string]int // severity name → count
 	HasEnvSensitive  bool
 }
 
@@ -83,6 +84,7 @@ func Packs() []PackInfo {
 			Name:            p.Name,
 			Description:     p.Description,
 			Keywords:        append([]string(nil), p.Keywords...),
+			SeverityCounts:  make(map[string]int),
 			HasEnvSensitive: p.HasEnvSensitive,
 		}
 		for _, r := range p.Rules {
@@ -98,6 +100,8 @@ func Packs() []PackInfo {
 			default:
 				info.DestructiveCount++
 			}
+			sev := Severity(r.Severity)
+			info.SeverityCounts[sev.String()]++
 		}
 		out = append(out, info)
 	}

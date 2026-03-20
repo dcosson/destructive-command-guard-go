@@ -49,9 +49,24 @@ func runListPacks(args []string) error {
 		fmt.Fprintf(stdout, "  %-25s %s\n", "", formatKeywords(p.Keywords))
 		fmt.Fprintf(stdout, "  %-25s %d destructive, %d privacy, %d both\n",
 			"", p.DestructiveCount, p.PrivacyCount, p.BothCount)
+		fmt.Fprintf(stdout, "  %-25s %s\n", "", formatSeverityCounts(p.SeverityCounts))
 		fmt.Fprintln(stdout)
 	}
 	return nil
+}
+
+func formatSeverityCounts(counts map[string]int) string {
+	order := []string{"Critical", "High", "Medium", "Low"}
+	var parts []string
+	for _, sev := range order {
+		if n, ok := counts[sev]; ok && n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, sev))
+		}
+	}
+	if len(parts) == 0 {
+		return "0 rules"
+	}
+	return strings.Join(parts, ", ")
 }
 
 // wrapDesc wraps text to maxWidth characters, breaking on spaces.
@@ -120,21 +135,16 @@ func runListRules(args []string) error {
 	sortRules(privacy)
 	sortRules(both)
 
-	const (
-		ruleNameWidth = 54 // "  id (pack)" padded to this width
-		descWidth     = 56 // wrap description to this many chars
-	)
-	descIndent := strings.Repeat(" ", ruleNameWidth)
+	const descIndentStr = "      " // 6 spaces for description lines
+	const descWidth = 74           // wrap description to this width (80 - 6)
 
 	printGroup := func(label string, rs []guard.RuleInfo) {
 		fmt.Fprintf(stdout, "%s (%d):\n", label, len(rs))
 		for _, r := range rs {
-			nameCol := fmt.Sprintf("  %s (%s)", r.ID, r.PackID)
+			fmt.Fprintf(stdout, "  %s (%s) [%s]\n", r.ID, r.PackID, r.Severity)
 			wrapped := wrapDesc(r.Reason, descWidth)
-			lines := strings.Split(wrapped, "\n")
-			fmt.Fprintf(stdout, "%-*s%s\n", ruleNameWidth, nameCol, lines[0])
-			for _, line := range lines[1:] {
-				fmt.Fprintf(stdout, "%s%s\n", descIndent, line)
+			for _, line := range strings.Split(wrapped, "\n") {
+				fmt.Fprintf(stdout, "%s%s\n", descIndentStr, line)
 			}
 		}
 		fmt.Fprintln(stdout)
