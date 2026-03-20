@@ -350,7 +350,73 @@ in §3.3 (the lane that determined the final decision takes priority):
 When a "both" rule triggers and both lanes contribute to the decision, the
 category prefix should be `[destructive+privacy]`.
 
-### 4.10 Match Propagation and Category Normalization
+### 4.10 CLI: Replace `packs` Command with `list` Command
+
+The existing `dcg-go packs` command is replaced by `dcg-go list` with two
+subcommands:
+
+#### `dcg-go list packs`
+
+Lists all registered packs with per-category rule counts:
+
+```
+core.git              Git Operations
+                      22 destructive, 0 privacy
+
+macos.system          macOS System Configuration
+                      2 destructive, 0 privacy, 10 both
+
+macos.privacy         macOS Privacy
+                      0 destructive, 5 privacy
+```
+
+Supports `--json` for machine-readable output.
+
+#### `dcg-go list rules`
+
+Lists all individual rules, grouped by category (destructive, privacy, both),
+with pack name in parentheses:
+
+```
+Destructive:
+  force-push (core.git)              Force push overwrites remote history
+  rm-recursive-force (core.filesystem)  Recursive force delete
+  drop-table (database.sql)          DROP TABLE removes data permanently
+  ...
+
+Privacy:
+  ssh-private-key-access (personal.ssh)  SSH private key read
+  keychain-read-password (macos.privacy) Keychain password extraction
+  ...
+
+Both:
+  csrutil-disable (macos.system)     Disables System Integrity Protection
+  osascript-send-message (macos.communication)  Send messages via AppleScript
+  ...
+```
+
+Supports `--json` for machine-readable output.
+
+#### Guard Package Changes
+
+The existing `guard.Packs()` function and `PackInfo` struct are updated to
+include per-category counts (replacing the current `SafeCount`/`DestrCount`
+split). A new `guard.Rules()` function is added returning `[]RuleInfo`:
+
+```go
+type RuleInfo struct {
+    ID          string
+    PackID      string
+    Category    RuleCategory
+    Severity    Severity
+    Reason      string
+    Remediation string
+}
+
+func Rules() []RuleInfo
+```
+
+### 4.11 Match Propagation and Category Normalization
 
 **Mandatory normalization**: When constructing Match objects from rule matches,
 a zero `Category` **must** be normalized to `CategoryDestructive` before the
