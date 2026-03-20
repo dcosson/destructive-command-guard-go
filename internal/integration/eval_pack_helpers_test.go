@@ -62,7 +62,8 @@ func matchPackDestructive(pack *packs.Pack, cmd string) string {
 }
 
 // matchRuleCommand is a convenience for tests still asserting individual rules.
-func matchRuleCommand(rule any, cmd string) bool {
+// If parser is nil, a new one is created.
+func matchRuleCommand(rule any, cmd string, parser ...*parse.BashParser) bool {
 	var matcher packs.MatchFunc
 	switch r := rule.(type) {
 	case *packs.Rule:
@@ -78,8 +79,13 @@ func matchRuleCommand(rule any, cmd string) bool {
 	if matcher == nil {
 		return false
 	}
-	parser := parse.NewBashParser()
-	parsed := parser.ParseAndExtract(context.Background(), cmd, 0)
+	var p *parse.BashParser
+	if len(parser) > 0 && parser[0] != nil {
+		p = parser[0]
+	} else {
+		p = parse.NewBashParser()
+	}
+	parsed := p.ParseAndExtract(context.Background(), cmd, 0)
 	for _, extracted := range parsed.Commands {
 		pc := packs.Command{
 			Name:    extracted.Name,

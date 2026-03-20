@@ -15,6 +15,7 @@ import (
 	"github.com/dcosson/destructive-command-guard-go/internal/eval"
 	"github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
+	"github.com/dcosson/destructive-command-guard-go/internal/parse"
 )
 
 // --- B1: Per-Pack Matching Throughput ---
@@ -205,6 +206,7 @@ func TestStressConcurrentDbMatching(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
+			p := parse.NewBashParser()
 			cmd := commands[idx%len(commands)]
 			for j := 0; j < iterations; j++ {
 				for _, id := range dbPackIDs {
@@ -214,7 +216,7 @@ func TestStressConcurrentDbMatching(t *testing.T) {
 					}
 					for _, dp := range pack.Rules {
 						if dp.Match != nil {
-							matchRuleCommand(dp, cmd)
+							matchRuleCommand(dp, cmd, p)
 						}
 					}
 				}
