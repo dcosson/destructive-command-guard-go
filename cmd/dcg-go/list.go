@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/dcosson/destructive-command-guard-go/guard"
 )
@@ -53,6 +54,33 @@ func runListPacks(args []string) error {
 	return nil
 }
 
+// wrapDesc wraps text to maxWidth characters, breaking on spaces.
+func wrapDesc(text string, maxWidth int) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	lineLen := 0
+	for i, w := range words {
+		if i == 0 {
+			b.WriteString(w)
+			lineLen = len(w)
+			continue
+		}
+		if lineLen+1+len(w) > maxWidth {
+			b.WriteString("\n")
+			b.WriteString(w)
+			lineLen = len(w)
+		} else {
+			b.WriteString(" ")
+			b.WriteString(w)
+			lineLen += 1 + len(w)
+		}
+	}
+	return b.String()
+}
+
 func runListRules(args []string) error {
 	fs := flag.NewFlagSet("list rules", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -92,11 +120,22 @@ func runListRules(args []string) error {
 	sortRules(privacy)
 	sortRules(both)
 
+	const (
+		ruleNameWidth = 54 // "  id (pack)" padded to this width
+		descWidth     = 56 // wrap description to this many chars
+	)
+	descIndent := strings.Repeat(" ", ruleNameWidth)
+
 	printGroup := func(label string, rs []guard.RuleInfo) {
 		fmt.Fprintf(stdout, "%s (%d):\n", label, len(rs))
 		for _, r := range rs {
-			fmt.Fprintf(stdout, "  %-40s (%s)\n", r.ID, r.PackID)
-			fmt.Fprintf(stdout, "%s%s\n", contIndent, wrapLine(r.Reason, contentCol, wrapWidth))
+			nameCol := fmt.Sprintf("  %s (%s)", r.ID, r.PackID)
+			wrapped := wrapDesc(r.Reason, descWidth)
+			lines := strings.Split(wrapped, "\n")
+			fmt.Fprintf(stdout, "%-*s%s\n", ruleNameWidth, nameCol, lines[0])
+			for _, line := range lines[1:] {
+				fmt.Fprintf(stdout, "%s%s\n", descIndent, line)
+			}
 		}
 		fmt.Fprintln(stdout)
 	}
