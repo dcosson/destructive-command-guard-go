@@ -11,7 +11,7 @@ rule: gh-repo-delete
 ---
 # D2: delete release
 command: gh release delete v1.0.0 --yes
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: platform.github

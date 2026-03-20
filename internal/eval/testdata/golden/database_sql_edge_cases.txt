@@ -4,7 +4,7 @@ format: v1
 ---
 # E7: Mixed case DROP TABLE
 command: psql -c "Drop Table users"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.postgresql
@@ -12,7 +12,7 @@ rule: psql-drop-table
 ---
 # E7: Extra whitespace in DROP TABLE
 command: psql -c "DROP   TABLE   users"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.postgresql
@@ -20,7 +20,7 @@ rule: psql-drop-table
 ---
 # E7: MySQL lowercase + whitespace
 command: mysql -e "drop database   myapp"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.mysql
@@ -28,7 +28,7 @@ rule: mysql-drop-database
 ---
 # E7: Multi-statement with destructive — SELECT then DROP
 command: psql -c "SELECT 1; DROP TABLE users"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.postgresql
@@ -36,7 +36,7 @@ rule: psql-drop-table
 ---
 # E7: Multi-statement MySQL — SELECT then TRUNCATE
 command: mysql -e "SELECT 1; TRUNCATE orders"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.mysql
@@ -48,7 +48,7 @@ decision: Allow
 ---
 # E7: --command long form matches same as -c
 command: psql --command "DROP TABLE users"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.postgresql
@@ -56,7 +56,7 @@ rule: psql-drop-table
 ---
 # E7: --execute long form for mysql
 command: mysql --execute "DROP TABLE users"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.mysql
@@ -64,7 +64,7 @@ rule: mysql-drop-table
 ---
 # E7: Quoted table name
 command: psql -c "DROP TABLE \"public\".\"users\""
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.postgresql
@@ -73,7 +73,7 @@ rule: psql-drop-table
 # E7: Comment then DROP TABLE — raw string matching catches DROP TABLE
 # in the command even when it appears after a SQL comment prefix.
 command: psql -c "-- comment DROP TABLE users"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.postgresql

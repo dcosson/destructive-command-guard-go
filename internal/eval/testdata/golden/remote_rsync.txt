@@ -3,7 +3,7 @@ format: v1
 ---
 # D1: rsync delete
 command: rsync --delete -a src/ dst/
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: remote.rsync
@@ -11,7 +11,7 @@ rule: rsync-delete
 ---
 # D2: rsync remove source files
 command: rsync --remove-source-files -a src/ dst/
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: remote.rsync

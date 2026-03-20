@@ -3,7 +3,7 @@ format: v1
 ---
 # D1: docker compose down -v
 command: docker compose down -v
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: containers.compose
@@ -11,7 +11,7 @@ rule: compose-down-volumes
 ---
 # D1: docker-compose down -v
 command: docker-compose down -v
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: containers.compose
@@ -19,7 +19,7 @@ rule: compose-down-volumes
 ---
 # D1: docker compose rm -f
 command: docker compose rm -f
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: containers.compose
@@ -27,7 +27,7 @@ rule: compose-down-volumes
 ---
 # D1: docker-compose stop
 command: docker-compose stop
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: containers.compose

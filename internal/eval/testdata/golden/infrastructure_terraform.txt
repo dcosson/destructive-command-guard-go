@@ -11,7 +11,7 @@ rule: terraform-destroy-auto-approve
 ---
 # D2: destroy interactive
 command: terraform destroy
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: infrastructure.terraform
@@ -19,7 +19,7 @@ rule: terraform-destroy
 ---
 # D3: apply auto approve
 command: terraform apply -auto-approve
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: infrastructure.terraform

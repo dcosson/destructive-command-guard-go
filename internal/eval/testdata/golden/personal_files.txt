@@ -11,7 +11,7 @@ rule: personal-files-delete
 ---
 # D2: personal files overwrite
 command: cp file.txt ~/Downloads/
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: personal.files
@@ -27,7 +27,7 @@ rule: personal-files-access
 ---
 # D3: personal files modify
 command: chmod 777 ~/Documents/script.sh
-decision: Deny
+decision: Ask
 severity: High
 confidence: Medium
 pack: personal.files
@@ -35,7 +35,7 @@ rule: personal-files-modify
 ---
 # D4: personal files write
 command: sed -i 's/old/new/' ~/Documents/notes.txt
-decision: Deny
+decision: Ask
 severity: High
 confidence: Medium
 pack: personal.files
@@ -67,7 +67,7 @@ rule: ssh-directory-destructive
 ---
 # D2: ssh private key access
 command: cat ~/.ssh/id_rsa
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: personal.ssh

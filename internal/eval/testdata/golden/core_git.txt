@@ -3,7 +3,7 @@ format: v1
 ---
 # D1: git push --force
 command: git push --force origin main
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: core.git
@@ -11,7 +11,7 @@ rule: git-push-force
 ---
 # D2: git push --mirror
 command: git push --mirror
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: core.git
@@ -19,7 +19,7 @@ rule: git-push-mirror
 ---
 # D3: git reset --hard
 command: git reset --hard HEAD~1
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: core.git
@@ -27,14 +27,14 @@ rule: git-reset-hard
 ---
 # D4: git checkout -- .
 command: git checkout -- .
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: core.git
 rule: git-checkout-discard-all
 ---
 # D5: git rebase
-decision: Deny
+decision: Ask
 command: git rebase main
 severity: High
 confidence: Medium
@@ -91,7 +91,7 @@ rule: git-checkout-discard-file
 ---
 # D12: git checkout .
 command: git checkout .
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: core.git
@@ -107,7 +107,7 @@ rule: git-push-refspec-delete
 ---
 # D14: git push +refspec
 command: git push origin +main:main
-decision: Deny
+decision: Ask
 severity: High
 confidence: Medium
 pack: core.git
@@ -115,7 +115,7 @@ rule: git-push-force-refspec
 ---
 # D15: git restore .
 command: git restore .
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: core.git
@@ -123,7 +123,7 @@ rule: git-restore-worktree-all
 ---
 # D16: git restore --source
 command: git restore --source HEAD~2 app/main.go
-decision: Deny
+decision: Ask
 severity: High
 confidence: Medium
 pack: core.git
@@ -131,7 +131,7 @@ rule: git-restore-source
 ---
 # D17: git reflog expire
 command: git reflog expire --expire=now --all
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: core.git
@@ -147,7 +147,7 @@ rule: git-gc-prune
 ---
 # D19: git filter-branch
 command: git filter-branch --tree-filter 'rm secret.txt' HEAD
-decision: Deny
+decision: Ask
 severity: High
 confidence: Medium
 pack: core.git

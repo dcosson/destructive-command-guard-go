@@ -4,7 +4,7 @@ format: v1
 ---
 # D1: DROP DATABASE
 command: mysql -e "DROP DATABASE myapp"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.mysql
@@ -13,7 +13,7 @@ rule: mysql-drop-database
 # D2: mysqladmin drop (no env escalation — "production" in "myapp_production"
 # has no word boundary due to underscore)
 command: mysqladmin drop myapp_production
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.mysql
@@ -21,7 +21,7 @@ rule: mysqladmin-drop
 ---
 # D3: DROP TABLE
 command: mysql -e "DROP TABLE users"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.mysql
@@ -29,7 +29,7 @@ rule: mysql-drop-table
 ---
 # D4: TRUNCATE
 command: mysql -e "TRUNCATE TABLE orders"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.mysql

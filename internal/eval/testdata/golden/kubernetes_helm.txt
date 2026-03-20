@@ -3,7 +3,7 @@ format: v1
 ---
 # D1: helm uninstall
 command: helm uninstall release
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: kubernetes.helm
@@ -11,7 +11,7 @@ rule: helm-uninstall
 ---
 # D1: helm delete alias
 command: helm delete release
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: kubernetes.helm

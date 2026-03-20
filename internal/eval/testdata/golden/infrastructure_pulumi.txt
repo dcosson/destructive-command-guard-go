@@ -11,7 +11,7 @@ rule: pulumi-destroy-yes
 ---
 # D2: destroy interactive
 command: pulumi destroy
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: infrastructure.pulumi
@@ -19,7 +19,7 @@ rule: pulumi-destroy
 ---
 # D3: up yes
 command: pulumi up --yes
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: infrastructure.pulumi

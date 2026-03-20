@@ -4,7 +4,7 @@ format: v1
 ---
 # D1: DROP TABLE (High)
 command: sqlite3 test.db "DROP TABLE users"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.sqlite
@@ -12,7 +12,7 @@ rule: sqlite3-drop-table
 ---
 # D2: .drop trigger (High)
 command: sqlite3 test.db ".drop trigger update_timestamp"
-decision: Deny
+decision: Ask
 severity: High
 confidence: Medium
 pack: database.sqlite

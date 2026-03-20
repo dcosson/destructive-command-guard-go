@@ -35,7 +35,7 @@ rule: rm-rf-local
 ---
 # D5: dd of=
 command: dd if=/dev/zero of=/dev/sda bs=4M
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: core.filesystem
@@ -43,7 +43,7 @@ rule: dd-write
 ---
 # D6: shred
 command: shred -vfz file.txt
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: core.filesystem

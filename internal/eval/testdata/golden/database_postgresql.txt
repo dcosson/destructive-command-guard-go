@@ -4,7 +4,7 @@ format: v1
 ---
 # D1: DROP DATABASE (High)
 command: psql -c "DROP DATABASE myapp"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.postgresql
@@ -12,7 +12,7 @@ rule: psql-drop-database
 ---
 # D1: DROP DATABASE with host flag (no env escalation; env detection uses env vars)
 command: psql -h localhost -c "DROP DATABASE production"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.postgresql
@@ -21,7 +21,7 @@ rule: psql-drop-database
 # D1: dropdb utility (no env escalation — "production" in "myapp_production"
 # has no word boundary due to underscore)
 command: dropdb myapp_production
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.postgresql
@@ -29,7 +29,7 @@ rule: dropdb
 ---
 # D2: DROP TABLE
 command: psql -c "DROP TABLE users"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.postgresql
@@ -37,7 +37,7 @@ rule: psql-drop-table
 ---
 # D2: DROP TABLE IF EXISTS
 command: psql -c "DROP TABLE IF EXISTS sessions"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.postgresql
@@ -45,7 +45,7 @@ rule: psql-drop-table
 ---
 # D3: TRUNCATE
 command: psql -c "TRUNCATE TABLE orders"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.postgresql
@@ -53,7 +53,7 @@ rule: psql-truncate
 ---
 # D4: DROP TABLE case insensitive
 command: psql -c "drop table users"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.postgresql
@@ -61,7 +61,7 @@ rule: psql-drop-table
 ---
 # D5: DROP SCHEMA
 command: psql -c "DROP SCHEMA public CASCADE"
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.postgresql

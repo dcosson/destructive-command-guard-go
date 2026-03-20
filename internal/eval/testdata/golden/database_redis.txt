@@ -4,7 +4,7 @@ format: v1
 ---
 # D1: FLUSHALL (High)
 command: redis-cli FLUSHALL
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.redis
@@ -12,7 +12,7 @@ rule: redis-flushall
 ---
 # D1: flushall lowercase
 command: redis-cli flushall
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.redis
@@ -20,7 +20,7 @@ rule: redis-flushall
 ---
 # D1: FlushAll mixed case
 command: redis-cli FlushAll
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.redis
@@ -28,7 +28,7 @@ rule: redis-flushall
 ---
 # D1: FLUSHALL with host flag (no env escalation; env detection uses env vars)
 command: redis-cli -h prod.redis.example.com FLUSHALL
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.redis
@@ -36,7 +36,7 @@ rule: redis-flushall
 ---
 # D2: FLUSHDB (High)
 command: redis-cli FLUSHDB
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: database.redis

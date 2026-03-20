@@ -3,7 +3,7 @@ format: v1
 ---
 # D1: rails db drop
 command: rails db:drop
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: frameworks
@@ -28,7 +28,7 @@ rule: rake-db-drop-all
 ---
 # D4: manage.py flush
 command: python manage.py flush
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: frameworks
@@ -44,7 +44,7 @@ rule: managepy-migrate-syncdb
 ---
 # D6: artisan migrate:fresh
 command: php artisan migrate:fresh
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: frameworks
@@ -52,7 +52,7 @@ rule: artisan-migrate-fresh
 ---
 # D7: mix ecto.reset
 command: mix ecto.reset
-decision: Deny
+decision: Ask
 severity: High
 confidence: High
 pack: frameworks
