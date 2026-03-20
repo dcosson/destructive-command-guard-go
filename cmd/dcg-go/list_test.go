@@ -21,8 +21,8 @@ func TestRunListPacksHuman(t *testing.T) {
 	if !strings.Contains(out, "core.git") {
 		t.Fatalf("missing core.git: %q", out)
 	}
-	if !strings.Contains(out, "destructive") {
-		t.Fatalf("missing destructive count: %q", out)
+	if !strings.Contains(out, "Destructive:") {
+		t.Fatalf("missing Destructive category line: %q", out)
 	}
 }
 
@@ -40,16 +40,16 @@ func TestRunListPacksJSON(t *testing.T) {
 	if len(out) == 0 {
 		t.Fatal("expected non-empty packs list")
 	}
-	// Verify per-category counts exist in JSON
+	// Verify per-category detail exists in JSON
 	first := out[0]
-	if _, ok := first["DestructiveCount"]; !ok {
-		t.Fatal("missing DestructiveCount in JSON output")
+	if _, ok := first["Destructive"]; !ok {
+		t.Fatal("missing Destructive in JSON output")
 	}
-	if _, ok := first["PrivacyCount"]; !ok {
-		t.Fatal("missing PrivacyCount in JSON output")
+	if _, ok := first["Privacy"]; !ok {
+		t.Fatal("missing Privacy in JSON output")
 	}
-	if _, ok := first["BothCount"]; !ok {
-		t.Fatal("missing BothCount in JSON output")
+	if _, ok := first["Both"]; !ok {
+		t.Fatal("missing Both in JSON output")
 	}
 }
 

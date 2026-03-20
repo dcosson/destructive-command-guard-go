@@ -123,7 +123,7 @@ func TestDeterministicPacksMetadataCopyIsolation(t *testing.T) {
 	if len(p1) != len(p2) {
 		t.Fatalf("packs length changed across calls: %d vs %d", len(p1), len(p2))
 	}
-	if !slices.EqualFunc(p1, p2, func(a, b guard.PackInfo) bool { return a.ID == b.ID && a.Name == b.Name && a.DestructiveCount == b.DestructiveCount && a.PrivacyCount == b.PrivacyCount && a.BothCount == b.BothCount }) {
+	if !slices.EqualFunc(p1, p2, func(a, b guard.PackInfo) bool { return a.ID == b.ID && a.Name == b.Name && a.Destructive.Count == b.Destructive.Count && a.Privacy.Count == b.Privacy.Count && a.Both.Count == b.Both.Count }) {
 		t.Fatalf("pack metadata changed across sequential calls")
 	}
 	if len(p1[0].Keywords) > 0 {

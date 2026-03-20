@@ -61,17 +61,22 @@ func (c *evalConfig) toInternal() eval.Config {
 	}
 }
 
+// CategoryDetail holds rule count and severity breakdown for a category.
+type CategoryDetail struct {
+	Count          int
+	SeverityCounts map[string]int
+}
+
 // PackInfo describes a registered pack.
 type PackInfo struct {
-	ID               string
-	Name             string
-	Description      string
-	Keywords         []string
-	DestructiveCount int
-	PrivacyCount     int
-	BothCount        int
-	SeverityCounts   map[string]int // severity name → count
-	HasEnvSensitive  bool
+	ID              string
+	Name            string
+	Description     string
+	Keywords        []string
+	Destructive     CategoryDetail
+	Privacy         CategoryDetail
+	Both            CategoryDetail
+	HasEnvSensitive bool
 }
 
 // Packs returns metadata for all registered packs.
@@ -84,7 +89,9 @@ func Packs() []PackInfo {
 			Name:            p.Name,
 			Description:     p.Description,
 			Keywords:        append([]string(nil), p.Keywords...),
-			SeverityCounts:  make(map[string]int),
+			Destructive:     CategoryDetail{SeverityCounts: make(map[string]int)},
+			Privacy:         CategoryDetail{SeverityCounts: make(map[string]int)},
+			Both:            CategoryDetail{SeverityCounts: make(map[string]int)},
 			HasEnvSensitive: p.HasEnvSensitive,
 		}
 		for _, r := range p.Rules {
@@ -92,16 +99,18 @@ func Packs() []PackInfo {
 			if cat == 0 {
 				cat = evalcore.CategoryDestructive
 			}
+			sev := Severity(r.Severity).String()
 			switch cat {
 			case evalcore.CategoryBoth:
-				info.BothCount++
+				info.Both.Count++
+				info.Both.SeverityCounts[sev]++
 			case evalcore.CategoryPrivacy:
-				info.PrivacyCount++
+				info.Privacy.Count++
+				info.Privacy.SeverityCounts[sev]++
 			default:
-				info.DestructiveCount++
+				info.Destructive.Count++
+				info.Destructive.SeverityCounts[sev]++
 			}
-			sev := Severity(r.Severity)
-			info.SeverityCounts[sev.String()]++
 		}
 		out = append(out, info)
 	}

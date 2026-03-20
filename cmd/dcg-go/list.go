@@ -47,24 +47,24 @@ func runListPacks(args []string) error {
 			fmt.Fprintf(stdout, "  %-25s %s\n", "", wrapLine(p.Description, contentCol, wrapWidth))
 		}
 		fmt.Fprintf(stdout, "  %-25s %s\n", "", formatKeywords(p.Keywords))
-		fmt.Fprintf(stdout, "  %-25s %d destructive, %d privacy, %d both\n",
-			"", p.DestructiveCount, p.PrivacyCount, p.BothCount)
-		fmt.Fprintf(stdout, "  %-25s %s\n", "", formatSeverityCounts(p.SeverityCounts))
+		fmt.Fprintf(stdout, "  %-25s Destructive: %s\n", "", formatCategoryDetail(p.Destructive))
+		fmt.Fprintf(stdout, "  %-25s Privacy: %s\n", "", formatCategoryDetail(p.Privacy))
+		fmt.Fprintf(stdout, "  %-25s Both: %s\n", "", formatCategoryDetail(p.Both))
 		fmt.Fprintln(stdout)
 	}
 	return nil
 }
 
-func formatSeverityCounts(counts map[string]int) string {
+func formatCategoryDetail(d guard.CategoryDetail) string {
+	if d.Count == 0 {
+		return "0 rules"
+	}
 	order := []string{"Critical", "High", "Medium", "Low"}
 	var parts []string
 	for _, sev := range order {
-		if n, ok := counts[sev]; ok && n > 0 {
+		if n, ok := d.SeverityCounts[sev]; ok && n > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", n, sev))
 		}
-	}
-	if len(parts) == 0 {
-		return "0 rules"
 	}
 	return strings.Join(parts, ", ")
 }
