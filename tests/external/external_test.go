@@ -45,12 +45,12 @@ func binary(t *testing.T) string {
 }
 
 type testResult struct {
-	Command                string `json:"command"`
-	Decision               string `json:"decision"`
-	DestructiveSeverity    string `json:"destructive_severity,omitempty"`
-	DestructiveConfidence  string `json:"destructive_confidence,omitempty"`
-	PrivacySeverity        string `json:"privacy_severity,omitempty"`
-	PrivacyConfidence      string `json:"privacy_confidence,omitempty"`
+	Command               string `json:"command"`
+	Decision              string `json:"decision"`
+	DestructiveSeverity   string `json:"destructive_severity,omitempty"`
+	DestructiveConfidence string `json:"destructive_confidence,omitempty"`
+	PrivacySeverity       string `json:"privacy_severity,omitempty"`
+	PrivacyConfidence     string `json:"privacy_confidence,omitempty"`
 }
 
 func runTest(t *testing.T, bin string, args ...string) (testResult, int) {
@@ -115,9 +115,9 @@ func TestExternalDestructiveDefaultPolicy(t *testing.T) {
 		wantExit int
 		wantDec  string
 	}{
-		{"rm -rf /", exitDeny, "Deny"},         // Critical → Deny
-		{"git push --force", exitAsk, "Ask"},    // High → Ask
-		{"echo hello", exitAllow, "Allow"},      // No match → Allow
+		{"rm -rf /", exitDeny, "Deny"},       // Critical → Deny
+		{"git push --force", exitAsk, "Ask"}, // High → Ask
+		{"echo hello", exitAllow, "Allow"},   // No match → Allow
 	}
 	for _, tc := range cases {
 		t.Run(tc.cmd, func(t *testing.T) {
@@ -142,10 +142,10 @@ func TestExternalPolicyVariations(t *testing.T) {
 		wantDec  string
 	}{
 		{"allow-all", exitAllow, "Allow"},
-		{"permissive", exitAllow, "Allow"},    // Permissive allows High
-		{"moderate", exitDeny, "Deny"},         // Moderate denies High
-		{"strict", exitDeny, "Deny"},           // Strict denies all
-		{"interactive", exitAsk, "Ask"},        // Interactive asks for High
+		{"permissive", exitAllow, "Allow"}, // Permissive allows High
+		{"moderate", exitDeny, "Deny"},     // Moderate denies High
+		{"strict", exitDeny, "Deny"},       // Strict denies all
+		{"interactive", exitAsk, "Ask"},    // Interactive asks for High
 	}
 	for _, tc := range cases {
 		t.Run(tc.policy, func(t *testing.T) {
@@ -268,21 +268,36 @@ func TestExternalHookMode(t *testing.T) {
 	bin := binary(t)
 	cases := []struct {
 		name     string
-		command  string
+		input    string
 		wantPerm string
+		wantExit int
 	}{
-		{"deny-critical", "rm -rf /", "deny"},
-		{"allow-safe", "echo hello", "allow"},
+		{"deny-critical", `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"rm -rf /"}}`, "deny", 0},
+		{"allow-safe", `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hello"}}`, "allow", 0},
+		{"allow-non-bash", `{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"/etc/passwd"}}`, "allow", 0},
+		{"malformed-input", `not json`, "", 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			input := fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"%s"}}`, tc.command)
 			cmd := exec.Command(bin)
-			cmd.Stdin = strings.NewReader(input)
-			var stdout bytes.Buffer
+			cmd.Stdin = strings.NewReader(tc.input)
+			var stdout, stderr bytes.Buffer
 			cmd.Stdout = &stdout
-			if err := cmd.Run(); err != nil {
-				t.Fatalf("hook mode failed: %v", err)
+			cmd.Stderr = &stderr
+			err := cmd.Run()
+			exit := 0
+			if err != nil {
+				if ee, ok := err.(*exec.ExitError); ok {
+					exit = ee.ExitCode()
+				} else {
+					t.Fatalf("hook mode failed: %v", err)
+				}
+			}
+			if exit != tc.wantExit {
+				t.Fatalf("exit=%d want=%d stderr=%s", exit, tc.wantExit, stderr.String())
+			}
+			if tc.wantExit != 0 {
+				return
 			}
 			var output map[string]any
 			if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
@@ -294,6 +309,43 @@ func TestExternalHookMode(t *testing.T) {
 			}
 			if got := hso["permissionDecision"]; got != tc.wantPerm {
 				t.Fatalf("permissionDecision=%v want=%s", got, tc.wantPerm)
+			}
+		})
+	}
+}
+
+func TestExternalTestMode(t *testing.T) {
+	bin := binary(t)
+	tests := []struct {
+		name         string
+		args         []string
+		wantExitCode int
+		wantContains string
+	}{
+		{"allow-safe-command", []string{"test", "echo hello"}, 0, "Decision: Allow"},
+		{"deny-destructive-command", []string{"test", "rm -rf /tmp/e2e"}, 2, "Decision: Deny"},
+		{"json-output", []string{"test", "--json", "git push --force"}, 3, `"decision": "Ask"`},
+		{"explain-mode", []string{"test", "--explain", "git push --force"}, 3, "Reason:"},
+		{"policy-override-permissive", []string{"test", "--policy", "permissive", "git push --force"}, 0, "Decision: Allow"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := exec.Command(bin, tt.args...)
+			var stdout bytes.Buffer
+			cmd.Stdout = &stdout
+			err := cmd.Run()
+			exit := 0
+			if ee, ok := err.(*exec.ExitError); ok {
+				exit = ee.ExitCode()
+			} else if err != nil {
+				t.Fatalf("unexpected run error: %v", err)
+			}
+			if exit != tt.wantExitCode {
+				t.Fatalf("exit=%d want=%d", exit, tt.wantExitCode)
+			}
+			if tt.wantContains != "" && !strings.Contains(stdout.String(), tt.wantContains) {
+				t.Fatalf("stdout missing %q: %s", tt.wantContains, stdout.String())
 			}
 		})
 	}

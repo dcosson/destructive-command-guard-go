@@ -210,7 +210,7 @@ internal/
   parse/                Tree-sitter shell parsing and AST analysis
   eval/                 Evaluation pipeline (matching, severity, policy)
   packs/                Pack definitions and registry
-  internal/e2etest/              Test infrastructure (mutation, comparison, e2e, stress)
+  internal/integration/              Test infrastructure (mutation, comparison, e2e, stress)
 scripts/                CI tier scripts
 docs/plans/             Architecture and plan documents
 ```
@@ -227,8 +227,8 @@ docs/plans/             Architecture and plan documents
 ```bash
 make build          # Build the binary
 make test           # Fast unit suite
-make test-unit      # Core packages only (~5s)
-make test-e2e       # E2E subprocess tests (~2s)
+make test-integration  # Heavy cross-cutting library tests
+make test-external  # Black-box binary subprocess tests
 make lint           # go vet + staticcheck
 make help           # All available targets
 ```
@@ -236,13 +236,10 @@ make help           # All available targets
 ### Extended test suites
 
 ```bash
-make test-stress      # Concurrent eval, high-volume fuzz, memory pressure
-make test-security    # Evasion, isolation, heap growth bounds
-make test-mutation    # Mutation operator kill rates
 make test-race        # Full suite with Go race detector
 make bench            # Benchmarks (validation, single iteration)
 make bench-full       # Benchmarks (full, 3s x 5 runs)
-make test-all         # Everything above
+make test-all         # test + test-integration + test-external + bench
 ```
 
 ### Comparison testing
@@ -270,16 +267,16 @@ Tests follow a prefix-based naming convention that maps to Makefile targets:
 
 | Prefix | What it tests | Target |
 |--------|---------------|--------|
-| `TestProperty*` | Invariants across random inputs | `make test-integration` / `internal/e2etest` |
-| `TestFault*` | Error paths and edge cases | `make test-integration` / `internal/e2etest` |
-| `TestOracle*` | Correctness via cross-checking | `make test` |
-| `TestGolden*` | Golden corpus validation | `make test` |
-| `TestDeterministic*` | Consistency across runs | `make test` |
-| `TestE2E*` | Full binary subprocess tests | `make test-e2e` |
-| `TestStress*` | Concurrency, load, memory | `make test-stress` |
-| `TestSecurity*` | Evasion, isolation, heap bounds | `make test-security` |
-| `TestMutation*` | Mutation testing kill rates | `make test-mutation` |
+| `TestProperty*` | Invariants across random inputs | `make test-integration` / `internal/integration` |
+| `TestFault*` | Error paths and edge cases | `make test-integration` / `internal/integration` |
+| `TestOracle*` | Correctness via cross-checking | `make test-integration` / `internal/integration` |
+| `TestGolden*` | Golden corpus validation | `make test-integration` / `internal/integration` |
+| `TestDeterministic*` | Consistency across runs | `make test-integration` / `internal/integration` |
+| `TestStress*` | Concurrency, load, memory | `make test-integration` / `internal/integration` |
+| `TestSecurity*` | Evasion, isolation, heap bounds | `make test-integration` / `internal/integration` |
+| `TestMutation*` | Mutation testing kill rates | `make test-integration` / `internal/integration` |
 | `TestComparison*` | Upstream comparison | `make test-comparison` |
+| `TestExternal*` | Full binary subprocess tests | `make test-external` / `tests/external` |
 | `Benchmark*` | Go benchmarks | `make bench` |
 
 ### Configuration

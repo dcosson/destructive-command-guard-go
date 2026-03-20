@@ -1,5 +1,5 @@
-.PHONY: build clean deps lint test test-integration test-e2e test-external \
-       test-stress test-security test-mutation test-comparison \
+.PHONY: build clean deps lint test test-integration test-external \
+       test-comparison \
        test-ci-tier1 test-ci-tier2 test-ci-tier3 test-all \
        bench bench-full test-race help
 
@@ -28,7 +28,7 @@ clean:
 # Dependencies
 # --------------------------------------------------------------------------- #
 
-# Install optional tooling used by lint, e2e, and comparison targets.
+# Install optional tooling used by lint, external tests, and comparison targets.
 # The core test suite (make test) has no external dependencies beyond the
 # Go toolchain — this target is only needed for extended testing.
 deps:
@@ -59,34 +59,21 @@ lint:
 # --------------------------------------------------------------------------- #
 
 # Fast unit tests. This is what you run most often.
-# Runs all packages except internal/e2etest/ which contains heavy test suites
-# (property, fault, security, oracle, stress, benchmark, fuzz, mutation, comparison).
+# Runs all packages except internal/integration/, which contains the heavy
+# cross-cutting library suites (property, fault, security, oracle, stress,
+# benchmark, fuzz, mutation, comparison).
 test:
-	go test $$(go list ./... | grep -v internal/e2etest) -count=1
+	go test $$(go list ./... | grep -v internal/integration) -count=1
 
-# Integration tests (non-black-box) that are intentionally excluded from
-# the unit loop. Includes:
-# - eval-owned corpus/database suites (tagged e2e)
-# - parse-owned heavy property/oracle/fault/security/golden/stress suites
-#   moved into internal/e2etest.
+# Heavy library-level integration suites. This runs the entire
+# internal/integration package.
 test-integration:
-	go test -tags=e2e ./internal/e2etest -run '^(TestGoldenCorpus|TestDb)' -count=1
-	go test ./internal/e2etest -run '^(TestParse|TestConcurrentParsingStress|TestWarningMessageSafety|TestMemorySafety|TestMemorySoakS2|TestGolden(SimpleCommands|CompoundCommands|Dataflow|ErrorRecovery)|TestOracle(SExpressionDeterminism|TreeSitterCLI|BashDataflowComparison|OverApproximationDocumented)|TestProperty(ExtractOutputConsistency|NormalizeIdempotent|NormalizeStripsPath|DataflowExpansionBounded|FullPipelineNeverPanics|FullPipelineStructured|InlineDetectionDepthBounded|ParseResultBoundaryContract|ParseNeverPanics|ParseNeverPanicsStructured|ParseNeverPanicsAdversarial|ParseNeverPanicsRealWorld|ParseDeterministic|ValidCommandsReturnTree|MaxInputSizeBoundary|ParseRootNodeType))$$' -count=1
+	go test ./internal/integration -count=1 -timeout 30m
 
 # Unit test target with -race detector enabled (same package set as `make test`).
-# Does not include integration/e2e/stress/security/mutation/comparison targets.
+# Does not include integration/external/comparison targets.
 test-race:
-	go test $$(go list ./... | grep -v internal/e2etest) -count=1 -race
-
-# --------------------------------------------------------------------------- #
-# Tests — E2E (builds binary, runs subprocess tests)
-# --------------------------------------------------------------------------- #
-
-# End-to-end tests that build the dcg-go binary and exercise it as a
-# subprocess. These test the full CLI surface: hook mode, test mode, packs
-# mode, and real-world scenario evaluation.
-test-e2e:
-	go test ./internal/e2etest -run '^TestE2E' -count=1 -v
+	go test $$(go list ./... | grep -v internal/integration) -count=1 -race
 
 # --------------------------------------------------------------------------- #
 # Tests — external (builds binary, tests CLI as black box)
@@ -94,26 +81,6 @@ test-e2e:
 
 test-external:
 	go test ./tests/external -count=1 -v
-
-# --------------------------------------------------------------------------- #
-# Tests — stress, security, benchmarks (longer-running)
-# --------------------------------------------------------------------------- #
-
-# Stress tests: concurrent evaluation, high-volume fuzzing, memory pressure,
-# mutation timeouts. These are CPU and memory intensive.
-test-stress:
-	go test ./internal/e2etest -run '^TestStress' -count=1 -v -timeout 30m
-	go test ./cmd/dcg-go -run '^TestStress' -count=1 -v -timeout 10m
-
-# Security tests: fuzz corpus cleanliness, golden file non-execution,
-# subprocess isolation, heap growth bounds, env sensitivity, evasion checks.
-test-security:
-	go test ./internal/e2etest -run '^TestSecurity' -count=1 -v -timeout 15m
-	go test ./cmd/dcg-go -run '^TestSecurity' -count=1 -v -timeout 15m
-
-# Mutation testing harness: verifies mutation operators and kill rates.
-test-mutation:
-	go test ./internal/e2etest -run '^Test(Mutation|DeterministicKnownMutationKill)' -count=1 -v
 
 # --------------------------------------------------------------------------- #
 # Tests — comparison (requires UPSTREAM_BINARY)
@@ -129,7 +96,7 @@ ifndef UPSTREAM_BINARY
 	@echo "UPSTREAM_BINARY is not set. Skipping comparison tests."
 	@echo "Usage: make test-comparison UPSTREAM_BINARY=/path/to/upstream-dcg"
 else
-	UPSTREAM_BINARY=$(UPSTREAM_BINARY) go test ./internal/e2etest -run '^TestComparison|^TestOracle.*Upstream' -count=1 -v
+	UPSTREAM_BINARY=$(UPSTREAM_BINARY) go test ./internal/integration -run '^TestComparison|^TestOracle.*Upstream' -count=1 -v
 endif
 
 # --------------------------------------------------------------------------- #
@@ -156,21 +123,21 @@ test-ci-tier3:
 bench:
 	go test ./cmd/dcg-go -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
 	go test -tags=e2e ./internal/eval -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
-	go test ./internal/e2etest -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
+	go test ./internal/integration -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
 
 # Run benchmarks with full iterations for performance measurement.
 bench-full:
 	go test ./cmd/dcg-go -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
 	go test -tags=e2e ./internal/eval -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
-	go test ./internal/e2etest -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
+	go test ./internal/integration -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
 
 # --------------------------------------------------------------------------- #
 # Aggregate targets
 # --------------------------------------------------------------------------- #
 
-# Run everything: unit, integration, e2e, stress, security, mutation, bench.
+# Run everything: unit, integration, external, and benchmarks.
 # Does NOT include comparison tests (needs UPSTREAM_BINARY).
-test-all: test test-integration test-e2e test-external test-stress test-security test-mutation bench
+test-all: test test-integration test-external bench
 
 # --------------------------------------------------------------------------- #
 # Help
@@ -187,15 +154,11 @@ help:
 	@echo ""
 	@echo "Test (primary):"
 	@echo "  make test               Fast unit tests"
-	@echo "  make test-integration   Heavy integration tests (internal/eval, tagged)"
+	@echo "  make test-integration   Heavy library integration tests"
+	@echo "  make test-external      Black-box binary subprocess tests"
 	@echo "  make test-race          Unit tests with race detector (same scope as make test)"
 	@echo ""
 	@echo "Test (extended):"
-	@echo "  make test-e2e           E2E tests (builds binary, subprocess tests)"
-	@echo "  make test-external      External tests (builds binary, policy/CLI validation)"
-	@echo "  make test-stress        Stress tests (concurrent, memory, timeouts)"
-	@echo "  make test-security      Security tests (evasion, heap, isolation)"
-	@echo "  make test-mutation      Mutation testing harness"
 	@echo "  make test-comparison    Comparison vs upstream (needs UPSTREAM_BINARY)"
 	@echo ""
 	@echo "Test (CI tiers):"
