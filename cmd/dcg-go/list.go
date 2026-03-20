@@ -69,6 +69,18 @@ func formatCategoryDetail(d guard.CategoryDetail) string {
 	return strings.Join(parts, ", ")
 }
 
+func formatRuleCategory(r guard.RuleInfo) string {
+	sev := r.Severity.String()
+	switch r.Category {
+	case guard.CategoryBoth:
+		return fmt.Sprintf("[Destructive: %s, Privacy: %s]", sev, sev)
+	case guard.CategoryPrivacy:
+		return fmt.Sprintf("[Privacy: %s]", sev)
+	default:
+		return fmt.Sprintf("[Destructive: %s]", sev)
+	}
+}
+
 // wrapDesc wraps text to maxWidth characters, breaking on spaces.
 func wrapDesc(text string, maxWidth int) string {
 	words := strings.Fields(text)
@@ -111,47 +123,23 @@ func runListRules(args []string) error {
 		return enc.Encode(rules)
 	}
 
-	var destructive, privacy, both []guard.RuleInfo
-	for _, r := range rules {
-		switch r.Category {
-		case guard.CategoryBoth:
-			both = append(both, r)
-		case guard.CategoryPrivacy:
-			privacy = append(privacy, r)
-		default:
-			destructive = append(destructive, r)
+	sort.Slice(rules, func(i, j int) bool {
+		if rules[i].PackID != rules[j].PackID {
+			return rules[i].PackID < rules[j].PackID
 		}
-	}
-
-	sortRules := func(rs []guard.RuleInfo) {
-		sort.Slice(rs, func(i, j int) bool {
-			if rs[i].PackID != rs[j].PackID {
-				return rs[i].PackID < rs[j].PackID
-			}
-			return rs[i].ID < rs[j].ID
-		})
-	}
-	sortRules(destructive)
-	sortRules(privacy)
-	sortRules(both)
+		return rules[i].ID < rules[j].ID
+	})
 
 	const descIndentStr = "      " // 6 spaces for description lines
 	const descWidth = 74           // wrap description to this width (80 - 6)
 
-	printGroup := func(label string, rs []guard.RuleInfo) {
-		fmt.Fprintf(stdout, "%s (%d):\n", label, len(rs))
-		for _, r := range rs {
-			fmt.Fprintf(stdout, "  %s (%s) [%s]\n", r.ID, r.PackID, r.Severity)
-			wrapped := wrapDesc(r.Reason, descWidth)
-			for _, line := range strings.Split(wrapped, "\n") {
-				fmt.Fprintf(stdout, "%s%s\n", descIndentStr, line)
-			}
+	fmt.Fprintf(stdout, "Rules (%d):\n", len(rules))
+	for _, r := range rules {
+		fmt.Fprintf(stdout, "  %s (%s) %s\n", r.ID, r.PackID, formatRuleCategory(r))
+		wrapped := wrapDesc(r.Reason, descWidth)
+		for _, line := range strings.Split(wrapped, "\n") {
+			fmt.Fprintf(stdout, "%s%s\n", descIndentStr, line)
 		}
-		fmt.Fprintln(stdout)
 	}
-
-	printGroup("Destructive", destructive)
-	printGroup("Privacy", privacy)
-	printGroup("Both", both)
 	return nil
 }

@@ -61,14 +61,14 @@ func TestRunListRulesHuman(t *testing.T) {
 		t.Fatalf("runListMode rules error: %v", err)
 	}
 	out := stdout.(*bytes.Buffer).String()
-	if !strings.Contains(out, "Destructive") {
-		t.Fatalf("missing Destructive group: %q", out)
+	if !strings.Contains(out, "Rules (") {
+		t.Fatalf("missing Rules header: %q", out)
 	}
-	if !strings.Contains(out, "Privacy") {
-		t.Fatalf("missing Privacy group: %q", out)
+	if !strings.Contains(out, "[Destructive:") {
+		t.Fatalf("missing Destructive category tag: %q", out)
 	}
-	if !strings.Contains(out, "Both") {
-		t.Fatalf("missing Both group: %q", out)
+	if !strings.Contains(out, "[Privacy:") {
+		t.Fatalf("missing Privacy category tag: %q", out)
 	}
 	if !strings.Contains(out, "core.git") {
 		t.Fatalf("missing core.git pack reference: %q", out)
