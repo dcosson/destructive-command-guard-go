@@ -15,8 +15,8 @@ func runTestMode(args []string) error {
 	explain := fs.Bool("explain", false, "Show detailed reasoning")
 	jsonOut := fs.Bool("json", false, "Output as JSON")
 	policyName := fs.String("policy", "", "Shorthand: set both destructive and privacy policy")
-	destrPolicyName := fs.String("destructive-policy", "", "Policy for destructive rules: strict, interactive, permissive")
-	privPolicyName := fs.String("privacy-policy", "", "Policy for privacy rules: strict, interactive, permissive")
+	destrPolicyName := fs.String("destructive-policy", "", "Policy for destructive rules: allow-all, permissive, moderate, strict, interactive")
+	privPolicyName := fs.String("privacy-policy", "", "Policy for privacy rules: allow-all, permissive, moderate, strict, interactive")
 	envFlag := fs.Bool("env", false,
 		"Include process environment in detection. "+
 			"Note: without --env, only inline env vars are detected.")
