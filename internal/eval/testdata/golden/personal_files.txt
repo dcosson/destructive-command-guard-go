@@ -1,7 +1,6 @@
-# Golden file: personal.files and personal.ssh packs
+# Golden file: personal.files pack
 format: v1
 ---
-# D1: desktop delete
 command: rm ~/Desktop/file.txt
 decision: Ask
 severity: High
@@ -9,23 +8,146 @@ confidence: High
 pack: personal.files
 rule: desktop-delete
 ---
-# D2: downloads overwrite
-command: cp file.txt ~/Downloads/
+command: shred ~/Desktop/secret.doc
 decision: Ask
 severity: High
 confidence: High
 pack: personal.files
-rule: downloads-overwrite
+rule: desktop-delete
 ---
-# D2 near-miss: no-clobber falls to access
-command: cp -n file.txt ~/Documents/
+command: unlink ~/Desktop/temp.log
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: desktop-delete
+---
+command: cp file.txt ~/Desktop/
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: desktop-overwrite
+---
+command: mv draft.pdf ~/Desktop/final.pdf
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: desktop-overwrite
+---
+command: cp -r src/ ~/Desktop/backup/
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: desktop-overwrite
+---
+command: chmod 777 ~/Desktop/script.sh
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: desktop-modify
+---
+command: chown root ~/Desktop/file.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: desktop-modify
+---
+command: truncate -s 0 ~/Desktop/log.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: desktop-modify
+---
+command: sed -i "s/old/new/" ~/Desktop/notes.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: desktop-write
+---
+command: tee ~/Desktop/output.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: desktop-write
+---
+command: sed -i "s/foo/bar/" ~/Desktop/config.ini
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: desktop-write
+---
+command: cat ~/Desktop/notes.txt
 decision: Ask
 severity: Medium
 confidence: Medium
 pack: personal.files
-rule: documents-access
+rule: desktop-access
 ---
-# D3: documents modify
+command: head -20 ~/Desktop/diary.md
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: personal.files
+rule: desktop-access
+---
+command: wc -l ~/Desktop/readme.txt
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: personal.files
+rule: desktop-access
+---
+command: rm ~/Documents/file.txt
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: documents-delete
+---
+command: shred ~/Documents/secret.doc
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: documents-delete
+---
+command: unlink ~/Documents/temp.log
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: documents-delete
+---
+command: cp file.txt ~/Documents/
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: documents-overwrite
+---
+command: mv draft.pdf ~/Documents/final.pdf
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: documents-overwrite
+---
+command: cp -r src/ ~/Documents/backup/
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: documents-overwrite
+---
 command: chmod 777 ~/Documents/script.sh
 decision: Ask
 severity: High
@@ -33,34 +155,478 @@ confidence: Medium
 pack: personal.files
 rule: documents-modify
 ---
-# D4: documents write
-command: sed -i 's/old/new/' ~/Documents/notes.txt
+command: chown root ~/Documents/file.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: documents-modify
+---
+command: truncate -s 0 ~/Documents/log.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: documents-modify
+---
+command: sed -i "s/old/new/" ~/Documents/notes.txt
 decision: Ask
 severity: High
 confidence: Medium
 pack: personal.files
 rule: documents-write
 ---
-# S1: ssh public key access
-command: cat ~/.ssh/id_rsa.pub
-decision: Allow
+command: tee ~/Documents/output.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: documents-write
 ---
-# S2: ssh config read
-command: cat ~/.ssh/config
-decision: Allow
+command: sed -i "s/foo/bar/" ~/Documents/config.ini
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: documents-write
 ---
-# D1: ssh directory destructive
-command: rm -rf ~/.ssh/
-decision: Deny
-severity: Critical
-confidence: High
-pack: personal.ssh
-rule: ssh-directory-destructive
+command: cat ~/Documents/notes.txt
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: personal.files
+rule: documents-access
 ---
-# D2: ssh private key access
-command: cat ~/.ssh/id_rsa
+command: head -20 ~/Documents/diary.md
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: personal.files
+rule: documents-access
+---
+command: wc -l ~/Documents/readme.txt
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: personal.files
+rule: documents-access
+---
+command: rm ~/Downloads/file.txt
 decision: Ask
 severity: High
 confidence: High
-pack: personal.ssh
-rule: ssh-private-key-access
+pack: personal.files
+rule: downloads-delete
+---
+command: shred ~/Downloads/secret.doc
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: downloads-delete
+---
+command: unlink ~/Downloads/temp.log
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: downloads-delete
+---
+command: cp file.txt ~/Downloads/
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: downloads-overwrite
+---
+command: mv draft.pdf ~/Downloads/final.pdf
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: downloads-overwrite
+---
+command: cp -r src/ ~/Downloads/backup/
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: downloads-overwrite
+---
+command: chmod 777 ~/Downloads/script.sh
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: downloads-modify
+---
+command: chown root ~/Downloads/file.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: downloads-modify
+---
+command: truncate -s 0 ~/Downloads/log.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: downloads-modify
+---
+command: sed -i "s/old/new/" ~/Downloads/notes.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: downloads-write
+---
+command: tee ~/Downloads/output.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: downloads-write
+---
+command: sed -i "s/foo/bar/" ~/Downloads/config.ini
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: downloads-write
+---
+command: cat ~/Downloads/notes.txt
+decision: Allow
+severity: Low
+confidence: Medium
+pack: personal.files
+rule: downloads-access
+---
+command: head -20 ~/Downloads/diary.md
+decision: Allow
+severity: Low
+confidence: Medium
+pack: personal.files
+rule: downloads-access
+---
+command: wc -l ~/Downloads/readme.txt
+decision: Allow
+severity: Low
+confidence: Medium
+pack: personal.files
+rule: downloads-access
+---
+command: rm ~/Music/file.txt
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: music-delete
+---
+command: shred ~/Music/secret.doc
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: music-delete
+---
+command: unlink ~/Music/temp.log
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: music-delete
+---
+command: cp file.txt ~/Music/
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: music-overwrite
+---
+command: mv draft.pdf ~/Music/final.pdf
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: music-overwrite
+---
+command: cp -r src/ ~/Music/backup/
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: music-overwrite
+---
+command: chmod 777 ~/Music/script.sh
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: music-modify
+---
+command: chown root ~/Music/file.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: music-modify
+---
+command: truncate -s 0 ~/Music/log.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: music-modify
+---
+command: sed -i "s/old/new/" ~/Music/notes.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: music-write
+---
+command: tee ~/Music/output.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: music-write
+---
+command: sed -i "s/foo/bar/" ~/Music/config.ini
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: music-write
+---
+command: cat ~/Music/notes.txt
+decision: Allow
+severity: Low
+confidence: Medium
+pack: personal.files
+rule: music-access
+---
+command: head -20 ~/Music/diary.md
+decision: Allow
+severity: Low
+confidence: Medium
+pack: personal.files
+rule: music-access
+---
+command: wc -l ~/Music/readme.txt
+decision: Allow
+severity: Low
+confidence: Medium
+pack: personal.files
+rule: music-access
+---
+command: rm ~/Pictures/file.txt
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: pictures-delete
+---
+command: shred ~/Pictures/secret.doc
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: pictures-delete
+---
+command: unlink ~/Pictures/temp.log
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: pictures-delete
+---
+command: cp file.txt ~/Pictures/
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: pictures-overwrite
+---
+command: mv draft.pdf ~/Pictures/final.pdf
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: pictures-overwrite
+---
+command: cp -r src/ ~/Pictures/backup/
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: pictures-overwrite
+---
+command: chmod 777 ~/Pictures/script.sh
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: pictures-modify
+---
+command: chown root ~/Pictures/file.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: pictures-modify
+---
+command: truncate -s 0 ~/Pictures/log.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: pictures-modify
+---
+command: sed -i "s/old/new/" ~/Pictures/notes.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: pictures-write
+---
+command: tee ~/Pictures/output.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: pictures-write
+---
+command: sed -i "s/foo/bar/" ~/Pictures/config.ini
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: pictures-write
+---
+command: cat ~/Pictures/notes.txt
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: personal.files
+rule: pictures-access
+---
+command: head -20 ~/Pictures/diary.md
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: personal.files
+rule: pictures-access
+---
+command: wc -l ~/Pictures/readme.txt
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: personal.files
+rule: pictures-access
+---
+command: rm ~/Videos/file.txt
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: videos-delete
+---
+command: shred ~/Videos/secret.doc
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: videos-delete
+---
+command: unlink ~/Videos/temp.log
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: videos-delete
+---
+command: cp file.txt ~/Videos/
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: videos-overwrite
+---
+command: mv draft.pdf ~/Videos/final.pdf
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: videos-overwrite
+---
+command: cp -r src/ ~/Videos/backup/
+decision: Ask
+severity: High
+confidence: High
+pack: personal.files
+rule: videos-overwrite
+---
+command: chmod 777 ~/Videos/script.sh
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: videos-modify
+---
+command: chown root ~/Videos/file.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: videos-modify
+---
+command: truncate -s 0 ~/Videos/log.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: videos-modify
+---
+command: sed -i "s/old/new/" ~/Videos/notes.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: videos-write
+---
+command: tee ~/Videos/output.txt
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: videos-write
+---
+command: sed -i "s/foo/bar/" ~/Videos/config.ini
+decision: Ask
+severity: High
+confidence: Medium
+pack: personal.files
+rule: videos-write
+---
+command: cat ~/Videos/notes.txt
+decision: Allow
+severity: Low
+confidence: Medium
+pack: personal.files
+rule: videos-access
+---
+command: head -20 ~/Videos/diary.md
+decision: Allow
+severity: Low
+confidence: Medium
+pack: personal.files
+rule: videos-access
+---
+command: wc -l ~/Videos/readme.txt
+decision: Allow
+severity: Low
+confidence: Medium
+pack: personal.files
+rule: videos-access

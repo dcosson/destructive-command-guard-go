@@ -19,7 +19,7 @@ func (permissivePolicy) Decide(a Assessment) Decision {
 	return Allow
 }
 
-// ModeratePolicy allows up to Medium, denies High+.
+// ModeratePolicy allows up to Medium, denies High+ and Indeterminate.
 func ModeratePolicy() Policy { return moderatePolicy{} }
 
 type moderatePolicy struct{}
@@ -31,12 +31,24 @@ func (moderatePolicy) Decide(a Assessment) Decision {
 	return Allow
 }
 
-// StrictPolicy denies everything regardless of severity.
+// StrictPolicy allows only Low, denies everything else including Indeterminate.
 func StrictPolicy() Policy { return strictPolicy{} }
 
 type strictPolicy struct{}
 
-func (strictPolicy) Decide(a Assessment) Decision { return Deny }
+func (strictPolicy) Decide(a Assessment) Decision {
+	if a.Severity == Low {
+		return Allow
+	}
+	return Deny
+}
+
+// BlockAllPolicy denies everything regardless of severity.
+func BlockAllPolicy() Policy { return blockAllPolicy{} }
+
+type blockAllPolicy struct{}
+
+func (blockAllPolicy) Decide(a Assessment) Decision { return Deny }
 
 // InteractivePolicy asks the user for Indeterminate, Medium, and High.
 // Allows Low. Denies Critical.

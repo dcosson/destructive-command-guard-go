@@ -1190,21 +1190,6 @@ simple	platform.github	gh-issue-pr-close	gh issue close 42 --yes
 compound	platform.github	gh-issue-pr-close	echo start && gh issue close 42 --yes
 subshell	platform.github	gh-issue-pr-close	(gh issue close 42 --yes)
 # Personal packs coverage (dcg-c9c.8)
-simple	personal.files	personal-files-delete	rm ~/Desktop/file.txt
-compound	personal.files	personal-files-delete	echo start && rm ~/Desktop/file.txt
-subshell	personal.files	personal-files-delete	(rm ~/Desktop/file.txt)
-simple	personal.files	personal-files-overwrite	cp file.txt ~/Downloads/
-compound	personal.files	personal-files-overwrite	echo start && cp file.txt ~/Downloads/
-subshell	personal.files	personal-files-overwrite	(cp file.txt ~/Downloads/)
-simple	personal.files	personal-files-modify	chmod 777 ~/Documents/script.sh
-compound	personal.files	personal-files-modify	echo start && chmod 777 ~/Documents/script.sh
-subshell	personal.files	personal-files-modify	(chmod 777 ~/Documents/script.sh)
-simple	personal.files	personal-files-write	sed -i 's/old/new/' ~/Documents/notes.txt
-compound	personal.files	personal-files-write	echo start && sed -i 's/old/new/' ~/Documents/notes.txt
-subshell	personal.files	personal-files-write	(sed -i 's/old/new/' ~/Documents/notes.txt)
-simple	personal.files	personal-files-access	cat ~/Documents/notes.txt
-compound	personal.files	personal-files-access	echo start && cat ~/Documents/notes.txt
-subshell	personal.files	personal-files-access	(cat ~/Documents/notes.txt)
 simple	personal.ssh	ssh-directory-destructive	rm -rf ~/.ssh/
 compound	personal.ssh	ssh-directory-destructive	echo start && rm -rf ~/.ssh/
 subshell	personal.ssh	ssh-directory-destructive	(rm -rf ~/.ssh/)
@@ -1333,3 +1318,102 @@ subshell	cloud.azure	azure-group-delete	(az group delete --name rg1)
 simple	cloud.cloudformation	cloudformation-delete-stack	aws cloudformation delete-stack --stack-name demo
 compound	cloud.cloudformation	cloudformation-delete-stack	echo start && aws cloudformation delete-stack --stack-name demo
 subshell	cloud.cloudformation	cloudformation-delete-stack	(aws cloudformation delete-stack --stack-name demo)
+simple	personal.files	desktop-delete	rm ~/Desktop/file-1.txt
+simple	personal.files	desktop-delete	rm ~/Desktop/file-2.txt
+simple	personal.files	desktop-delete	rm ~/Desktop/file-3.txt
+simple	personal.files	desktop-overwrite	cp src-1.txt ~/Desktop/
+simple	personal.files	desktop-overwrite	cp src-2.txt ~/Desktop/
+simple	personal.files	desktop-overwrite	cp src-3.txt ~/Desktop/
+simple	personal.files	desktop-modify	chmod 644 ~/Desktop/f-1.txt
+simple	personal.files	desktop-modify	chmod 644 ~/Desktop/f-2.txt
+simple	personal.files	desktop-modify	chmod 644 ~/Desktop/f-3.txt
+simple	personal.files	desktop-write	sed -i "s/a/b/" ~/Desktop/f-1.txt
+simple	personal.files	desktop-write	sed -i "s/a/b/" ~/Desktop/f-2.txt
+simple	personal.files	desktop-write	sed -i "s/a/b/" ~/Desktop/f-3.txt
+simple	personal.files	desktop-access	cat ~/Desktop/f-1.txt
+simple	personal.files	desktop-access	cat ~/Desktop/f-2.txt
+simple	personal.files	desktop-access	cat ~/Desktop/f-3.txt
+simple	personal.files	documents-delete	rm ~/Documents/file-1.txt
+simple	personal.files	documents-delete	rm ~/Documents/file-2.txt
+simple	personal.files	documents-delete	rm ~/Documents/file-3.txt
+simple	personal.files	documents-overwrite	cp src-1.txt ~/Documents/
+simple	personal.files	documents-overwrite	cp src-2.txt ~/Documents/
+simple	personal.files	documents-overwrite	cp src-3.txt ~/Documents/
+simple	personal.files	documents-modify	chmod 644 ~/Documents/f-1.txt
+simple	personal.files	documents-modify	chmod 644 ~/Documents/f-2.txt
+simple	personal.files	documents-modify	chmod 644 ~/Documents/f-3.txt
+simple	personal.files	documents-write	sed -i "s/a/b/" ~/Documents/f-1.txt
+simple	personal.files	documents-write	sed -i "s/a/b/" ~/Documents/f-2.txt
+simple	personal.files	documents-write	sed -i "s/a/b/" ~/Documents/f-3.txt
+simple	personal.files	documents-access	cat ~/Documents/f-1.txt
+simple	personal.files	documents-access	cat ~/Documents/f-2.txt
+simple	personal.files	documents-access	cat ~/Documents/f-3.txt
+simple	personal.files	downloads-delete	rm ~/Downloads/file-1.txt
+simple	personal.files	downloads-delete	rm ~/Downloads/file-2.txt
+simple	personal.files	downloads-delete	rm ~/Downloads/file-3.txt
+simple	personal.files	downloads-overwrite	cp src-1.txt ~/Downloads/
+simple	personal.files	downloads-overwrite	cp src-2.txt ~/Downloads/
+simple	personal.files	downloads-overwrite	cp src-3.txt ~/Downloads/
+simple	personal.files	downloads-modify	chmod 644 ~/Downloads/f-1.txt
+simple	personal.files	downloads-modify	chmod 644 ~/Downloads/f-2.txt
+simple	personal.files	downloads-modify	chmod 644 ~/Downloads/f-3.txt
+simple	personal.files	downloads-write	sed -i "s/a/b/" ~/Downloads/f-1.txt
+simple	personal.files	downloads-write	sed -i "s/a/b/" ~/Downloads/f-2.txt
+simple	personal.files	downloads-write	sed -i "s/a/b/" ~/Downloads/f-3.txt
+simple	personal.files	downloads-access	cat ~/Downloads/f-1.txt
+simple	personal.files	downloads-access	cat ~/Downloads/f-2.txt
+simple	personal.files	downloads-access	cat ~/Downloads/f-3.txt
+simple	personal.files	music-delete	rm ~/Music/file-1.txt
+simple	personal.files	music-delete	rm ~/Music/file-2.txt
+simple	personal.files	music-delete	rm ~/Music/file-3.txt
+simple	personal.files	music-overwrite	cp src-1.txt ~/Music/
+simple	personal.files	music-overwrite	cp src-2.txt ~/Music/
+simple	personal.files	music-overwrite	cp src-3.txt ~/Music/
+simple	personal.files	music-modify	chmod 644 ~/Music/f-1.txt
+simple	personal.files	music-modify	chmod 644 ~/Music/f-2.txt
+simple	personal.files	music-modify	chmod 644 ~/Music/f-3.txt
+simple	personal.files	music-write	sed -i "s/a/b/" ~/Music/f-1.txt
+simple	personal.files	music-write	sed -i "s/a/b/" ~/Music/f-2.txt
+simple	personal.files	music-write	sed -i "s/a/b/" ~/Music/f-3.txt
+simple	personal.files	music-access	cat ~/Music/f-1.txt
+simple	personal.files	music-access	cat ~/Music/f-2.txt
+simple	personal.files	music-access	cat ~/Music/f-3.txt
+simple	personal.files	pictures-delete	rm ~/Pictures/file-1.txt
+simple	personal.files	pictures-delete	rm ~/Pictures/file-2.txt
+simple	personal.files	pictures-delete	rm ~/Pictures/file-3.txt
+simple	personal.files	pictures-overwrite	cp src-1.txt ~/Pictures/
+simple	personal.files	pictures-overwrite	cp src-2.txt ~/Pictures/
+simple	personal.files	pictures-overwrite	cp src-3.txt ~/Pictures/
+simple	personal.files	pictures-modify	chmod 644 ~/Pictures/f-1.txt
+simple	personal.files	pictures-modify	chmod 644 ~/Pictures/f-2.txt
+simple	personal.files	pictures-modify	chmod 644 ~/Pictures/f-3.txt
+simple	personal.files	pictures-write	sed -i "s/a/b/" ~/Pictures/f-1.txt
+simple	personal.files	pictures-write	sed -i "s/a/b/" ~/Pictures/f-2.txt
+simple	personal.files	pictures-write	sed -i "s/a/b/" ~/Pictures/f-3.txt
+simple	personal.files	pictures-access	cat ~/Pictures/f-1.txt
+simple	personal.files	pictures-access	cat ~/Pictures/f-2.txt
+simple	personal.files	pictures-access	cat ~/Pictures/f-3.txt
+simple	personal.files	videos-delete	rm ~/Videos/file-1.txt
+simple	personal.files	videos-delete	rm ~/Videos/file-2.txt
+simple	personal.files	videos-delete	rm ~/Videos/file-3.txt
+simple	personal.files	videos-overwrite	cp src-1.txt ~/Videos/
+simple	personal.files	videos-overwrite	cp src-2.txt ~/Videos/
+simple	personal.files	videos-overwrite	cp src-3.txt ~/Videos/
+simple	personal.files	videos-modify	chmod 644 ~/Videos/f-1.txt
+simple	personal.files	videos-modify	chmod 644 ~/Videos/f-2.txt
+simple	personal.files	videos-modify	chmod 644 ~/Videos/f-3.txt
+simple	personal.files	videos-write	sed -i "s/a/b/" ~/Videos/f-1.txt
+simple	personal.files	videos-write	sed -i "s/a/b/" ~/Videos/f-2.txt
+simple	personal.files	videos-write	sed -i "s/a/b/" ~/Videos/f-3.txt
+simple	personal.files	videos-access	cat ~/Videos/f-1.txt
+simple	personal.files	videos-access	cat ~/Videos/f-2.txt
+simple	personal.files	videos-access	cat ~/Videos/f-3.txt
+simple	macos.privacy	icloud-delete	rm "~/Library/Mobile Documents/f-1.txt"
+simple	macos.privacy	icloud-delete	rm "~/Library/Mobile Documents/f-2.txt"
+simple	macos.privacy	icloud-delete	rm "~/Library/Mobile Documents/f-3.txt"
+simple	macos.privacy	icloud-overwrite	cp src-1.txt "~/Library/Mobile Documents/"
+simple	macos.privacy	icloud-overwrite	cp src-2.txt "~/Library/Mobile Documents/"
+simple	macos.privacy	icloud-overwrite	cp src-3.txt "~/Library/Mobile Documents/"
+simple	macos.privacy	icloud-access	cat "~/Library/Mobile Documents/f-1.txt"
+simple	macos.privacy	icloud-access	cat "~/Library/Mobile Documents/f-2.txt"
+simple	macos.privacy	icloud-access	cat "~/Library/Mobile Documents/f-3.txt"

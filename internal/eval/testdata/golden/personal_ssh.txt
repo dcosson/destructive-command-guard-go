@@ -1,0 +1,42 @@
+# Golden file: personal.ssh pack
+format: v1
+---
+# ssh public key access (safe)
+command: cat ~/.ssh/id_rsa.pub
+decision: Allow
+---
+# ssh config read (safe)
+command: cat ~/.ssh/config
+decision: Allow
+---
+# ssh directory destructive
+command: rm -rf ~/.ssh/
+decision: Deny
+severity: Critical
+confidence: High
+pack: personal.ssh
+rule: ssh-directory-destructive
+---
+# ssh private key access
+command: cat ~/.ssh/id_rsa
+decision: Ask
+severity: High
+confidence: High
+pack: personal.ssh
+rule: ssh-private-key-access
+---
+# ssh ed25519 private key access
+command: cat ~/.ssh/id_ed25519
+decision: Ask
+severity: High
+confidence: High
+pack: personal.ssh
+rule: ssh-private-key-access
+---
+# ssh ecdsa private key access
+command: less ~/.ssh/id_ecdsa
+decision: Ask
+severity: High
+confidence: High
+pack: personal.ssh
+rule: ssh-private-key-access

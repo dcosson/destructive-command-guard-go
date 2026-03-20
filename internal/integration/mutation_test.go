@@ -30,11 +30,15 @@ var equivalentMutationPrefixes = []string{
 
 func isEquivalentMutation(packID, operator string) bool {
 	if operator != "RemoveFlag" {
-		// These git push safety variants still match after the specific
-		// transformation, so the mutation is observationally equivalent here.
-		if strings.HasPrefix(packID, "core.git.git-push-force-with-lease") ||
-			strings.HasPrefix(packID, "core.git.git-push-force-if-includes") {
-			return operator == "SwapCommandName" || operator == "RemoveNotAlternative" || operator == "ShiftArgPosition"
+		// These rules use broad command-name matchers where path/content regex
+		// is the real discriminator. Swapping names, removing negation alternatives,
+		// or shifting arg positions are observationally equivalent.
+		equivOps := operator == "SwapCommandName" || operator == "RemoveNotAlternative" || operator == "ShiftArgPosition"
+		if equivOps && (strings.HasPrefix(packID, "core.git.git-push-force-with-lease") ||
+			strings.HasPrefix(packID, "core.git.git-push-force-if-includes") ||
+			packID == "personal.files" ||
+			packID == "macos.privacy") {
+			return true
 		}
 		return false
 	}

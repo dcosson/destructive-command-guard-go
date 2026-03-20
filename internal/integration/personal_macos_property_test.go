@@ -13,11 +13,11 @@ func TestPropertyPersonalPackReachability(t *testing.T) {
 		rule string
 		cmd  string
 	}{
-		{"personal.files", "personal-files-delete", "rm ~/Desktop/file.txt"},
-		{"personal.files", "personal-files-overwrite", "cp file.txt ~/Downloads/"},
-		{"personal.files", "personal-files-modify", "chmod 777 ~/Documents/script.sh"},
-		{"personal.files", "personal-files-write", "tee ~/Desktop/output.txt"},
-		{"personal.files", "personal-files-access", "cat ~/Documents/notes.txt"},
+		{"personal.files", "desktop-delete", "rm ~/Desktop/file.txt"},
+		{"personal.files", "downloads-overwrite", "cp file.txt ~/Downloads/"},
+		{"personal.files", "documents-modify", "chmod 777 ~/Documents/script.sh"},
+		{"personal.files", "desktop-write", "tee ~/Desktop/output.txt"},
+		{"personal.files", "documents-access", "cat ~/Documents/notes.txt"},
 		{"personal.ssh", "ssh-directory-destructive", "rm -rf ~/.ssh/"},
 		{"personal.ssh", "ssh-private-key-access", "cat ~/.ssh/id_rsa"},
 	}
@@ -63,9 +63,9 @@ func TestPropertyPersonalFilesSeverityTiers(t *testing.T) {
 		severity guard.Severity
 		rule     string
 	}{
-		{"rm ~/Desktop/file.txt", guard.Critical, "personal-files-delete"},
-		{"cp file.txt ~/Downloads/", guard.High, "personal-files-overwrite"},
-		{"cat ~/Documents/notes.txt", guard.Medium, "personal-files-access"},
+		{"rm ~/Desktop/file.txt", guard.High, "desktop-delete"},
+		{"cp file.txt ~/Downloads/", guard.High, "downloads-overwrite"},
+		{"cat ~/Documents/notes.txt", guard.Medium, "documents-access"},
 	}
 	for _, tc := range tiers {
 		res := guard.Evaluate(tc.cmd, guard.WithDestructivePolicy(guard.InteractivePolicy()))

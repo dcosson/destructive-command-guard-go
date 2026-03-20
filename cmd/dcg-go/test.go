@@ -87,10 +87,12 @@ func parsePolicy(name string) (guard.Policy, error) {
 		return guard.ModeratePolicy(), nil
 	case "strict":
 		return guard.StrictPolicy(), nil
+	case "block-all":
+		return guard.BlockAllPolicy(), nil
 	case "interactive":
 		return guard.InteractivePolicy(), nil
 	default:
-		return nil, fmt.Errorf("unknown policy: %s (valid: allow-all, permissive, moderate, strict, interactive)", name)
+		return nil, fmt.Errorf("unknown policy: %s (valid: allow-all, permissive, moderate, strict, block-all, interactive)", name)
 	}
 }
 

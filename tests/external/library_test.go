@@ -17,6 +17,8 @@ func policyByName(name string) guard.Policy {
 		return guard.ModeratePolicy()
 	case "strict":
 		return guard.StrictPolicy()
+	case "block-all":
+		return guard.BlockAllPolicy()
 	case "interactive":
 		return guard.InteractivePolicy()
 	default:

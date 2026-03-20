@@ -66,7 +66,7 @@ func TestStrictPolicyDecisions(t *testing.T) {
 		want Decision
 	}{
 		{name: "indeterminate", sev: Indeterminate, want: Deny},
-		{name: "low", sev: Low, want: Deny},
+		{name: "low", sev: Low, want: Allow},
 		{name: "medium", sev: Medium, want: Deny},
 		{name: "high", sev: High, want: Deny},
 		{name: "critical", sev: Critical, want: Deny},
@@ -78,6 +78,16 @@ func TestStrictPolicyDecisions(t *testing.T) {
 				t.Fatalf("Decide(%v) = %v, want %v", tc.sev, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestBlockAllPolicyDecisions(t *testing.T) {
+	p := BlockAllPolicy()
+	for _, sev := range []Severity{Indeterminate, Low, Medium, High, Critical} {
+		got := p.Decide(Assessment{Severity: sev})
+		if got != Deny {
+			t.Fatalf("Decide(%v) = %v, want Deny", sev, got)
+		}
 	}
 }
 

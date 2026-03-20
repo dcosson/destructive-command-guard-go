@@ -1,0 +1,74 @@
+# Golden file: macos.privacy pack (iCloud rules)
+format: v1
+---
+# icloud delete quoted path
+command: rm "~/Library/Mobile Documents/file.txt"
+decision: Deny
+severity: Critical
+confidence: High
+pack: macos.privacy
+rule: icloud-delete
+---
+# icloud delete single-quoted
+command: rm '~/Library/Mobile Documents/old/'
+decision: Deny
+severity: Critical
+confidence: High
+pack: macos.privacy
+rule: icloud-delete
+---
+# icloud delete CloudDocs subdir
+command: rm -rf "~/Library/Mobile Documents/com~apple~CloudDocs/"
+decision: Deny
+severity: Critical
+confidence: High
+pack: macos.privacy
+rule: icloud-delete
+---
+# icloud overwrite quoted
+command: cp file.txt "~/Library/Mobile Documents/"
+decision: Ask
+severity: High
+confidence: High
+pack: macos.privacy
+rule: icloud-overwrite
+---
+# icloud overwrite mv
+command: mv draft.pdf "~/Library/Mobile Documents/final.pdf"
+decision: Ask
+severity: High
+confidence: High
+pack: macos.privacy
+rule: icloud-overwrite
+---
+# icloud overwrite cp
+command: cp -r src/ "~/Library/Mobile Documents/backup/"
+decision: Ask
+severity: High
+confidence: High
+pack: macos.privacy
+rule: icloud-overwrite
+---
+# icloud access cat
+command: cat "~/Library/Mobile Documents/com~apple~CloudDocs/file.txt"
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: macos.privacy
+rule: icloud-access
+---
+# icloud access ls
+command: ls "~/Library/Mobile Documents/"
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: macos.privacy
+rule: icloud-access
+---
+# icloud access find
+command: find "~/Library/Mobile Documents/" -name "*.pdf"
+decision: Ask
+severity: Medium
+confidence: Medium
+pack: macos.privacy
+rule: icloud-access

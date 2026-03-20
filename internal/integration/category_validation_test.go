@@ -112,12 +112,18 @@ func TestCategoryAssignments(t *testing.T) {
 	// Verify privacy rules
 	privacyRules := []string{
 		"personal.ssh.ssh-private-key-access",
-		"personal.files.personal-files-access",
+		"personal.files.desktop-access",
+		"personal.files.documents-access",
+		"personal.files.downloads-access",
+		"personal.files.music-access",
+		"personal.files.pictures-access",
+		"personal.files.videos-access",
 		"macos.privacy.keychain-read-password",
 		"macos.privacy.keychain-dump",
 		"macos.privacy.messages-db-access",
 		"macos.privacy.private-data-access",
 		"macos.privacy.spotlight-search",
+		"macos.privacy.icloud-access",
 	}
 	for _, key := range privacyRules {
 		r, ok := ruleMap[key]
