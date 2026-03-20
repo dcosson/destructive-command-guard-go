@@ -1,6 +1,5 @@
 .PHONY: build clean deps fmt fmt-check check check-nofix \
-       test test-integration test-external test-comparison \
-       test-ci-tier1 test-ci-tier2 test-ci-tier3 test-all \
+       test test-integration test-external test-comparison test-all \
        bench bench-full test-race help
 
 # Build output directory
@@ -115,22 +114,6 @@ else
 endif
 
 # --------------------------------------------------------------------------- #
-# Tests — CI tiers (curated subsets for commit / PR / nightly)
-# --------------------------------------------------------------------------- #
-
-# Tier 1: Commit-level smoke tests. Target: <5s.
-test-ci-tier1:
-	bash scripts/ci_tier1.sh
-
-# Tier 2: PR-level tests. Target: <30s.
-test-ci-tier2:
-	bash scripts/ci_tier2.sh
-
-# Tier 3: Nightly comprehensive tests + benchmarks. Target: <60m.
-test-ci-tier3:
-	bash scripts/ci_tier3.sh
-
-# --------------------------------------------------------------------------- #
 # Benchmarks
 # --------------------------------------------------------------------------- #
 
@@ -177,11 +160,6 @@ help:
 	@echo ""
 	@echo "Test (extended):"
 	@echo "  make test-comparison    Comparison vs upstream (needs UPSTREAM_BINARY)"
-	@echo ""
-	@echo "Test (CI tiers):"
-	@echo "  make test-ci-tier1      Commit-level smoke (<5s)"
-	@echo "  make test-ci-tier2      PR-level tests (<30s)"
-	@echo "  make test-ci-tier3      Nightly comprehensive (<60m)"
 	@echo ""
 	@echo "Benchmarks:"
 	@echo "  make bench              Benchmarks (validation, 1 iteration)"
