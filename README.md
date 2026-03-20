@@ -30,6 +30,29 @@ In other words, this library does not just look for "dangerous commands" in the
 abstract. It parses a bash command, matches it against typed rules, and then
 evaluates the matched rules by category and severity.
 
+## Policies
+
+You set a separate policy for destructive rules and privacy rules. Each
+policy converts a severity assessment into an `Allow`, `Deny`, or `Ask`
+decision. The two decisions are then merged: the strictest one wins
+(`Deny` > `Ask` > `Allow`).
+
+This lets you configure different risk tolerances for each category. For
+example, you might be comfortable with destructive commands (you know what
+you're doing) but want strict protection against anything touching private
+data.
+
+| Severity | Allow All | Permissive | Moderate | Strict | Interactive (default) |
+|--------|:---:|:---:|:---:|:---:|:---:|
+| **Indeterminate** | Allow | Allow | Allow | Deny | Ask |
+| **Low** | Allow | Allow | Allow | Allow | Allow |
+| **Medium** | Allow | Allow | Allow | Deny | Ask |
+| **High** | Allow | Allow | Deny | Deny | Ask |
+| **Critical** | Allow | Deny | Deny | Deny | Deny |
+
+Only **Interactive** ever returns `Ask`. All other policies return only
+`Allow` or `Deny`.
+
 ## Installation
 
 Requires Go 1.24+.
@@ -141,29 +164,6 @@ guard.WithPacks("core.git")             // Only evaluate specific packs
 guard.WithDisabledPacks("frameworks")   // Skip specific packs
 guard.WithEnv(os.Environ())             // Pass environment for context-aware rules
 ```
-
-### Policies
-
-You set a separate policy for destructive rules and privacy rules. Each
-policy converts a severity assessment into an `Allow`, `Deny`, or `Ask`
-decision. The two decisions are then merged: the strictest one wins
-(`Deny` > `Ask` > `Allow`).
-
-This lets you configure different risk tolerances for each category. For
-example, you might be comfortable with destructive commands (you know what
-you're doing) but want strict protection against anything touching private
-data.
-
-| Policy | Indeterminate | Low | Medium | High | Critical |
-|--------|:---:|:---:|:---:|:---:|:---:|
-| **Allow All** | Allow | Allow | Allow | Allow | Allow |
-| **Permissive** | Allow | Allow | Allow | Allow | Deny |
-| **Moderate** | Allow | Allow | Allow | Deny | Deny |
-| **Strict** | Deny | Allow | Deny | Deny | Deny |
-| **Interactive** (default) | Ask | Allow | Ask | Ask | Deny |
-
-Only **Interactive** ever returns `Ask`. All other policies return only
-`Allow` or `Deny`.
 
 ### Result
 
