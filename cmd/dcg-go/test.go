@@ -25,7 +25,7 @@ func runTestMode(args []string) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return fmt.Errorf("usage: dcg-go test [--explain] [--json] [--policy NAME] \"command\"")
+		return fmt.Errorf("usage: dcg-go test [--explain] [--json] [--policy NAME] [--destructive-policy NAME] [--privacy-policy NAME] \"command\"")
 	}
 
 	command := fs.Arg(0)
