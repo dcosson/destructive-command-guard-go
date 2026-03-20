@@ -63,7 +63,7 @@ lint:
 # cross-cutting library suites (property, fault, security, oracle, stress,
 # benchmark, fuzz, mutation, comparison).
 test:
-	go test $$(go list ./... | grep -v internal/integration) -count=1
+	go test $$(go list ./... | grep -v internal/integration | grep -v tests/external) -count=1
 
 # Heavy library-level integration suites. This runs the entire
 # internal/integration package.
@@ -73,7 +73,7 @@ test-integration:
 # Unit test target with -race detector enabled (same package set as `make test`).
 # Does not include integration/external/comparison targets.
 test-race:
-	go test $$(go list ./... | grep -v internal/integration) -count=1 -race
+	go test $$(go list ./... | grep -v internal/integration | grep -v tests/external) -count=1 -race
 
 # --------------------------------------------------------------------------- #
 # Tests — external (builds binary, tests CLI as black box)
