@@ -13,11 +13,12 @@ privacy-sensitive, or both) and severity (`Low`, `Medium`, `High`, or
 
 At a high level, the library:
 
-1. Parses bash command text with tree-sitter.
-2. Extracts command structure from the syntax tree.
-3. Matches the command against registered rules, organized into packs.
-4. Produces separate assessments for destructive risk and privacy risk.
-5. Applies policy to turn those assessments into a final decision.
+1. Runs a fast Aho-Corasick keyword prefilter to identify potentially relevant packs.
+2. Parses bash command text with tree-sitter.
+3. Extracts command structure from the syntax tree.
+4. Matches the command against registered rules, organized into packs.
+5. Produces separate assessments for destructive risk and privacy risk.
+6. Applies policy to turn those assessments into a final decision.
 
 ## Terminology
 
