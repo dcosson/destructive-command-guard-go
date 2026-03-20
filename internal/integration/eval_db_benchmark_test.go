@@ -199,8 +199,8 @@ func TestStressConcurrentDbMatching(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	const goroutines = 16
-	const iterations = 50
+	const goroutines = 40
+	const iterations = 1000
 
 	for i := 0; i < goroutines; i++ {
 		wg.Add(1)
