@@ -1,0 +1,33 @@
+{
+  "id": "dcg-n0e.1",
+  "title": "relocate-e2etest-to-internal-e2etest",
+  "description": "Move e2etest/ → internal/e2etest/ and update all references.\n\n## What to do\n\n1. Move the directory: e2etest/ → internal/e2etest/\n2. Update the Go module import path everywhere:\n   - All files in internal/e2etest/ itself (package stays e2etest)\n   - guard/ test files that import e2etest (guard/integration_test.go, etc.)\n   - cmd/dcg-go/ test files if any import e2etest\n   - Any other files: grep for \"e2etest\" across the codebase\n3. Update Makefile: replace ./e2etest with ./internal/e2etest in ALL targets\n   (test-e2e, test-stress, test-security, test-mutation, test-comparison, bench, bench-full)\n4. Update CLAUDE.md project structure to show internal/e2etest/ instead of e2etest/\n5. Run make test \u0026\u0026 make test-e2e to verify everything passes\n6. Commit\n\n## Why\n\nHaving e2etest/ at the top level means it can't import unexported internal APIs\nwithout those APIs being exported to external consumers. At internal/e2etest/,\nwe can export helpers within internal/ (e.g. eval test helpers, parse test helpers)\nthat are visible to the test package but not to external importers.",
+  "status": "in_progress",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-n0e",
+  "dependencies": [
+    {
+      "id": "dcg-n0e",
+      "type": "parent-child"
+    }
+  ],
+  "dependents": [
+    {
+      "id": "dcg-n0e.2",
+      "type": "blocks"
+    },
+    {
+      "id": "dcg-n0e.3",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg-go"
+  ],
+  "assignee": "Danny Cosson",
+  "created_at": "2026-03-04T13:03:15.548706-08:00",
+  "updated_at": "2026-03-04T13:04:38.594123-08:00"
+}

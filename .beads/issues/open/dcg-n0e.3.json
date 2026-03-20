@@ -1,0 +1,27 @@
+{
+  "id": "dcg-n0e.3",
+  "title": "move-parse-heavy-tests-to-internal-e2etest",
+  "description": "Move heavy tests from internal/parse/ to internal/e2etest/ now that e2etest is under internal/.\n\n## What to do\n\n1. For any unexported APIs used by the tests, export them in internal/parse/:\n   - newTree → NewTree (used by benchmark_test.go BenchmarkParsePoolEffectiveness)\n   - Any others found during the move\n2. Move internal/parse/helpers_test.go to internal/e2etest/parse_helpers.go\n   (export the generators: GenerateRandomCommand, GenerateCommandFromRand, etc.)\n   These helpers only use exported parse APIs so they move cleanly.\n3. Move these test files to internal/e2etest/ (change package, update imports):\n   - internal/parse/property_test.go\n   - internal/parse/property_pending_test.go\n   - internal/parse/oracle_test.go\n   - internal/parse/fault_injection_test.go\n   - internal/parse/security_test.go\n   - internal/parse/soak_test.go\n   - internal/parse/concurrency_test.go\n   - internal/parse/golden_test.go (update testdata path to use FindModuleRoot)\n   - internal/parse/benchmark_test.go\n   - internal/parse/fuzz_test.go\n4. Update Makefile if parse benchmarks need a new target\n5. Run tests to verify\n\n## Keep in internal/parse/ (lightweight unit tests)\n- bash_test.go, extract_test.go, dataflow_test.go, normalize_test.go,\n  inline_test.go, grammars_test.go, debug_test.go, example_*_test.go\n\n## Depends on\ndcg-n0e.1 (relocate e2etest to internal/e2etest) must be done first.",
+  "status": "in_progress",
+  "priority": 2,
+  "type": "task",
+  "parent": "dcg-n0e",
+  "dependencies": [
+    {
+      "id": "dcg-n0e",
+      "type": "parent-child"
+    },
+    {
+      "id": "dcg-n0e.1",
+      "type": "blocks"
+    }
+  ],
+  "created_by": "Danny Cosson",
+  "owner": "dcosson@gmail.com",
+  "labels": [
+    "project=dcg-go"
+  ],
+  "assignee": "Danny Cosson",
+  "created_at": "2026-03-04T13:03:52.657361-08:00",
+  "updated_at": "2026-03-04T13:11:22.991745-08:00"
+}
