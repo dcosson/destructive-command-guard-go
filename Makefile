@@ -58,14 +58,19 @@ check: fmt
 	@echo "==> go vet"
 	go vet ./...
 	@echo "==> staticcheck"
-	go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+	@if command -v staticcheck >/dev/null 2>&1; then \
+		staticcheck ./...; \
+	else \
+		go run honnef.co/go/tools/cmd/staticcheck@latest ./...; \
+	fi
 
 # CI version: check formatting without fixing, then vet + staticcheck.
+# Expects staticcheck installed via make deps.
 check-nofix: fmt-check
 	@echo "==> go vet"
 	go vet ./...
 	@echo "==> staticcheck"
-	go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+	staticcheck ./...
 
 # --------------------------------------------------------------------------- #
 # Tests — primary targets
