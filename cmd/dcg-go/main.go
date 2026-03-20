@@ -19,7 +19,8 @@ const usage = `dcg-go - Destructive Command Guard
 Usage:
     dcg-go              Hook mode: read JSON from stdin, evaluate, write JSON
     dcg-go test "cmd"   Evaluate a command and print the result
-    dcg-go packs        List available pattern packs
+    dcg-go list packs   List available pattern packs
+    dcg-go list rules   List all rules grouped by category
     dcg-go version      Print version information
     dcg-go help         Print this help message
 
@@ -33,17 +34,24 @@ Test Mode:
     dcg-go test --explain "git push --force"
     dcg-go test --json "git push --force"
     dcg-go test --policy strict "RAILS_ENV=production rails db:drop"
+    dcg-go test --destructive-policy permissive --privacy-policy strict "cat ~/.ssh/id_rsa"
     dcg-go test --env "rails db:reset"
 
     Exit codes: 0=Allow, 1=Error, 2=Deny, 3=Ask
 
-Packs Mode:
-    dcg-go packs
-    dcg-go packs --json
+List Mode:
+    dcg-go list packs
+    dcg-go list packs --json
+    dcg-go list rules
+    dcg-go list rules --json
 
 Config:
     dcg-go looks for config at ~/.config/dcg-go/config.yaml
     Override with DCG_CONFIG environment variable.
+
+    Config fields:
+      destructive_policy: strict|interactive|permissive
+      privacy_policy: strict|interactive|permissive
 `
 
 // Version is set at build time via -ldflags.
@@ -64,8 +72,8 @@ func main() {
 			fmt.Fprintf(stderr, "error: %v\n", err)
 			exitFn(1)
 		}
-	case "packs":
-		if err := runPacksMode(os.Args[2:]); err != nil {
+	case "list":
+		if err := runListMode(os.Args[2:]); err != nil {
 			fmt.Fprintf(stderr, "error: %v\n", err)
 			exitFn(1)
 		}

@@ -71,13 +71,13 @@ func TestPropertyPacksModeDeterminism(t *testing.T) {
 	reset := withIO(t)
 	defer reset()
 
-	if err := runPacksMode([]string{"--json"}); err != nil {
-		t.Fatalf("runPacksMode --json: %v", err)
+	if err := runListMode([]string{"packs", "--json"}); err != nil {
+		t.Fatalf("runListMode packs --json: %v", err)
 	}
 	first := stdout.(*bytes.Buffer).String()
 	stdout = &bytes.Buffer{}
-	if err := runPacksMode([]string{"--json"}); err != nil {
-		t.Fatalf("runPacksMode --json (second): %v", err)
+	if err := runListMode([]string{"packs", "--json"}); err != nil {
+		t.Fatalf("runListMode packs --json (second): %v", err)
 	}
 	second := stdout.(*bytes.Buffer).String()
 	if first != second {

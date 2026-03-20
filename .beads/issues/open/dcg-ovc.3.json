@@ -2,7 +2,7 @@
   "id": "dcg-ovc.3",
   "title": "rule-categories-cli-and-api",
   "description": "Implement CLI changes and guard API surface for rule categories. From docs/plans/06-rule-categories.md.\n\nSections: §4.8, §4.9, §4.10, §3.3\n\nKey deliverables:\n- Config YAML: destructive_policy/privacy_policy fields (remove old policy field)\n- Test mode: --destructive-policy/--privacy-policy flags, --policy shorthand\n- Hook output: buildReason with [category] prefix, explanation precedence (§3.3)\n- Replace dcg-go packs command with dcg-go list command:\n  - dcg-go list packs: per-category rule counts\n  - dcg-go list rules: all rules grouped by category with pack name\n  - Both support --json\n- Updated guard.PackInfo with DestructiveCount/PrivacyCount/BothCount\n- New guard.Rules() returning []RuleInfo\n- Update main.go command routing and usage text\n- Integration tests for dual-policy evaluation scenarios\n- Tests for list command output, config parsing, hook output format\n\nReferences:\n- Plan: docs/plans/06-rule-categories.md §3.3, §4.8, §4.9, §4.10, §8 (Integration Tests)\n- Depends on: dcg-ovc.1 (foundation), dcg-ovc.2 (rule tagging, for list command to show real categories)",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
   "parent": "dcg-ovc",
@@ -29,5 +29,5 @@
   ],
   "assignee": "coder-2-fog",
   "created_at": "2026-03-19T22:21:29.075019-07:00",
-  "updated_at": "2026-03-19T23:07:06.534503-07:00"
+  "updated_at": "2026-03-19T23:07:37.018621-07:00"
 }
