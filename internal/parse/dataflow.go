@@ -142,7 +142,7 @@ func (da *DataflowAnalyzer) ResolveString(s string) (expansions []string, capped
 
 		acc = acc + parts[i]
 		values := da.Resolve(refs[i].name)
-		if values == nil || len(values) == 0 {
+		if len(values) == 0 {
 			build(i+1, acc+refs[i].raw)
 			return
 		}

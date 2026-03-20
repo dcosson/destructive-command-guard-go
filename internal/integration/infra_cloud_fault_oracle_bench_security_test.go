@@ -192,9 +192,7 @@ func TestStressHighVolumeInfraCloudCommands(t *testing.T) {
 	}
 	commands := make([]string, 0, 6000)
 	for i := 0; i < 1000; i++ {
-		for _, b := range base {
-			commands = append(commands, b)
-		}
+		commands = append(commands, base...)
 	}
 	var wg sync.WaitGroup
 	for w := 0; w < 16; w++ {

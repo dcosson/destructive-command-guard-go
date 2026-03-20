@@ -1,3 +1,5 @@
+//go:build integration
+
 package integration
 
 // Shared pack test helpers for database pack tests.

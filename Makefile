@@ -81,7 +81,7 @@ test:
 # Heavy integration suites: internal/integration package + build-tagged
 # tests in cmd/dcg-go (fuzz, oracle, stress, security, property tests).
 test-integration:
-	go test ./internal/integration -count=1 -timeout 30m
+	go test -tags=integration ./internal/integration -count=1 -timeout 30m
 	go test -tags=integration ./cmd/dcg-go -count=1 -timeout 10m
 
 # Unit test target with -race detector enabled (same package set as `make test`).
@@ -119,15 +119,15 @@ endif
 
 # Run all benchmarks with a single iteration (validation mode).
 bench:
-	go test ./cmd/dcg-go -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
-	go test -tags=e2e ./internal/eval -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
-	go test ./internal/integration -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
+	go test -tags=integration ./cmd/dcg-go -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
+	go test ./internal/eval -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
+	go test -tags=integration ./internal/integration -run '^$$' -bench 'Benchmark' -benchtime=1x -count=1
 
 # Run benchmarks with full iterations for performance measurement.
 bench-full:
-	go test ./cmd/dcg-go -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
-	go test -tags=e2e ./internal/eval -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
-	go test ./internal/integration -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
+	go test -tags=integration ./cmd/dcg-go -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
+	go test ./internal/eval -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
+	go test -tags=integration ./internal/integration -run '^$$' -bench 'Benchmark' -benchtime=3s -count=5
 
 # --------------------------------------------------------------------------- #
 # Aggregate targets

@@ -213,23 +213,3 @@ func RawTextRegex(re *regexp.Regexp) MatchFunc {
 		return re != nil && re.MatchString(cmd.RawText)
 	})
 }
-
-func hasAll(cmd Command, terms ...string) bool {
-	s := strings.ToLower(cmd.RawText)
-	for _, term := range terms {
-		if !strings.Contains(s, strings.ToLower(term)) {
-			return false
-		}
-	}
-	return true
-}
-
-func hasAny(cmd Command, terms ...string) bool {
-	s := strings.ToLower(cmd.RawText)
-	for _, term := range terms {
-		if strings.Contains(s, strings.ToLower(term)) {
-			return true
-		}
-	}
-	return false
-}
