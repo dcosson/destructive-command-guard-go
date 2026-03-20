@@ -65,10 +65,11 @@ lint:
 test:
 	go test $$(go list ./... | grep -v internal/integration | grep -v tests/external) -count=1
 
-# Heavy library-level integration suites. This runs the entire
-# internal/integration package.
+# Heavy integration suites: internal/integration package + build-tagged
+# tests in cmd/dcg-go (fuzz, oracle, stress, security, property tests).
 test-integration:
 	go test ./internal/integration -count=1 -timeout 30m
+	go test -tags=integration ./cmd/dcg-go -count=1 -timeout 10m
 
 # Unit test target with -race detector enabled (same package set as `make test`).
 # Does not include integration/external/comparison targets.
