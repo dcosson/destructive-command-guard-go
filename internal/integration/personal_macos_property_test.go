@@ -88,12 +88,8 @@ func TestPropertyPersonalFilesSeverityTiers(t *testing.T) {
 func TestPropertyMacOSPackRegistrationGated(t *testing.T) {
 	ids := []string{"macos.communication", "macos.privacy", "macos.system"}
 	for _, id := range ids {
-		has := HasRegisteredPack(id)
-		if runtime.GOOS == "darwin" && !has {
-			t.Fatalf("expected %s to be registered on darwin", id)
-		}
-		if runtime.GOOS != "darwin" && has {
-			t.Fatalf("did not expect %s on non-darwin", id)
+		if !HasRegisteredPack(id) {
+			t.Fatalf("expected %s to be registered on all platforms", id)
 		}
 	}
 }
