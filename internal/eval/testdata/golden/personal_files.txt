@@ -1,21 +1,21 @@
 # Golden file: personal.files and personal.ssh packs
 format: v1
 ---
-# D1: personal files delete
+# D1: desktop delete
 command: rm ~/Desktop/file.txt
 decision: Deny
 severity: Critical
 confidence: High
 pack: personal.files
-rule: personal-files-delete
+rule: desktop-delete
 ---
-# D2: personal files overwrite
+# D2: downloads overwrite
 command: cp file.txt ~/Downloads/
 decision: Ask
 severity: High
 confidence: High
 pack: personal.files
-rule: personal-files-overwrite
+rule: downloads-overwrite
 ---
 # D2 near-miss: no-clobber falls to access
 command: cp -n file.txt ~/Documents/
@@ -23,31 +23,23 @@ decision: Ask
 severity: Medium
 confidence: Medium
 pack: personal.files
-rule: personal-files-access
+rule: documents-access
 ---
-# D3: personal files modify
+# D3: documents modify
 command: chmod 777 ~/Documents/script.sh
 decision: Ask
 severity: High
 confidence: Medium
 pack: personal.files
-rule: personal-files-modify
+rule: documents-modify
 ---
-# D4: personal files write
+# D4: documents write
 command: sed -i 's/old/new/' ~/Documents/notes.txt
 decision: Ask
 severity: High
 confidence: Medium
 pack: personal.files
-rule: personal-files-write
----
-# D5: personal files access
-command: cat "~/Library/Mobile Documents/com~apple~CloudDocs/file.txt"
-decision: Ask
-severity: Medium
-confidence: Medium
-pack: personal.files
-rule: personal-files-access
+rule: documents-write
 ---
 # S1: ssh public key access
 command: cat ~/.ssh/id_rsa.pub

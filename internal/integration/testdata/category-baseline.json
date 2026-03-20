@@ -1,6 +1,6 @@
 {
-  "total_destructive": 116,
-  "total_privacy": 7,
+  "total_destructive": 138,
+  "total_privacy": 13,
   "total_both": 18,
   "packs": {
     "cloud.aws": {
@@ -104,8 +104,8 @@
       "both": 8
     },
     "macos.privacy": {
-      "destructive": 0,
-      "privacy": 5,
+      "destructive": 2,
+      "privacy": 6,
       "both": 0
     },
     "macos.system": {
@@ -114,8 +114,8 @@
       "both": 10
     },
     "personal.files": {
-      "destructive": 4,
-      "privacy": 1,
+      "destructive": 24,
+      "privacy": 6,
       "both": 0
     },
     "personal.ssh": {
