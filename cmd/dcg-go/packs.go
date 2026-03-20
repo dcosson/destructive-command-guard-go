@@ -28,7 +28,7 @@ func runPacksMode(args []string) error {
 	for _, p := range packs {
 		fmt.Fprintf(stdout, "  %-25s %s\n", p.ID, p.Name)
 		if p.Description != "" {
-			fmt.Fprintf(stdout, "  %-25s %s\n", "", p.Description)
+			fmt.Fprintf(stdout, "  %-25s %s\n", "", wrapLine(p.Description, contentCol, wrapWidth))
 		}
 		fmt.Fprintf(stdout, "  %-25s %s\n", "", formatKeywords(p.Keywords))
 		fmt.Fprintf(stdout, "  %-25s %d safe, %d destructive patterns\n", "", p.SafeCount, p.DestrCount)
@@ -37,14 +37,49 @@ func runPacksMode(args []string) error {
 	return nil
 }
 
-// formatKeywords wraps a keyword list at ~80 columns with proper indentation.
+const (
+	// Column where content starts (2 leading spaces + 25 padded field + 1).
+	contentCol = 28
+	// Target max line width for wrapping.
+	wrapWidth = 80
+	// Indentation string to align continuation lines with content.
+	contIndent = "                            " // 28 spaces
+)
+
+// wrapLine wraps prose text at ~wrapWidth columns, breaking on spaces.
+// startCol is the column offset where the text begins on its first line.
+func wrapLine(text string, startCol, maxWidth int) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	lineLen := startCol
+
+	for i, w := range words {
+		if i == 0 {
+			b.WriteString(w)
+			lineLen += len(w)
+			continue
+		}
+		if lineLen+1+len(w) > maxWidth {
+			b.WriteString("\n")
+			b.WriteString(contIndent)
+			b.WriteString(w)
+			lineLen = contentCol + len(w)
+		} else {
+			b.WriteString(" ")
+			b.WriteString(w)
+			lineLen += 1 + len(w)
+		}
+	}
+	return b.String()
+}
+
+// formatKeywords wraps a keyword list at ~wrapWidth columns with proper indentation.
 func formatKeywords(keywords []string) string {
-	const (
-		maxWidth = 80
-		prefix   = "Keywords: "
-		// 2 leading spaces + 25 padded field = 27 chars before content
-		indent = "                            " // 28 spaces to align with prefix
-	)
+	prefix := "Keywords: "
 
 	if len(keywords) == 0 {
 		return prefix + "(none)"
@@ -52,7 +87,7 @@ func formatKeywords(keywords []string) string {
 
 	var b strings.Builder
 	b.WriteString(prefix)
-	lineLen := 27 + len(prefix) // account for the leading column padding
+	lineLen := contentCol + len(prefix)
 
 	for i, kw := range keywords {
 		sep := ", "
@@ -60,12 +95,12 @@ func formatKeywords(keywords []string) string {
 			sep = ""
 		}
 		addition := sep + kw
-		if i > 0 && lineLen+len(addition) > maxWidth {
+		if i > 0 && lineLen+len(addition) > wrapWidth {
 			b.WriteString(",\n")
-			b.WriteString(indent)
+			b.WriteString(contIndent)
 			b.WriteString(strings.Repeat(" ", len(prefix)))
 			b.WriteString(kw)
-			lineLen = len(indent) + len(prefix) + len(kw)
+			lineLen = contentCol + len(prefix) + len(kw)
 		} else {
 			b.WriteString(addition)
 			lineLen += len(addition)
