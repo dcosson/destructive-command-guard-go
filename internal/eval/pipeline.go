@@ -248,10 +248,7 @@ func (p *Pipeline) activePacks(cfg Config) ([]packs.Pack, []Warning) {
 
 	var selected []packs.Pack
 	if cfg.EnabledPacks == nil {
-		selected = make([]packs.Pack, 0, len(all))
-		for _, pk := range all {
-			selected = append(selected, pk)
-		}
+		selected = append(selected, all...)
 	} else {
 		selected = make([]packs.Pack, 0, len(cfg.EnabledPacks))
 		for _, id := range cfg.EnabledPacks {

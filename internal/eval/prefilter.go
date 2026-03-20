@@ -85,10 +85,8 @@ func (p *PreFilter) CandidatePacks(matchedKeywords []string, enabledPacks []stri
 	}
 
 	enabledSet := make(map[string]struct{})
-	if enabledPacks != nil {
-		for _, id := range enabledPacks {
-			enabledSet[id] = struct{}{}
-		}
+	for _, id := range enabledPacks {
+		enabledSet[id] = struct{}{}
 	}
 
 	seen := make(map[string]struct{})

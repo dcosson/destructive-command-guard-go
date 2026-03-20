@@ -130,14 +130,14 @@ func printTestHuman(result guard.Result, explain bool) error {
 }
 
 type TestResult struct {
-	Command                  string              `json:"command"`
-	Decision                 string              `json:"decision"`
-	DestructiveSeverity      string              `json:"destructive_severity,omitempty"`
-	DestructiveConfidence    string              `json:"destructive_confidence,omitempty"`
-	PrivacySeverity          string              `json:"privacy_severity,omitempty"`
-	PrivacyConfidence        string              `json:"privacy_confidence,omitempty"`
-	Matches                  []TestMatchResult   `json:"matches,omitempty"`
-	Warnings                 []TestWarningResult `json:"warnings,omitempty"`
+	Command               string              `json:"command"`
+	Decision              string              `json:"decision"`
+	DestructiveSeverity   string              `json:"destructive_severity,omitempty"`
+	DestructiveConfidence string              `json:"destructive_confidence,omitempty"`
+	PrivacySeverity       string              `json:"privacy_severity,omitempty"`
+	PrivacyConfidence     string              `json:"privacy_confidence,omitempty"`
+	Matches               []TestMatchResult   `json:"matches,omitempty"`
+	Warnings              []TestWarningResult `json:"warnings,omitempty"`
 }
 
 type TestMatchResult struct {

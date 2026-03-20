@@ -86,9 +86,9 @@ type Assessment struct {
 type RuleCategory uint8
 
 const (
-	CategoryDestructive RuleCategory = 1 << iota // 0b01
-	CategoryPrivacy                               // 0b10
-	CategoryBoth = CategoryDestructive | CategoryPrivacy // 0b11
+	CategoryDestructive RuleCategory                            = 1 << iota // 0b01
+	CategoryPrivacy                                                         // 0b10
+	CategoryBoth        = CategoryDestructive | CategoryPrivacy             // 0b11
 )
 
 func (c RuleCategory) String() string {
