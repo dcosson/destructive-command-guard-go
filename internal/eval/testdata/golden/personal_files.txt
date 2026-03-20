@@ -3,8 +3,8 @@ format: v1
 ---
 # D1: desktop delete
 command: rm ~/Desktop/file.txt
-decision: Deny
-severity: Critical
+decision: Ask
+severity: High
 confidence: High
 pack: personal.files
 rule: desktop-delete
