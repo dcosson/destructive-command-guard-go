@@ -66,7 +66,7 @@ func TestStrictPolicyDecisions(t *testing.T) {
 		want Decision
 	}{
 		{name: "indeterminate", sev: Indeterminate, want: Deny},
-		{name: "low", sev: Low, want: Allow},
+		{name: "low", sev: Low, want: Deny},
 		{name: "medium", sev: Medium, want: Deny},
 		{name: "high", sev: High, want: Deny},
 		{name: "critical", sev: Critical, want: Deny},
