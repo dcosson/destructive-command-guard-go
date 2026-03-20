@@ -131,8 +131,8 @@ final decision:
 ### 3.4 Result Reporting
 
 The Result struct gains per-category assessments so callers can see why a
-decision was made in each dimension. The existing single `Assessment` field
-is kept for backward compatibility (set to the max of both categories).
+decision was made in each dimension. The single `Assessment` field is removed
+— callers use `DestructiveAssessment` and `PrivacyAssessment` directly.
 
 ## 4. Detailed Design
 
@@ -171,7 +171,7 @@ func (c RuleCategory) HasPrivacy() bool     { return c&CategoryPrivacy != 0 }
 ```go
 type Rule struct {
     ID           string
-    Category     evalcore.RuleCategory  // NEW — defaults to CategoryDestructive
+    Category     evalcore.RuleCategory
     Severity     int
     Confidence   int
     Reason       string
@@ -181,9 +181,9 @@ type Rule struct {
 }
 ```
 
-Rules with `Category == 0` (unset) are treated as `CategoryDestructive` during
-migration. See §4.10 for the mandatory normalization point that prevents
-fail-open bugs.
+Rules with `Category == 0` (unset) are normalized to `CategoryDestructive` at
+match construction time. See §4.10 for the mandatory normalization point that
+prevents fail-open bugs.
 
 ### 4.3 Match Struct Changes (`internal/evalcore`)
 
@@ -191,7 +191,7 @@ fail-open bugs.
 type Match struct {
     Pack         string
     Rule         string
-    Category     RuleCategory   // NEW
+    Category     RuleCategory
     Severity     Severity
     Confidence   Confidence
     Reason       string
@@ -205,9 +205,8 @@ type Match struct {
 ```go
 type Result struct {
     Decision              Decision
-    Assessment            *Assessment       // Max of both categories (backward compat)
-    DestructiveAssessment *Assessment       // NEW — nil if no destructive matches
-    PrivacyAssessment     *Assessment       // NEW — nil if no privacy matches
+    DestructiveAssessment *Assessment       // nil if no destructive matches
+    PrivacyAssessment     *Assessment       // nil if no privacy matches
     Matches               []Match
     Warnings              []Warning
     Command               string
@@ -230,10 +229,10 @@ type PolicyConfig struct {
 func (pc PolicyConfig) Decide(destructive, privacy *Assessment) Decision {
     dDec := Allow
     pDec := Allow
-    if destructive != nil && pc.DestructivePolicy != nil {
+    if destructive != nil {
         dDec = pc.DestructivePolicy.Decide(*destructive)
     }
-    if privacy != nil && pc.PrivacyPolicy != nil {
+    if privacy != nil {
         pDec = pc.PrivacyPolicy.Decide(*privacy)
     }
     // Merge: deny > ask > allow
@@ -251,9 +250,8 @@ func (pc PolicyConfig) Decide(destructive, privacy *Assessment) Decision {
 
 ```go
 type Config struct {
-    Policy             Policy    // Legacy single policy (backward compat)
-    DestructivePolicy  Policy    // NEW — overrides Policy for destructive rules
-    PrivacyPolicy      Policy    // NEW — overrides Policy for privacy rules
+    DestructivePolicy  Policy
+    PrivacyPolicy      Policy
     Allowlist          []string
     Blocklist          []string
     EnabledPacks       []string
@@ -262,9 +260,10 @@ type Config struct {
 }
 ```
 
-When `DestructivePolicy` or `PrivacyPolicy` are nil, they fall back to `Policy`.
-This ensures full backward compatibility — existing callers that only set
-`Policy` get the same behavior as today.
+Both `DestructivePolicy` and `PrivacyPolicy` are required. The old single
+`Policy` field is removed — callers must specify both. The `guard` package
+convenience functions (e.g., `StrictPolicy()`, `InteractivePolicy()`) can be
+used for both fields when a uniform policy is desired.
 
 ### 4.6 Pipeline Changes (`internal/eval`)
 
@@ -300,22 +299,16 @@ dAgg, pAgg := aggregateByCategory(result.Matches)
 result.DestructiveAssessment = dAgg
 result.PrivacyAssessment = pAgg
 
-// Backward-compat: overall assessment is max of both
-result.Assessment = maxAssessment(dAgg, pAgg)
-
-// Apply per-category policies
-dPolicy := cfg.DestructivePolicy
-if dPolicy == nil { dPolicy = cfg.Policy }
-pPolicy := cfg.PrivacyPolicy
-if pPolicy == nil { pPolicy = cfg.Policy }
-
-pc := PolicyConfig{DestructivePolicy: dPolicy, PrivacyPolicy: pPolicy}
+pc := PolicyConfig{
+    DestructivePolicy: cfg.DestructivePolicy,
+    PrivacyPolicy:     cfg.PrivacyPolicy,
+}
 result.Decision = pc.Decide(dAgg, pAgg)
 ```
 
 ### 4.7 Public API Changes (`guard` package)
 
-New option functions:
+The old `WithPolicy` option is replaced by two separate options:
 
 ```go
 func WithDestructivePolicy(p Policy) Option {
@@ -327,26 +320,20 @@ func WithPrivacyPolicy(p Policy) Option {
 }
 ```
 
+Both must be provided. The old `WithPolicy` is removed.
+
 ### 4.8 CLI / Config Changes
 
-The YAML config gains optional per-category policy fields:
+The YAML config uses per-category policy fields:
 
 ```yaml
-# Legacy (still works, applies to both categories):
-policy: interactive
-
-# New per-category overrides:
 destructive_policy: permissive
 privacy_policy: strict
 ```
 
-The `parsePolicy` function already exists and handles string-to-Policy
-conversion. The config struct and `toOptions()` method are extended to support
-the new fields.
-
-When per-category policies are set, they override the base `policy` for their
-respective category. When only `policy` is set, it applies to both (backward
-compat).
+The old single `policy` field is removed. Both fields are required in the
+config. The `parsePolicy` function already exists and handles string-to-Policy
+conversion.
 
 ### 4.9 Hook Output Changes
 
@@ -392,43 +379,22 @@ result.Matches = append(result.Matches, Match{
 A regression test must verify that a rule with `Category == 0` is treated as
 `CategoryDestructive` and does not bypass both aggregation lanes (see §7).
 
-## 5. Migration Plan
+## 5. Implementation Plan
 
 ### 5.1 Rule Tagging
 
 Every existing rule gets a `Category` field. Based on the audit:
 
-1. **Default to `CategoryDestructive`** — this covers 105/141 rules correctly
-   with zero changes.
-2. **Explicitly tag privacy rules** — ~20 rules across personal.files,
-   personal.ssh, macos.privacy packs.
-3. **Explicitly tag "both" rules** — ~16 rules in macos.system,
-   macos.communication packs.
+1. **Default to `CategoryDestructive`** — this covers the majority of rules
+   correctly with zero changes.
+2. **Explicitly tag privacy rules** — rules across personal.files,
+   personal.ssh, macos.privacy packs (see Appendix).
+3. **Explicitly tag "both" rules** — rules in macos.system,
+   macos.communication packs (see Appendix).
 
-This is a straightforward, mechanical change. A validation test should be added
-to ensure every rule has a non-zero category.
+A validation test ensures every rule has a non-zero category.
 
-### 5.2 Backward Compatibility
-
-This change is **behavior-compatible and additive**:
-
-- `Config.Policy` (single policy) continues to work exactly as before.
-- Per-category policies are opt-in via new fields.
-- `Result.Assessment` (single) is always populated with the max of both
-  categories for callers that don't use the new per-category assessments.
-- Existing tests remain valid without modification (they use single Policy).
-
-**Source and wire-format caveats**: Adding fields to `Match` and `Result`
-structs can break downstream consumers that use unkeyed struct literals
-(`Match{"pack", "rule", ...}`) or strict snapshot assertions over serialized
-(JSON/TSV) result payloads. Migration notes:
-
-- Callers using unkeyed struct literals must switch to keyed literals.
-- JSON consumers should use lenient deserialization that ignores unknown fields
-  (the standard `encoding/json` behavior).
-- Golden file / snapshot assertions will need regeneration (see §5.3).
-
-### 5.3 Golden File Updates
+### 5.2 Golden File Updates
 
 Golden files include match data. The Match struct gains a Category field, so
 golden files will need regeneration. This is mechanical — run the golden update
@@ -439,11 +405,11 @@ tool.
 No new packages needed. Changes are additive within existing packages:
 
 ```
-internal/evalcore/    ← RuleCategory type, PolicyConfig, updated Match/Result
+internal/evalcore/    ← RuleCategory type, PolicyConfig, Match/Result with Category
 internal/packs/       ← Rule.Category field
-internal/eval/        ← aggregateByCategory, updated Pipeline.Run, updated Config
+internal/eval/        ← aggregateByCategory, Pipeline.Run, Config with dual policies
 guard/                ← WithDestructivePolicy, WithPrivacyPolicy options
-cmd/dcg-go/           ← Config.DestructivePolicy/PrivacyPolicy, updated buildReason
+cmd/dcg-go/           ← Config with dual policies, buildReason with category prefix
 ```
 
 Import flow is unchanged — no new cycles.
@@ -571,7 +537,7 @@ source of truth post-merge.
 | # | Reviewer | Severity | Summary | Disposition | Notes |
 |---|----------|----------|---------|-------------|-------|
 | 1 | 06-rule-categories-review | P0 | Zero `Category` fail-open during migration | Incorporated | §4.2, §4.10 add mandatory normalization; §7 adds regression test |
-| 2 | 06-rule-categories-review | P1 | Backward-compat claim overstated for struct literals / snapshots | Incorporated | §5.2 reworded to "behavior-compatible, additive API" with migration notes |
+| 2 | 06-rule-categories-review | P1 | Backward-compat claim overstated for struct literals / snapshots | Incorporated | No external consumers — removed all backward-compat language, legacy fields, and fallback logic entirely |
 | 3 | 06-rule-categories-review | P1 | Inventory counts inconsistent with appendix | Incorporated | §2 counts fixed to match per-pack table; §7 adds CI baseline validation |
 | 4 | 06-rule-categories-review | P2 | No winning-lane explanation semantics | Incorporated | §3.3 added explanation precedence rules; §4.9 updated |
 | 5 | 06-rule-categories-review | P3 | "Both" info-loss narrative conflicts with bitmask model | Incorporated | §2 subsection rewritten to reflect bitmask model |
