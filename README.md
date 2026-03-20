@@ -44,7 +44,7 @@ data.
 
 | Severity | Allow All | Permissive | Moderate | Strict | Interactive (default) |
 |--------|:---:|:---:|:---:|:---:|:---:|
-| **Indeterminate** | Allow | Allow | Allow | Deny | Ask |
+| **Indeterminate** | Allow | Allow | Deny | Deny | Ask |
 | **Low** | Allow | Allow | Allow | Allow | Allow |
 | **Medium** | Allow | Allow | Allow | Deny | Ask |
 | **High** | Allow | Allow | Deny | Deny | Ask |

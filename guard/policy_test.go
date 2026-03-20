@@ -42,7 +42,7 @@ func TestModeratePolicyDecisions(t *testing.T) {
 		sev  Severity
 		want Decision
 	}{
-		{name: "indeterminate", sev: Indeterminate, want: Allow},
+		{name: "indeterminate", sev: Indeterminate, want: Deny},
 		{name: "low", sev: Low, want: Allow},
 		{name: "medium", sev: Medium, want: Allow},
 		{name: "high", sev: High, want: Deny},

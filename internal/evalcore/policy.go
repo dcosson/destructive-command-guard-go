@@ -25,7 +25,7 @@ func ModeratePolicy() Policy { return moderatePolicy{} }
 type moderatePolicy struct{}
 
 func (moderatePolicy) Decide(a Assessment) Decision {
-	if a.Severity >= High {
+	if a.Severity >= High || a.Severity == Indeterminate {
 		return Deny
 	}
 	return Allow
