@@ -1,13 +1,34 @@
 # destructive-command-guard-go
 
-A command-line tool and Go library that analyzes shell commands for destructive
-operations and returns allow/deny/ask decisions. Designed to be used as a
+A command-line tool and Go library that analyzes shell commands and returns
+`allow`, `deny`, or `ask` decisions. It is designed to be used as a
 [Claude Code hook](https://docs.anthropic.com/en/docs/claude-code/hooks) to
-intercept dangerous commands before they execute.
+intercept risky commands before they execute.
 
-It parses commands using tree-sitter grammars (bash, zsh, fish), matches them
-against a library of destructive patterns organized into packs, and applies a
-configurable policy to produce a decision.
+It parses bash commands with tree-sitter, matches them against registered
+rules, and evaluates the matching rules by category (destructive,
+privacy-sensitive, or both) and severity (`Low`, `Medium`, `High`, or
+`Critical`).
+
+At a high level, the library:
+
+1. Parses bash command text with tree-sitter.
+2. Extracts command structure from the syntax tree.
+3. Matches the command against registered rules, organized into packs.
+4. Produces separate assessments for destructive risk and privacy risk.
+5. Applies policy to turn those assessments into a final decision.
+
+## Terminology
+
+- A `rule` is one pattern the library knows how to recognize.
+- A `pack` is a collection of related rules, such as Git, filesystem, or
+  database operations.
+- Each rule has a `RuleCategory`: `Destructive`, `Privacy`, or `Both`.
+- Each rule also has a `Severity`: `Low`, `Medium`, `High`, or `Critical`.
+
+In other words, this library does not just look for "dangerous commands" in the
+abstract. It parses a bash command, matches it against typed rules, and then
+evaluates the matched rules by category and severity.
 
 ## Installation
 
@@ -61,8 +82,11 @@ dcg-go test --json "git push --force origin main"
 # With explanation
 dcg-go test --explain "DROP TABLE users;"
 
-# Override policy
+# Override both category policies together
 dcg-go test --policy permissive "git push --force"
+
+# Override category policies independently
+dcg-go test --destructive-policy permissive --privacy-policy strict "cat ~/.ssh/id_rsa"
 
 # Pass caller environment for context-aware evaluation
 dcg-go test --env "RAILS_ENV=production rails db:reset"
@@ -70,11 +94,13 @@ dcg-go test --env "RAILS_ENV=production rails db:reset"
 
 Exit codes: `0` = Allow, `1` = Error, `2` = Deny, `3` = Ask.
 
-### List packs
+### List packs and rules
 
 ```bash
-dcg-go packs          # Human-readable
-dcg-go packs --json   # Machine-readable
+dcg-go list packs         # Human-readable pack summary
+dcg-go list packs --json  # Machine-readable pack summary
+dcg-go list rules         # Human-readable rules grouped by category
+dcg-go list rules --json  # Machine-readable rule metadata
 ```
 
 ## Go Library
@@ -98,10 +124,16 @@ case guard.Allow:
 }
 ```
 
+Each match includes the rule category and severity that contributed to the
+decision. The result also keeps destructive and privacy assessments separate,
+then merges them into the final `Allow` / `Ask` / `Deny` decision.
+
 ### Options
 
 ```go
-guard.WithPolicy(p Policy)              // Strict, Interactive (default), or Permissive
+guard.WithPolicy(p Policy)              // Set both destructive and privacy policies
+guard.WithDestructivePolicy(p Policy)   // Set only the destructive policy
+guard.WithPrivacyPolicy(p Policy)       // Set only the privacy policy
 guard.WithAllowlist("git push *")       // Glob patterns to always allow
 guard.WithBlocklist("rm -rf /*")        // Glob patterns to always deny
 guard.WithPacks("core.git")             // Only evaluate specific packs
@@ -110,6 +142,9 @@ guard.WithEnv(os.Environ())             // Pass environment for context-aware ru
 ```
 
 ### Policies
+
+Policies are applied independently to the destructive assessment and the privacy
+assessment, then merged into one final decision.
 
 | Policy | Indeterminate | Low | Medium | High | Critical |
 |--------|:---:|:---:|:---:|:---:|:---:|
@@ -121,17 +156,19 @@ guard.WithEnv(os.Environ())             // Pass environment for context-aware ru
 
 ```go
 type Result struct {
-    Decision   Decision     // Allow, Deny, or Ask
-    Assessment *Assessment  // Aggregate severity + confidence
-    Matches    []Match      // Individual pattern matches (pack, rule, reason, remediation)
-    Warnings   []Warning    // Parse warnings (partial parse, truncation, etc.)
-    Command    string       // The original command
+    Decision              Decision     // Allow, Deny, or Ask
+    DestructiveAssessment *Assessment  // Aggregate destructive severity + confidence
+    PrivacyAssessment     *Assessment  // Aggregate privacy severity + confidence
+    Matches               []Match      // Individual matched rules
+    Warnings              []Warning    // Parse warnings (partial parse, truncation, etc.)
+    Command               string       // The original command
 }
 ```
 
 ## Pattern Packs
 
-Commands are matched against rule packs organized by domain:
+Commands are matched against rule packs organized by domain. Packs contain rules
+whose categories are destructive, privacy-sensitive, or both.
 
 | Pack | Description |
 |------|-------------|
@@ -143,9 +180,13 @@ Commands are matched against rule packs organized by domain:
 | `database.mongodb` | dropDatabase, dropCollection, mongorestore --drop |
 | `database.redis` | FLUSHALL, FLUSHDB, CONFIG SET, DEBUG |
 | `frameworks` | rails db:drop, db:reset in production |
+| `personal.*` | personal files and SSH material, including privacy-sensitive paths |
+| `secrets.*` | secret-management tools and sensitive secret access patterns |
+| `macos.privacy` | privacy-sensitive macOS automation and data access |
 
-Each pack contains safe patterns (known non-destructive commands) and
-destructive patterns with severity ratings and remediation suggestions.
+Each rule records a category, severity, reason, and remediation. Some packs
+also include safe patterns that short-circuit evaluation for known
+non-destructive cases.
 
 ## Project Structure
 
