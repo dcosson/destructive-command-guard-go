@@ -108,8 +108,29 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 
 	parsed := p.parser.ParseAndExtract(context.Background(), command, 0)
 	result.Warnings = append(result.Warnings, convertParseWarnings(parsed.Warnings)...)
+
+	// Parse error with no extracted commands: let policy decide via Indeterminate.
 	if len(parsed.Commands) == 0 {
-		result.Decision = DecisionAllow
+		if !parsed.HasError {
+			result.Decision = DecisionAllow
+			return result
+		}
+		indeterminate := &Assessment{
+			Severity:   SeverityIndeterminate,
+			Confidence: ConfidenceLow,
+		}
+		result.DestructiveAssessment = indeterminate
+		result.PrivacyAssessment = indeterminate
+		dPolicy := cfg.DestructivePolicy
+		if dPolicy == nil {
+			dPolicy = evalcore.InteractivePolicy()
+		}
+		pPolicy := cfg.PrivacyPolicy
+		if pPolicy == nil {
+			pPolicy = evalcore.InteractivePolicy()
+		}
+		pc := evalcore.PolicyConfig{DestructivePolicy: dPolicy, PrivacyPolicy: pPolicy}
+		result.Decision = pc.Decide(indeterminate, indeterminate)
 		return result
 	}
 
@@ -173,12 +194,28 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 		}
 	}
 
-	if len(result.Matches) == 0 {
+	if len(result.Matches) == 0 && !parsed.HasError {
 		result.Decision = DecisionAllow
 		return result
 	}
 
 	dAgg, pAgg := aggregateByCategory(result.Matches)
+
+	// Partial parse: ensure both assessments are at least Indeterminate
+	// so the policy can weigh in on the unparsed portion.
+	if parsed.HasError {
+		indeterminate := &Assessment{
+			Severity:   SeverityIndeterminate,
+			Confidence: ConfidenceLow,
+		}
+		if dAgg == nil {
+			dAgg = indeterminate
+		}
+		if pAgg == nil {
+			pAgg = indeterminate
+		}
+	}
+
 	result.DestructiveAssessment = dAgg
 	result.PrivacyAssessment = pAgg
 
