@@ -1,6 +1,6 @@
 # Rule Categories: Destructive vs Privacy — Design Doc
 
-**Status**: Draft
+**Status**: Complete
 **Author**: dcg-scheduler
 **Date**: 2026-03-06
 
@@ -694,3 +694,23 @@ source of truth post-merge.
 | 2 | tall-vale | P1 | Plan 02 pipeline code references `pack.Destructive` renamed to `pack.Rules` | Incorporated | §4.2 notes plan 02 is superseded; §5 tracks the update |
 | 3 | tall-vale | P2 | Hook JSON output lacks structured category metadata | Incorporated | §4.9 documents hook protocol limitation and reason-string-only approach |
 | 4 | tall-vale | P3 | `PackInfo` struct changes not fully specified | Incorporated | §4.10 now shows full `PackInfo` struct with per-category counts |
+
+---
+
+## Completion Signoff
+
+- **Status**: Complete
+- **Date**: 2026-03-20
+- **Branch**: main
+- **Commit**: 92f412d
+- **Verified by**: tall-vale
+- **Test verification**: `make test` — PASS (all packages)
+- **Acceptance tests**: PASS (7 dual-policy integration tests, 1 category baseline validation, 3 pipeline category tests, 2 evalcore bitmask/policy tests)
+- **Deviations from plan**:
+  - [Cosmetic] §2 summary counts (114 destructive / 8 privacy) differ from actual baseline (116 destructive / 7 privacy). Appendix was authoritative and correctly followed. personal.files has 1 privacy rule, not 2 as the per-pack table claimed.
+  - [Cosmetic] dcg-ovc.1 implemented several dcg-ovc.3 deliverables early (config YAML, test mode flags, hook output prefix, PackInfo, guard.Rules()). All plan items delivered, just across different beads than planned.
+  - [Cosmetic] `packs.go` retained as a thin wrapper rather than fully deleted — contains only shared formatting helpers (`wrapLine`, `formatKeywords`) used by list.go.
+- **Structural deviations resolved**: None found
+- **Additions beyond plan**:
+  - `guard.Rules()` and `RuleInfo` type implemented in dcg-ovc.1 (plan put these in §4.10 alongside list command)
+  - `TestDualPolicyBlocklistBypassesDualPolicy` and `TestDualPolicyAllowlistBypassesDualPolicy` integration tests (verifying the §4.11 blocklist/allowlist bypass behavior)
