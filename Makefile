@@ -1,5 +1,5 @@
-.PHONY: build clean deps lint test test-integration test-external \
-       test-comparison \
+.PHONY: build clean deps fmt fmt-check check check-nofix \
+       test test-integration test-external test-comparison \
        test-ci-tier1 test-ci-tier2 test-ci-tier3 test-all \
        bench bench-full test-race help
 
@@ -43,16 +43,30 @@ deps:
 	@echo "Set UPSTREAM_BINARY=/path/to/upstream-dcg when running make test-comparison."
 
 # --------------------------------------------------------------------------- #
-# Lint
+# Formatting & checks
 # --------------------------------------------------------------------------- #
 
-lint:
+# Format all Go source files in place.
+fmt:
+	gofmt -w .
+
+# Check formatting without modifying files (fails if unformatted).
+fmt-check:
+	@test -z "$$(gofmt -l .)" || (gofmt -l . && echo "above files are not formatted" && exit 1)
+
+# Format, then run vet + staticcheck.
+check: fmt
+	@echo "==> go vet"
 	go vet ./...
-	@if command -v staticcheck >/dev/null 2>&1; then \
-		staticcheck ./...; \
-	else \
-		echo "staticcheck not installed — run 'make deps' to install"; \
-	fi
+	@echo "==> staticcheck"
+	go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+
+# CI version: check formatting without fixing, then vet + staticcheck.
+check-nofix: fmt-check
+	@echo "==> go vet"
+	go vet ./...
+	@echo "==> staticcheck"
+	go run honnef.co/go/tools/cmd/staticcheck@latest ./...
 
 # --------------------------------------------------------------------------- #
 # Tests — primary targets
@@ -151,7 +165,9 @@ help:
 	@echo "  make build              Build the dcg-go binary"
 	@echo "  make clean              Remove build artifacts and test cache"
 	@echo "  make deps               Install optional tooling (staticcheck)"
-	@echo "  make lint               Run go vet + staticcheck"
+	@echo "  make fmt                Format all Go source files"
+	@echo "  make check              Format + vet + staticcheck"
+	@echo "  make check-nofix        Check formatting + vet + staticcheck (CI, no edits)"
 	@echo ""
 	@echo "Test (primary):"
 	@echo "  make test               Fast unit tests"
