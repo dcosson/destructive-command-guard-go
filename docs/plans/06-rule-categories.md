@@ -166,9 +166,23 @@ func (c RuleCategory) HasDestructive() bool { return c&CategoryDestructive != 0 
 func (c RuleCategory) HasPrivacy() bool     { return c&CategoryPrivacy != 0 }
 ```
 
-### 4.2 Rule Struct Changes (`internal/packs`)
+### 4.2 Pack and Rule Struct Changes (`internal/packs`)
+
+The `Pack.Destructive` field is renamed to `Pack.Rules` since it now holds
+rules of all categories (destructive, privacy, and both). `Pack.Safe` stays
+as-is — safe rules are exemption patterns that don't need categories.
 
 ```go
+type Pack struct {
+    ID              string
+    Name            string
+    Description     string
+    Keywords        []string
+    Safe            []Rule
+    Rules           []Rule   // was Destructive
+    HasEnvSensitive bool
+}
+
 type Rule struct {
     ID           string
     Category     evalcore.RuleCategory
@@ -181,8 +195,11 @@ type Rule struct {
 }
 ```
 
+All callers of `pack.Destructive` (pipeline.go, registry.go, guard.go, pack
+definitions, tests) must be updated to `pack.Rules`.
+
 Rules with `Category == 0` (unset) are normalized to `CategoryDestructive` at
-match construction time. See §4.10 for the mandatory normalization point that
+match construction time. See §4.11 for the mandatory normalization point that
 prevents fail-open bugs.
 
 ### 4.3 Match Struct Changes (`internal/evalcore`)
@@ -260,10 +277,9 @@ type Config struct {
 }
 ```
 
-Both `DestructivePolicy` and `PrivacyPolicy` are required. The old single
-`Policy` field is removed — callers must specify both. The `guard` package
-convenience functions (e.g., `StrictPolicy()`, `InteractivePolicy()`) can be
-used for both fields when a uniform policy is desired.
+Both `DestructivePolicy` and `PrivacyPolicy` must be non-nil at evaluation
+time. The `guard` package `defaultConfig()` sets both to `InteractivePolicy()`
+so bare `Evaluate()` calls work without explicit policy options.
 
 ### 4.6 Pipeline Changes (`internal/eval`)
 
@@ -320,7 +336,9 @@ func WithPrivacyPolicy(p Policy) Option {
 }
 ```
 
-Both must be provided. The old `WithPolicy` is removed.
+The old `WithPolicy` is removed. `defaultConfig()` sets both to
+`InteractivePolicy()`, so callers that don't pass either option get the same
+default behavior as today.
 
 ### 4.8 CLI / Config Changes
 
@@ -334,6 +352,17 @@ privacy_policy: strict
 The old single `policy` field is removed. Both fields are required in the
 config. The `parsePolicy` function already exists and handles string-to-Policy
 conversion.
+
+The `dcg-go test` command gains `--destructive-policy` and `--privacy-policy`
+flags. A bare `--policy X` is kept as shorthand that sets both to X:
+
+```
+dcg-go test --policy strict "rm -rf /"
+dcg-go test --destructive-policy permissive --privacy-policy strict "cat ~/.ssh/id_rsa"
+```
+
+Test mode output includes the category prefix on each match (same format as
+hook output in §4.9).
 
 ### 4.9 Hook Output Changes
 
@@ -401,7 +430,8 @@ Supports `--json` for machine-readable output.
 
 The existing `guard.Packs()` function and `PackInfo` struct are updated to
 include per-category counts (replacing the current `SafeCount`/`DestrCount`
-split). A new `guard.Rules()` function is added returning `[]RuleInfo`:
+with `DestructiveCount`/`PrivacyCount`/`BothCount`). A new `guard.Rules()`
+function is added returning `[]RuleInfo`:
 
 ```go
 type RuleInfo struct {
@@ -445,6 +475,11 @@ result.Matches = append(result.Matches, Match{
 A regression test must verify that a rule with `Category == 0` is treated as
 `CategoryDestructive` and does not bypass both aggregation lanes (see §7).
 
+**Note on blocklist/allowlist**: These short-circuit before category
+aggregation — blocklist always returns Deny, allowlist always returns Allow.
+Their synthetic Match objects get `CategoryDestructive` via normalization, but
+this is cosmetic since the dual-policy pipeline is never reached.
+
 ## 5. Implementation Plan
 
 ### 5.1 Rule Tagging
@@ -472,7 +507,7 @@ No new packages needed. Changes are additive within existing packages:
 
 ```
 internal/evalcore/    ← RuleCategory type, PolicyConfig, Match/Result with Category
-internal/packs/       ← Rule.Category field
+internal/packs/       ← Pack.Rules rename, Rule.Category field
 internal/eval/        ← aggregateByCategory, Pipeline.Run, Config with dual policies
 guard/                ← WithDestructivePolicy, WithPrivacyPolicy options
 cmd/dcg-go/           ← Config with dual policies, buildReason with category prefix
@@ -542,17 +577,11 @@ sequenceDiagram
     Pipeline-->>Caller: Result{Decision: Deny,<br/>PrivacyAssessment: {High, High}}
 ```
 
-## 9. Open Questions
+## 9. Future Directions
 
-1. **Should the "test" CLI mode show categories?** Likely yes — the `dcg-go test`
-   output should include the category of each match. Low complexity to add.
-
-2. **Should `dcg-go packs` show category distribution?** Would be useful for
-   users understanding what a pack covers. Could show counts per category.
-
-3. **Future: more granular categories?** The bitmask approach naturally extends
-   if we ever need categories beyond destructive/privacy (e.g., "network",
-   "system-config"). Not proposing this now, but the design doesn't preclude it.
+The bitmask approach naturally extends if we ever need categories beyond
+destructive/privacy (e.g., "network", "system-config"). Not proposing this
+now, but the design doesn't preclude it.
 
 ---
 
@@ -598,7 +627,7 @@ source of truth post-merge.
 | macos.communication | open-terminal |
 | macos.communication | osascript-jxa-catchall |
 
-## Review Disposition
+## Round 1 Review Disposition
 
 | # | Reviewer | Severity | Summary | Disposition | Notes |
 |---|----------|----------|---------|-------------|-------|
@@ -607,3 +636,13 @@ source of truth post-merge.
 | 3 | 06-rule-categories-review | P1 | Inventory counts inconsistent with appendix | Incorporated | §2 counts fixed to match per-pack table; §7 adds CI baseline validation |
 | 4 | 06-rule-categories-review | P2 | No winning-lane explanation semantics | Incorporated | §3.3 added explanation precedence rules; §4.9 updated |
 | 5 | 06-rule-categories-review | P3 | "Both" info-loss narrative conflicts with bitmask model | Incorporated | §2 subsection rewritten to reflect bitmask model |
+
+## Round 2 Review Disposition
+
+| # | Reviewer | Severity | Summary | Disposition | Notes |
+|---|----------|----------|---------|-------------|-------|
+| 1 | tall-vale | P1 | `Pack.Destructive` naming misleading for privacy rules | Incorporated | §4.2 renames to `Pack.Rules`; `Pack.Safe` unchanged |
+| 2 | tall-vale | P1 | Default policy behavior unspecified | Incorporated | §4.5 and §4.7 specify `InteractivePolicy()` defaults |
+| 3 | tall-vale | P2 | Test mode `--policy` flag not addressed | Incorporated | §4.8 adds `--destructive-policy`/`--privacy-policy` flags and `--policy` shorthand |
+| 4 | tall-vale | P2 | Open Questions §9 is stale | Incorporated | §9 resolved: Q1/Q2 answered by §4.8/§4.10, Q3 kept as future directions |
+| 5 | tall-vale | P3 | Blocklist matches get implicit CategoryDestructive | Incorporated | §4.11 adds note that blocklist/allowlist bypass dual-policy pipeline |
