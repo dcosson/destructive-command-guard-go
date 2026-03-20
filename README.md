@@ -3,7 +3,8 @@
 A command-line tool and Go library that analyzes shell commands and returns
 `allow`, `deny`, or `ask` decisions. It is designed to be used as a
 [Claude Code hook](https://docs.anthropic.com/en/docs/claude-code/hooks) to
-intercept risky commands before they execute.
+intercept risky commands before they execute. It is based on the Rust library
+[destructive_command_guard](https://github.com/Dicklesworthstone/destructive_command_guard).
 
 It parses bash commands with tree-sitter, matches them against registered
 rules, and evaluates the matching rules by category (destructive,
