@@ -44,6 +44,6 @@ var PolicyVariations = []PolicyExpectation{
 	{"permissive", "Allow"},
 	{"moderate", "Deny"},
 	{"strict", "Deny"},
-	{"block-all", "Deny"},
+	{"block", "Deny"},
 	{"interactive", "Ask"},
 }

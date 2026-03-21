@@ -44,13 +44,15 @@ example, you might be comfortable with destructive commands (you know what
 you're doing) but want strict protection against anything touching private
 data.
 
-| Severity | Allow All | Permissive | Moderate | Strict | Block All | Interactive (default) |
+| Severity | Allow All | Permissive | Moderate | Strict | Block | Interactive (default) |
 |--------|:---:|:---:|:---:|:---:|:---:|:---:|
 | **Indeterminate** | Allow | Allow | Deny | Deny | Deny | Ask |
 | **Low** | Allow | Allow | Allow | Allow | Deny | Allow |
 | **Medium** | Allow | Allow | Allow | Deny | Deny | Ask |
 | **High** | Allow | Allow | Deny | Deny | Deny | Ask |
 | **Critical** | Allow | Deny | Deny | Deny | Deny | Deny |
+
+To block all commands unconditionally (matched or not), use `WithBlocklist("*")`.
 
 Only **Interactive** ever returns `Ask`. All other policies return only
 `Allow` or `Deny`.
@@ -287,7 +289,7 @@ Tests follow a prefix-based naming convention that maps to Makefile targets:
 (override with `DCG_CONFIG` env var):
 
 ```yaml
-destructive_policy: moderate    # allow-all, permissive, moderate, strict, block-all, interactive
+destructive_policy: moderate    # allow-all, permissive, moderate, strict, block, interactive
 privacy_policy: strict
 allowlist:
   - "git status *"

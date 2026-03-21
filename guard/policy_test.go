@@ -81,8 +81,8 @@ func TestStrictPolicyDecisions(t *testing.T) {
 	}
 }
 
-func TestBlockAllPolicyDecisions(t *testing.T) {
-	p := BlockAllPolicy()
+func TestBlockPolicyDecisions(t *testing.T) {
+	p := BlockPolicy()
 	for _, sev := range []Severity{Indeterminate, Low, Medium, High, Critical} {
 		got := p.Decide(Assessment{Severity: sev})
 		if got != Deny {

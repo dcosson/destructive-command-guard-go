@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Added
-- **BlockAll policy** — denies everything regardless of severity
+- **Block policy** — denies all matched rules regardless of severity
 - **Per-directory personal file rules** — personal.files pack now has separate
   rules for Desktop, Documents, Downloads, Music, Pictures, and Videos with
   per-directory severity tuning
