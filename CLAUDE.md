@@ -93,3 +93,14 @@ Specifically:
 - **Test helpers**: shared heavy-suite helpers go in `internal/integration/`.
   Shared binary-subprocess helpers go in `tests/external/`. Per-package helpers
   go in `{package}/helpers_test.go` or `{package}/pack_helpers_test.go`.
+
+## Releasing
+
+1. Update `CHANGELOG.md`: move Unreleased items under a new `## vX.Y.Z — YYYY-MM-DD` heading
+2. Commit the changelog: `git commit -am "Release vX.Y.Z"`
+3. Run all CI checks: `make check-nofix && make test && make test-integration && make test-external`
+4. Ensure working directory is clean: `git status` should show nothing
+5. Tag the release: `git tag vX.Y.Z`
+6. Push tag and branch: `git push origin main --tags`
+
+Do NOT delete or move tags after pushing — consumers may pin to them.

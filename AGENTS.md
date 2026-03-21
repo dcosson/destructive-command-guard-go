@@ -92,3 +92,14 @@ cmd/dcg-go/         CLI binary
 - Push after committing on non-main branches.
 - Use descriptive commit messages: `{package}: {what changed}`
 - Run `make test` before every commit. Run `make test-external` if CLI behavior changed.
+
+## Releasing
+
+1. Update `CHANGELOG.md`: move Unreleased items under a new `## vX.Y.Z — YYYY-MM-DD` heading
+2. Commit the changelog: `git commit -am "Release vX.Y.Z"`
+3. Run all CI checks: `make check-nofix && make test && make test-integration && make test-external`
+4. Ensure working directory is clean: `git status` should show nothing
+5. Tag the release: `git tag vX.Y.Z`
+6. Push tag and branch: `git push origin main --tags`
+
+Do NOT delete or move tags after pushing — consumers may pin to them.
