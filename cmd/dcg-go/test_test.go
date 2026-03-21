@@ -7,7 +7,7 @@ import (
 )
 
 func TestParsePolicy(t *testing.T) {
-	for _, name := range []string{"allow-all", "permissive", "moderate", "strict", "block", "interactive"} {
+	for _, name := range []string{"allow-all", "permissive", "moderate", "strict", "very-strict", "interactive"} {
 		if _, err := parsePolicy(name); err != nil {
 			t.Fatalf("%s error: %v", name, err)
 		}

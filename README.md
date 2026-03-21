@@ -44,7 +44,7 @@ example, you might be comfortable with destructive commands (you know what
 you're doing) but want strict protection against anything touching private
 data.
 
-| Severity | Allow All | Permissive | Moderate | Strict | Block | Interactive (default) |
+| Severity | Allow All | Permissive | Moderate | Strict | Very Strict | Interactive (default) |
 |--------|:---:|:---:|:---:|:---:|:---:|:---:|
 | **Indeterminate** | Allow | Allow | Deny | Deny | Deny | Ask |
 | **Low** | Allow | Allow | Allow | Allow | Deny | Allow |
@@ -289,7 +289,7 @@ Tests follow a prefix-based naming convention that maps to Makefile targets:
 (override with `DCG_CONFIG` env var):
 
 ```yaml
-destructive_policy: moderate    # allow-all, permissive, moderate, strict, block, interactive
+destructive_policy: moderate    # allow-all, permissive, moderate, strict, very-strict, interactive
 privacy_policy: strict
 allowlist:
   - "git status *"

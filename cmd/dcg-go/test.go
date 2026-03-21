@@ -13,7 +13,7 @@ const policyHelp = `Available policies (from most to least permissive):
   permissive   Allow up to High, deny Critical
   moderate     Allow up to Medium, deny High+ and Indeterminate
   strict       Allow only Low, deny everything else
-  block        Deny all matched rules
+  very-strict  Deny all matched rules
   interactive  Ask for Indeterminate/Medium/High, deny Critical (default)`
 
 func newTestCmd() *cobra.Command {
@@ -124,12 +124,12 @@ func parsePolicy(name string) (guard.Policy, error) {
 		return guard.ModeratePolicy(), nil
 	case "strict":
 		return guard.StrictPolicy(), nil
-	case "block":
-		return guard.BlockPolicy(), nil
+	case "very-strict":
+		return guard.VeryStrictPolicy(), nil
 	case "interactive":
 		return guard.InteractivePolicy(), nil
 	default:
-		return nil, fmt.Errorf("unknown policy: %s (valid: allow-all, permissive, moderate, strict, block, interactive)", name)
+		return nil, fmt.Errorf("unknown policy: %s (valid: allow-all, permissive, moderate, strict, very-strict, interactive)", name)
 	}
 }
 

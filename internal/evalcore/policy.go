@@ -43,12 +43,12 @@ func (strictPolicy) Decide(a Assessment) Decision {
 	return Deny
 }
 
-// BlockPolicy denies all matched rules regardless of severity.
-func BlockPolicy() Policy { return blockPolicy{} }
+// VeryStrictPolicy denies all matched rules regardless of severity.
+func VeryStrictPolicy() Policy { return veryStrictPolicy{} }
 
-type blockPolicy struct{}
+type veryStrictPolicy struct{}
 
-func (blockPolicy) Decide(a Assessment) Decision { return Deny }
+func (veryStrictPolicy) Decide(a Assessment) Decision { return Deny }
 
 // InteractivePolicy asks the user for Indeterminate, Medium, and High.
 // Allows Low. Denies Critical.

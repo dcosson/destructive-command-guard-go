@@ -14,8 +14,8 @@ func ModeratePolicy() Policy { return evalcore.ModeratePolicy() }
 // StrictPolicy allows only Low, denies everything else including Indeterminate.
 func StrictPolicy() Policy { return evalcore.StrictPolicy() }
 
-// BlockPolicy denies all matched rules regardless of severity.
-func BlockPolicy() Policy { return evalcore.BlockPolicy() }
+// VeryStrictPolicy denies all matched rules regardless of severity.
+func VeryStrictPolicy() Policy { return evalcore.VeryStrictPolicy() }
 
 // InteractivePolicy asks the user for Indeterminate, Medium, and High. Allows Low. Denies Critical.
 func InteractivePolicy() Policy { return evalcore.InteractivePolicy() }
