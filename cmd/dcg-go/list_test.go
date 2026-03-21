@@ -1,20 +1,16 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
 )
 
-func TestRunListPacksHuman(t *testing.T) {
-	reset := withIO(t)
-	defer reset()
-
-	if err := runListMode([]string{"packs"}); err != nil {
-		t.Fatalf("runListMode packs error: %v", err)
+func TestListPacksHuman(t *testing.T) {
+	out, _, err := execCmd(t, "list", "packs")
+	if err != nil {
+		t.Fatalf("list packs error: %v", err)
 	}
-	out := stdout.(*bytes.Buffer).String()
 	if !strings.Contains(out, "Registered packs") {
 		t.Fatalf("missing header: %q", out)
 	}
@@ -26,88 +22,61 @@ func TestRunListPacksHuman(t *testing.T) {
 	}
 }
 
-func TestRunListPacksJSON(t *testing.T) {
-	reset := withIO(t)
-	defer reset()
-
-	if err := runListMode([]string{"packs", "--json"}); err != nil {
-		t.Fatalf("runListMode packs --json error: %v", err)
+func TestListPacksJSON(t *testing.T) {
+	out, _, err := execCmd(t, "list", "packs", "--json")
+	if err != nil {
+		t.Fatalf("list packs --json error: %v", err)
 	}
-	var out []map[string]any
-	if err := json.Unmarshal(stdout.(*bytes.Buffer).Bytes(), &out); err != nil {
+	var packs []map[string]any
+	if err := json.Unmarshal([]byte(out), &packs); err != nil {
 		t.Fatalf("invalid json: %v", err)
 	}
-	if len(out) == 0 {
+	if len(packs) == 0 {
 		t.Fatal("expected non-empty packs list")
 	}
-	// Verify per-category detail exists in JSON
-	first := out[0]
-	if _, ok := first["Destructive"]; !ok {
-		t.Fatal("missing Destructive in JSON output")
-	}
-	if _, ok := first["Privacy"]; !ok {
-		t.Fatal("missing Privacy in JSON output")
-	}
-	if _, ok := first["Both"]; !ok {
-		t.Fatal("missing Both in JSON output")
-	}
-}
-
-func TestRunListRulesHuman(t *testing.T) {
-	reset := withIO(t)
-	defer reset()
-
-	if err := runListMode([]string{"rules"}); err != nil {
-		t.Fatalf("runListMode rules error: %v", err)
-	}
-	out := stdout.(*bytes.Buffer).String()
-	if !strings.Contains(out, "Rules (") {
-		t.Fatalf("missing Rules header: %q", out)
-	}
-	if !strings.Contains(out, "[Destructive:") {
-		t.Fatalf("missing Destructive category tag: %q", out)
-	}
-	if !strings.Contains(out, "[Privacy:") {
-		t.Fatalf("missing Privacy category tag: %q", out)
-	}
-	if !strings.Contains(out, "core.git") {
-		t.Fatalf("missing core.git pack reference: %q", out)
-	}
-}
-
-func TestRunListRulesJSON(t *testing.T) {
-	reset := withIO(t)
-	defer reset()
-
-	if err := runListMode([]string{"rules", "--json"}); err != nil {
-		t.Fatalf("runListMode rules --json error: %v", err)
-	}
-	var out []map[string]any
-	if err := json.Unmarshal(stdout.(*bytes.Buffer).Bytes(), &out); err != nil {
-		t.Fatalf("invalid json: %v", err)
-	}
-	if len(out) == 0 {
-		t.Fatal("expected non-empty rules list")
-	}
-	// Verify rule fields exist
-	first := out[0]
-	for _, field := range []string{"ID", "PackID", "Category", "Severity", "Reason"} {
-		if _, ok := first[field]; !ok {
-			t.Fatalf("missing %s in JSON output", field)
+	first := packs[0]
+	for _, key := range []string{"Destructive", "Privacy", "Both"} {
+		if _, ok := first[key]; !ok {
+			t.Fatalf("missing %s in JSON output", key)
 		}
 	}
 }
 
-func TestRunListNoSubcommand(t *testing.T) {
-	err := runListMode(nil)
-	if err == nil {
-		t.Fatal("expected error for no subcommand")
+func TestListRulesHuman(t *testing.T) {
+	out, _, err := execCmd(t, "list", "rules")
+	if err != nil {
+		t.Fatalf("list rules error: %v", err)
+	}
+	if !strings.Contains(out, "Rules (") {
+		t.Fatalf("missing Rules header: %q", out)
+	}
+	if !strings.Contains(out, "[Destructive:") {
+		t.Fatalf("missing Destructive tag: %q", out)
+	}
+	if !strings.Contains(out, "[Privacy:") {
+		t.Fatalf("missing Privacy tag: %q", out)
+	}
+	if !strings.Contains(out, "core.git") {
+		t.Fatalf("missing core.git: %q", out)
 	}
 }
 
-func TestRunListUnknownSubcommand(t *testing.T) {
-	err := runListMode([]string{"bogus"})
-	if err == nil {
-		t.Fatal("expected error for unknown subcommand")
+func TestListRulesJSON(t *testing.T) {
+	out, _, err := execCmd(t, "list", "rules", "--json")
+	if err != nil {
+		t.Fatalf("list rules --json error: %v", err)
+	}
+	var rules []map[string]any
+	if err := json.Unmarshal([]byte(out), &rules); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if len(rules) == 0 {
+		t.Fatal("expected non-empty rules list")
+	}
+	first := rules[0]
+	for _, field := range []string{"ID", "PackID", "Category", "Severity", "Reason"} {
+		if _, ok := first[field]; !ok {
+			t.Fatalf("missing %s in JSON output", field)
+		}
 	}
 }

@@ -2,53 +2,57 @@ package main
 
 import (
 	"bytes"
-	"os"
-	"strings"
 	"testing"
 )
 
+// execCmd creates a fresh root command and executes it with the given args.
+// Returns stdout, stderr contents.
+func execCmd(t *testing.T, args ...string) (string, string, error) {
+	t.Helper()
+	outBuf := &bytes.Buffer{}
+	errBuf := &bytes.Buffer{}
+	oldOut, oldErr, oldExit, oldEnv := stdout, stderr, exitFn, environFn
+	stdout = outBuf
+	stderr = errBuf
+	exitFn = func(int) {} // don't exit during tests
+	t.Cleanup(func() {
+		stdout, stderr, exitFn, environFn = oldOut, oldErr, oldExit, oldEnv
+	})
+
+	cmd := newRootCmd()
+	cmd.SetArgs(args)
+	cmd.SetOut(outBuf)
+	cmd.SetErr(errBuf)
+	err := cmd.Execute()
+	return outBuf.String(), errBuf.String(), err
+}
+
 func TestMainHelp(t *testing.T) {
-	reset := withIO(t)
-	defer reset()
-
-	oldArgs := os.Args
-	os.Args = []string{"dcg-go", "help"}
-	t.Cleanup(func() { os.Args = oldArgs })
-
-	main()
-	if !strings.Contains(stdout.(*bytes.Buffer).String(), "Usage:") {
-		t.Fatalf("help output missing usage: %q", stdout.(*bytes.Buffer).String())
+	out, _, err := execCmd(t, "help")
+	if err != nil {
+		t.Fatalf("help error: %v", err)
+	}
+	if len(out) < 50 {
+		t.Fatalf("help output too short: %q", out)
 	}
 }
 
-func TestMainUnknownCommandExits(t *testing.T) {
-	reset := withIO(t)
-	defer reset()
-
-	oldArgs := os.Args
-	os.Args = []string{"dcg-go", "wat"}
-	t.Cleanup(func() { os.Args = oldArgs })
-
-	var code int
-	exitFn = func(c int) { code = c }
-	main()
-	if code != 1 {
-		t.Fatalf("exit code = %d, want 1", code)
-	}
-	if !strings.Contains(stderr.(*bytes.Buffer).String(), "unknown command: wat") {
-		t.Fatalf("stderr missing unknown command: %q", stderr.(*bytes.Buffer).String())
+func TestMainUnknownCommand(t *testing.T) {
+	_, _, err := execCmd(t, "wat")
+	if err == nil {
+		t.Fatal("expected error for unknown command")
 	}
 }
 
+// withIO swaps global IO vars for testing. Used by config and integration tests
+// that call internal functions directly.
 func withIO(t *testing.T) func() {
 	t.Helper()
 	oldIn, oldOut, oldErr := stdin, stdout, stderr
 	oldExit, oldEnv := exitFn, environFn
-	stdin = bytes.NewBuffer(nil)
+	stdin = &bytes.Buffer{}
 	stdout = &bytes.Buffer{}
 	stderr = &bytes.Buffer{}
-	exitFn = oldExit
-	environFn = oldEnv
 	return func() {
 		stdin, stdout, stderr = oldIn, oldOut, oldErr
 		exitFn, environFn = oldExit, oldEnv

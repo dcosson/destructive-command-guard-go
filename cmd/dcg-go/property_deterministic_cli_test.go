@@ -70,18 +70,14 @@ func TestDeterministicHookModeExamples(t *testing.T) {
 }
 
 func TestPropertyPacksModeDeterminism(t *testing.T) {
-	reset := withIO(t)
-	defer reset()
-
-	if err := runListMode([]string{"packs", "--json"}); err != nil {
-		t.Fatalf("runListMode packs --json: %v", err)
+	first, _, err := execCmd(t, "list", "packs", "--json")
+	if err != nil {
+		t.Fatalf("list packs --json: %v", err)
 	}
-	first := stdout.(*bytes.Buffer).String()
-	stdout = &bytes.Buffer{}
-	if err := runListMode([]string{"packs", "--json"}); err != nil {
-		t.Fatalf("runListMode packs --json (second): %v", err)
+	second, _, err := execCmd(t, "list", "packs", "--json")
+	if err != nil {
+		t.Fatalf("list packs --json (second): %v", err)
 	}
-	second := stdout.(*bytes.Buffer).String()
 	if first != second {
 		t.Fatalf("packs --json output changed between runs")
 	}
@@ -114,15 +110,12 @@ func TestDeterministicConfigPathPrecedence(t *testing.T) {
 }
 
 func TestDeterministicRunTestModeJSONShape(t *testing.T) {
-	reset := withIO(t)
-	defer reset()
-	exitFn = func(int) {}
-
-	if err := runTestMode([]string{"--json", "echo hello"}); err != nil {
-		t.Fatalf("runTestMode --json: %v", err)
+	outStr, _, err := execCmd(t, "test", "--json", "echo hello")
+	if err != nil {
+		t.Fatalf("test --json: %v", err)
 	}
 	var out map[string]any
-	if err := json.Unmarshal(stdout.(*bytes.Buffer).Bytes(), &out); err != nil {
+	if err := json.Unmarshal([]byte(outStr), &out); err != nil {
 		t.Fatalf("invalid json: %v", err)
 	}
 	if out["command"] != "echo hello" {

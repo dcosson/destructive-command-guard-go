@@ -2,79 +2,105 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 
 	"github.com/dcosson/destructive-command-guard-go/guard"
+	"github.com/spf13/cobra"
 )
 
-func runTestMode(args []string) error {
-	fs := flag.NewFlagSet("test", flag.ContinueOnError)
-	fs.SetOutput(stderr)
+func newTestCmd() *cobra.Command {
+	var (
+		explain       bool
+		jsonOut       bool
+		policyName    string
+		destrPolicy   string
+		privPolicy    string
+		envFlag       bool
+		allowlistFlag []string
+		blocklistFlag []string
+	)
 
-	explain := fs.Bool("explain", false, "Show detailed reasoning")
-	jsonOut := fs.Bool("json", false, "Output as JSON")
-	policyName := fs.String("policy", "", "Shorthand: set both destructive and privacy policy")
-	destrPolicyName := fs.String("destructive-policy", "", "Policy for destructive rules: allow-all, permissive, moderate, strict, interactive")
-	privPolicyName := fs.String("privacy-policy", "", "Policy for privacy rules: allow-all, permissive, moderate, strict, interactive")
-	envFlag := fs.Bool("env", false,
-		"Include process environment in detection. "+
-			"Note: without --env, only inline env vars are detected.")
+	cmd := &cobra.Command{
+		Use:   "test [flags] \"command\"",
+		Short: "Evaluate a command and print the result",
+		Long: `Evaluate a shell command against registered rules and print the result.
 
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() != 1 {
-		return fmt.Errorf("usage: dcg-go test [--explain] [--json] [--policy NAME] [--destructive-policy NAME] [--privacy-policy NAME] \"command\"")
+Exit codes: 0=Allow, 1=Error, 2=Deny, 3=Ask`,
+		Example: `  dcg-go test "git push --force"
+  dcg-go test --explain "DROP TABLE users;"
+  dcg-go test --json "git push --force origin main"
+  dcg-go test --policy strict "rm -rf /"
+  dcg-go test --destructive-policy permissive --privacy-policy strict "cat ~/.ssh/id_rsa"
+  dcg-go test --blocklist "rm *" "rm -rf /tmp"
+  dcg-go test --env "RAILS_ENV=production rails db:reset"`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			command := args[0]
+			cfg := loadConfig()
+			opts := cfg.toOptions()
+
+			if policyName != "" {
+				p, err := parsePolicy(policyName)
+				if err != nil {
+					return err
+				}
+				opts = append(opts, guard.WithDestructivePolicy(p), guard.WithPrivacyPolicy(p))
+			}
+			if destrPolicy != "" {
+				p, err := parsePolicy(destrPolicy)
+				if err != nil {
+					return err
+				}
+				opts = append(opts, guard.WithDestructivePolicy(p))
+			}
+			if privPolicy != "" {
+				p, err := parsePolicy(privPolicy)
+				if err != nil {
+					return err
+				}
+				opts = append(opts, guard.WithPrivacyPolicy(p))
+			}
+			if len(allowlistFlag) > 0 {
+				opts = append(opts, guard.WithAllowlist(allowlistFlag...))
+			}
+			if len(blocklistFlag) > 0 {
+				opts = append(opts, guard.WithBlocklist(blocklistFlag...))
+			}
+			if envFlag {
+				opts = append(opts, guard.WithEnv(environFn()))
+			}
+
+			result := guard.Evaluate(command, opts...)
+			if jsonOut {
+				if err := printTestJSON(result); err != nil {
+					return err
+				}
+			} else {
+				if err := printTestHuman(result, explain); err != nil {
+					return err
+				}
+			}
+
+			switch result.Decision {
+			case guard.Deny:
+				exitFn(2)
+			case guard.Ask:
+				exitFn(3)
+			}
+			return nil
+		},
 	}
 
-	command := fs.Arg(0)
-	cfg := loadConfig()
-	opts := cfg.toOptions()
+	cmd.Flags().BoolVar(&explain, "explain", false, "Show detailed reasoning")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
+	cmd.Flags().StringVar(&policyName, "policy", "", "Set both destructive and privacy policy (allow-all, permissive, moderate, strict, block, interactive)")
+	cmd.Flags().StringVar(&destrPolicy, "destructive-policy", "", "Policy for destructive rules")
+	cmd.Flags().StringVar(&privPolicy, "privacy-policy", "", "Policy for privacy rules")
+	cmd.Flags().BoolVar(&envFlag, "env", false, "Include process environment in detection")
+	cmd.Flags().StringSliceVar(&allowlistFlag, "allowlist", nil, "Glob patterns to always allow")
+	cmd.Flags().StringSliceVar(&blocklistFlag, "blocklist", nil, "Glob patterns to always deny")
 
-	if *policyName != "" {
-		p, err := parsePolicy(*policyName)
-		if err != nil {
-			return err
-		}
-		opts = append(opts, guard.WithDestructivePolicy(p), guard.WithPrivacyPolicy(p))
-	}
-	if *destrPolicyName != "" {
-		p, err := parsePolicy(*destrPolicyName)
-		if err != nil {
-			return err
-		}
-		opts = append(opts, guard.WithDestructivePolicy(p))
-	}
-	if *privPolicyName != "" {
-		p, err := parsePolicy(*privPolicyName)
-		if err != nil {
-			return err
-		}
-		opts = append(opts, guard.WithPrivacyPolicy(p))
-	}
-	if *envFlag {
-		opts = append(opts, guard.WithEnv(environFn()))
-	}
-
-	result := guard.Evaluate(command, opts...)
-	if *jsonOut {
-		if err := printTestJSON(result); err != nil {
-			return err
-		}
-	} else {
-		if err := printTestHuman(result, *explain); err != nil {
-			return err
-		}
-	}
-
-	switch result.Decision {
-	case guard.Deny:
-		exitFn(2)
-	case guard.Ask:
-		exitFn(3)
-	}
-	return nil
+	return cmd
 }
 
 func parsePolicy(name string) (guard.Policy, error) {

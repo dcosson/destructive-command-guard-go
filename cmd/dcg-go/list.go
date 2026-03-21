@@ -2,57 +2,96 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/dcosson/destructive-command-guard-go/guard"
+	"github.com/spf13/cobra"
 )
 
-func runListMode(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("usage: dcg-go list {packs,rules} [--json]")
+func newListCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List packs and rules",
 	}
-
-	switch args[0] {
-	case "packs":
-		return runListPacks(args[1:])
-	case "rules":
-		return runListRules(args[1:])
-	default:
-		return fmt.Errorf("unknown list subcommand: %s (valid: packs, rules)", args[0])
-	}
+	cmd.AddCommand(newListPacksCmd())
+	cmd.AddCommand(newListRulesCmd())
+	return cmd
 }
 
-func runListPacks(args []string) error {
-	fs := flag.NewFlagSet("list packs", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	jsonOut := fs.Bool("json", false, "Output as JSON")
-	if err := fs.Parse(args); err != nil {
-		return err
+func newListPacksCmd() *cobra.Command {
+	var jsonOut bool
+
+	cmd := &cobra.Command{
+		Use:   "packs",
+		Short: "List available pattern packs",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			packs := guard.Packs()
+			if jsonOut {
+				enc := json.NewEncoder(stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(packs)
+			}
+
+			fmt.Fprintf(stdout, "Registered packs (%d):\n\n", len(packs))
+			for _, p := range packs {
+				fmt.Fprintf(stdout, "  %-25s %s\n", p.ID, p.Name)
+				if p.Description != "" {
+					fmt.Fprintf(stdout, "  %-25s %s\n", "", wrapLine(p.Description, contentCol, wrapWidth))
+				}
+				fmt.Fprintf(stdout, "  %-25s %s\n", "", formatKeywords(p.Keywords))
+				fmt.Fprintf(stdout, "  %-25s Destructive: %s\n", "", formatCategoryDetail(p.Destructive))
+				fmt.Fprintf(stdout, "  %-25s Privacy: %s\n", "", formatCategoryDetail(p.Privacy))
+				fmt.Fprintf(stdout, "  %-25s Both: %s\n", "", formatCategoryDetail(p.Both))
+				fmt.Fprintln(stdout)
+			}
+			return nil
+		},
 	}
 
-	packs := guard.Packs()
-	if *jsonOut {
-		enc := json.NewEncoder(stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(packs)
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
+	return cmd
+}
+
+func newListRulesCmd() *cobra.Command {
+	var jsonOut bool
+
+	cmd := &cobra.Command{
+		Use:   "rules",
+		Short: "List all rules sorted by pack",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rules := guard.Rules()
+			if jsonOut {
+				enc := json.NewEncoder(stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(rules)
+			}
+
+			sort.Slice(rules, func(i, j int) bool {
+				if rules[i].PackID != rules[j].PackID {
+					return rules[i].PackID < rules[j].PackID
+				}
+				return rules[i].ID < rules[j].ID
+			})
+
+			const descIndentStr = "      " // 6 spaces for description lines
+			const descWidth = 74           // wrap description to this width (80 - 6)
+
+			fmt.Fprintf(stdout, "Rules (%d):\n", len(rules))
+			for _, r := range rules {
+				fmt.Fprintf(stdout, "  %s (%s) %s\n", r.ID, r.PackID, formatRuleCategory(r))
+				wrapped := wrapDesc(r.Reason, descWidth)
+				for _, line := range strings.Split(wrapped, "\n") {
+					fmt.Fprintf(stdout, "%s%s\n", descIndentStr, line)
+				}
+			}
+			return nil
+		},
 	}
 
-	fmt.Fprintf(stdout, "Registered packs (%d):\n\n", len(packs))
-	for _, p := range packs {
-		fmt.Fprintf(stdout, "  %-25s %s\n", p.ID, p.Name)
-		if p.Description != "" {
-			fmt.Fprintf(stdout, "  %-25s %s\n", "", wrapLine(p.Description, contentCol, wrapWidth))
-		}
-		fmt.Fprintf(stdout, "  %-25s %s\n", "", formatKeywords(p.Keywords))
-		fmt.Fprintf(stdout, "  %-25s Destructive: %s\n", "", formatCategoryDetail(p.Destructive))
-		fmt.Fprintf(stdout, "  %-25s Privacy: %s\n", "", formatCategoryDetail(p.Privacy))
-		fmt.Fprintf(stdout, "  %-25s Both: %s\n", "", formatCategoryDetail(p.Both))
-		fmt.Fprintln(stdout)
-	}
-	return nil
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
+	return cmd
 }
 
 func formatCategoryDetail(d guard.CategoryDetail) string {
@@ -106,40 +145,4 @@ func wrapDesc(text string, maxWidth int) string {
 		}
 	}
 	return b.String()
-}
-
-func runListRules(args []string) error {
-	fs := flag.NewFlagSet("list rules", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	jsonOut := fs.Bool("json", false, "Output as JSON")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	rules := guard.Rules()
-	if *jsonOut {
-		enc := json.NewEncoder(stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(rules)
-	}
-
-	sort.Slice(rules, func(i, j int) bool {
-		if rules[i].PackID != rules[j].PackID {
-			return rules[i].PackID < rules[j].PackID
-		}
-		return rules[i].ID < rules[j].ID
-	})
-
-	const descIndentStr = "      " // 6 spaces for description lines
-	const descWidth = 74           // wrap description to this width (80 - 6)
-
-	fmt.Fprintf(stdout, "Rules (%d):\n", len(rules))
-	for _, r := range rules {
-		fmt.Fprintf(stdout, "  %s (%s) %s\n", r.ID, r.PackID, formatRuleCategory(r))
-		wrapped := wrapDesc(r.Reason, descWidth)
-		for _, line := range strings.Split(wrapped, "\n") {
-			fmt.Fprintf(stdout, "%s%s\n", descIndentStr, line)
-		}
-	}
-	return nil
 }

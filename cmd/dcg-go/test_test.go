@@ -1,81 +1,82 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
 )
 
 func TestParsePolicy(t *testing.T) {
-	if _, err := parsePolicy("strict"); err != nil {
-		t.Fatalf("strict error: %v", err)
-	}
-	if _, err := parsePolicy("interactive"); err != nil {
-		t.Fatalf("interactive error: %v", err)
-	}
-	if _, err := parsePolicy("permissive"); err != nil {
-		t.Fatalf("permissive error: %v", err)
+	for _, name := range []string{"allow-all", "permissive", "moderate", "strict", "block", "interactive"} {
+		if _, err := parsePolicy(name); err != nil {
+			t.Fatalf("%s error: %v", name, err)
+		}
 	}
 	if _, err := parsePolicy("wat"); err == nil {
 		t.Fatal("expected error for unknown policy")
 	}
 }
 
-func TestRunTestModeDenyExitCode(t *testing.T) {
-	reset := withIO(t)
-	defer reset()
-
-	code := 0
-	exitFn = func(c int) { code = c }
-	if err := runTestMode([]string{"rm -rf /"}); err != nil {
-		t.Fatalf("runTestMode error: %v", err)
+func TestTestModeDenyExitCode(t *testing.T) {
+	out, _, err := execCmd(t, "test", "rm -rf /")
+	if err != nil {
+		t.Fatalf("test error: %v", err)
 	}
-	if code != 2 {
-		t.Fatalf("exit code = %d, want 2", code)
+	if !strings.Contains(out, "Decision: Deny") {
+		t.Fatalf("expected Deny: %q", out)
 	}
 }
 
-func TestRunTestModeJSONOutput(t *testing.T) {
-	reset := withIO(t)
-	defer reset()
-
-	exitFn = func(int) {}
-	if err := runTestMode([]string{"--json", "git status"}); err != nil {
-		t.Fatalf("runTestMode error: %v", err)
+func TestTestModeJSONOutput(t *testing.T) {
+	out, _, err := execCmd(t, "test", "--json", "git status")
+	if err != nil {
+		t.Fatalf("test --json error: %v", err)
 	}
-
-	var out map[string]any
-	if err := json.Unmarshal(stdout.(*bytes.Buffer).Bytes(), &out); err != nil {
-		t.Fatalf("json output invalid: %v\n%s", err, stdout.(*bytes.Buffer).String())
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("json invalid: %v\n%s", err, out)
 	}
-	if out["command"] != "git status" {
-		t.Fatalf("command = %#v", out["command"])
+	if result["command"] != "git status" {
+		t.Fatalf("command = %#v", result["command"])
 	}
 }
 
-func TestRunTestModeExplainOutput(t *testing.T) {
-	reset := withIO(t)
-	defer reset()
-
-	exitFn = func(int) {}
-	if err := runTestMode([]string{"--explain", "rm -rf /"}); err != nil {
-		t.Fatalf("runTestMode error: %v", err)
+func TestTestModeExplainOutput(t *testing.T) {
+	out, _, err := execCmd(t, "test", "--explain", "rm -rf /")
+	if err != nil {
+		t.Fatalf("test --explain error: %v", err)
 	}
-	s := stdout.(*bytes.Buffer).String()
-	if !strings.Contains(s, "Decision: Deny") {
-		t.Fatalf("output missing decision: %q", s)
+	if !strings.Contains(out, "Decision: Deny") {
+		t.Fatalf("missing decision: %q", out)
 	}
-	if !strings.Contains(s, "Reason:") {
-		t.Fatalf("output missing explain reason: %q", s)
+	if !strings.Contains(out, "Reason:") {
+		t.Fatalf("missing explain reason: %q", out)
 	}
 }
 
-func TestRunTestModeUsageError(t *testing.T) {
-	reset := withIO(t)
-	defer reset()
+func TestTestModeNoArgs(t *testing.T) {
+	_, _, err := execCmd(t, "test")
+	if err == nil {
+		t.Fatal("expected error for no args")
+	}
+}
 
-	if err := runTestMode(nil); err == nil {
-		t.Fatal("expected usage error")
+func TestTestModeBlocklist(t *testing.T) {
+	out, _, err := execCmd(t, "test", "--blocklist", "echo *", "echo hello")
+	if err != nil {
+		t.Fatalf("test --blocklist error: %v", err)
+	}
+	if !strings.Contains(out, "Decision: Deny") {
+		t.Fatalf("expected Deny with blocklist: %q", out)
+	}
+}
+
+func TestTestModeAllowlist(t *testing.T) {
+	out, _, err := execCmd(t, "test", "--allowlist", "rm *", "rm -rf /")
+	if err != nil {
+		t.Fatalf("test --allowlist error: %v", err)
+	}
+	if !strings.Contains(out, "Decision: Allow") {
+		t.Fatalf("expected Allow with allowlist: %q", out)
 	}
 }

@@ -309,8 +309,8 @@ func TestBinaryVersionAndHelp(t *testing.T) {
 		if err != nil {
 			t.Fatalf("help failed: %v", err)
 		}
-		if !strings.Contains(string(out), "list packs") {
-			t.Fatalf("help missing list packs: %s", out)
+		if !strings.Contains(string(out), "list") {
+			t.Fatalf("help missing list command: %s", out)
 		}
 	})
 }

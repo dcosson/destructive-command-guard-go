@@ -22,15 +22,17 @@ func TestDecisionToHookDecision(t *testing.T) {
 }
 
 func TestWriteHookOutput(t *testing.T) {
-	reset := withIO(t)
-	defer reset()
+	outBuf := &bytes.Buffer{}
+	oldOut := stdout
+	stdout = outBuf
+	t.Cleanup(func() { stdout = oldOut })
 
 	if err := writeHookOutput("deny", "test reason"); err != nil {
 		t.Fatalf("writeHookOutput error: %v", err)
 	}
 
 	var out HookOutput
-	if err := json.Unmarshal(stdout.(*bytes.Buffer).Bytes(), &out); err != nil {
+	if err := json.Unmarshal(outBuf.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal output: %v", err)
 	}
 	if out.HookSpecificOutput.PermissionDecision != "deny" {
@@ -42,16 +44,18 @@ func TestWriteHookOutput(t *testing.T) {
 }
 
 func TestRunHookModeNonBashAllows(t *testing.T) {
-	reset := withIO(t)
-	defer reset()
-
+	outBuf := &bytes.Buffer{}
+	oldIn, oldOut := stdin, stdout
 	stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"command":"git push --force"}}`)
+	stdout = outBuf
+	t.Cleanup(func() { stdin, stdout = oldIn, oldOut })
+
 	if err := runHookMode(); err != nil {
 		t.Fatalf("runHookMode error: %v", err)
 	}
 
 	var out HookOutput
-	if err := json.Unmarshal(stdout.(*bytes.Buffer).Bytes(), &out); err != nil {
+	if err := json.Unmarshal(outBuf.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal output: %v", err)
 	}
 	if out.HookSpecificOutput.PermissionDecision != "allow" {
@@ -60,16 +64,18 @@ func TestRunHookModeNonBashAllows(t *testing.T) {
 }
 
 func TestRunHookModeBashDeny(t *testing.T) {
-	reset := withIO(t)
-	defer reset()
-
+	outBuf := &bytes.Buffer{}
+	oldIn, oldOut := stdin, stdout
 	stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"rm -rf /"}}`)
+	stdout = outBuf
+	t.Cleanup(func() { stdin, stdout = oldIn, oldOut })
+
 	if err := runHookMode(); err != nil {
 		t.Fatalf("runHookMode error: %v", err)
 	}
 
 	var out HookOutput
-	if err := json.Unmarshal(stdout.(*bytes.Buffer).Bytes(), &out); err != nil {
+	if err := json.Unmarshal(outBuf.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal output: %v", err)
 	}
 	if out.HookSpecificOutput.PermissionDecision != "deny" {
@@ -81,19 +87,23 @@ func TestRunHookModeBashDeny(t *testing.T) {
 }
 
 func TestRunHookModeUnsupportedEventWarnsAndAllows(t *testing.T) {
-	reset := withIO(t)
-	defer reset()
-
+	outBuf := &bytes.Buffer{}
+	errBuf := &bytes.Buffer{}
+	oldIn, oldOut, oldErr := stdin, stdout, stderr
 	stdin = strings.NewReader(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"rm -rf /"}}`)
+	stdout = outBuf
+	stderr = errBuf
+	t.Cleanup(func() { stdin, stdout, stderr = oldIn, oldOut, oldErr })
+
 	if err := runHookMode(); err != nil {
 		t.Fatalf("runHookMode error: %v", err)
 	}
 
-	if !strings.Contains(stderr.(*bytes.Buffer).String(), "unsupported hook event") {
-		t.Fatalf("stderr missing warning: %q", stderr.(*bytes.Buffer).String())
+	if !strings.Contains(errBuf.String(), "unsupported hook event") {
+		t.Fatalf("stderr missing warning: %q", errBuf.String())
 	}
 	var out HookOutput
-	if err := json.Unmarshal(stdout.(*bytes.Buffer).Bytes(), &out); err != nil {
+	if err := json.Unmarshal(outBuf.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal output: %v", err)
 	}
 	if out.HookSpecificOutput.PermissionDecision != "allow" {
