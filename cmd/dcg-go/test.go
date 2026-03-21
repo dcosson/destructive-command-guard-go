@@ -102,13 +102,14 @@ Exit codes: 0=Allow, 1=Error, 2=Deny, 3=Ask
 		},
 	}
 
-	cmd.Flags().BoolVar(&explain, "explain", false, "Show detailed reasoning")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
-	cmd.Flags().StringVar(&destrPolicy, "destructive-policy", "", "Policy for destructive rules (see --help for options)")
-	cmd.Flags().StringVar(&privPolicy, "privacy-policy", "", "Policy for privacy rules (see --help for options)")
-	cmd.Flags().BoolVar(&envFlag, "env", false, "Include process environment in detection")
+	cmd.Flags().SortFlags = false
+	cmd.Flags().StringVar(&destrPolicy, "destructive-policy", "", "Policy for destructive rules (see policies above)")
+	cmd.Flags().StringVar(&privPolicy, "privacy-policy", "", "Policy for privacy rules (see policies above)")
 	cmd.Flags().StringSliceVar(&allowlistFlag, "allowlist", nil, "Glob patterns to always allow")
 	cmd.Flags().StringSliceVar(&blocklistFlag, "blocklist", nil, "Glob patterns to always deny")
+	cmd.Flags().BoolVar(&envFlag, "env", false, "Include process environment in detection")
+	cmd.Flags().BoolVar(&explain, "explain", false, "Show detailed reasoning")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
 
 	return cmd
 }
