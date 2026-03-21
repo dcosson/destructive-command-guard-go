@@ -8,11 +8,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const policyHelp = `Available policies (from most to least permissive):
+  allow-all    Allow everything
+  permissive   Allow up to High, deny Critical
+  moderate     Allow up to Medium, deny High+ and Indeterminate
+  strict       Allow only Low, deny everything else
+  block        Deny all matched rules
+  interactive  Ask for Indeterminate/Medium/High, deny Critical (default)`
+
 func newTestCmd() *cobra.Command {
 	var (
 		explain       bool
 		jsonOut       bool
-		policyName    string
 		destrPolicy   string
 		privPolicy    string
 		envFlag       bool
@@ -25,11 +32,16 @@ func newTestCmd() *cobra.Command {
 		Short: "Evaluate a command and print the result",
 		Long: `Evaluate a shell command against registered rules and print the result.
 
-Exit codes: 0=Allow, 1=Error, 2=Deny, 3=Ask`,
+If only one of --destructive-policy or --privacy-policy is set, the
+other defaults to allow-all.
+
+Exit codes: 0=Allow, 1=Error, 2=Deny, 3=Ask
+
+` + policyHelp,
 		Example: `  dcg-go test "git push --force"
   dcg-go test --explain "DROP TABLE users;"
   dcg-go test --json "git push --force origin main"
-  dcg-go test --policy strict "rm -rf /"
+  dcg-go test --destructive-policy strict "rm -rf /"
   dcg-go test --destructive-policy permissive --privacy-policy strict "cat ~/.ssh/id_rsa"
   dcg-go test --blocklist "rm *" "rm -rf /tmp"
   dcg-go test --env "RAILS_ENV=production rails db:reset"`,
@@ -39,19 +51,15 @@ Exit codes: 0=Allow, 1=Error, 2=Deny, 3=Ask`,
 			cfg := loadConfig()
 			opts := cfg.toOptions()
 
-			if policyName != "" {
-				p, err := parsePolicy(policyName)
-				if err != nil {
-					return err
-				}
-				opts = append(opts, guard.WithDestructivePolicy(p), guard.WithPrivacyPolicy(p))
-			}
 			if destrPolicy != "" {
 				p, err := parsePolicy(destrPolicy)
 				if err != nil {
 					return err
 				}
 				opts = append(opts, guard.WithDestructivePolicy(p))
+				if privPolicy == "" {
+					opts = append(opts, guard.WithPrivacyPolicy(guard.AllowAllPolicy()))
+				}
 			}
 			if privPolicy != "" {
 				p, err := parsePolicy(privPolicy)
@@ -59,6 +67,9 @@ Exit codes: 0=Allow, 1=Error, 2=Deny, 3=Ask`,
 					return err
 				}
 				opts = append(opts, guard.WithPrivacyPolicy(p))
+				if destrPolicy == "" {
+					opts = append(opts, guard.WithDestructivePolicy(guard.AllowAllPolicy()))
+				}
 			}
 			if len(allowlistFlag) > 0 {
 				opts = append(opts, guard.WithAllowlist(allowlistFlag...))
@@ -93,9 +104,8 @@ Exit codes: 0=Allow, 1=Error, 2=Deny, 3=Ask`,
 
 	cmd.Flags().BoolVar(&explain, "explain", false, "Show detailed reasoning")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
-	cmd.Flags().StringVar(&policyName, "policy", "", "Set both destructive and privacy policy (allow-all, permissive, moderate, strict, block, interactive)")
-	cmd.Flags().StringVar(&destrPolicy, "destructive-policy", "", "Policy for destructive rules")
-	cmd.Flags().StringVar(&privPolicy, "privacy-policy", "", "Policy for privacy rules")
+	cmd.Flags().StringVar(&destrPolicy, "destructive-policy", "", "Policy for destructive rules (see --help for options)")
+	cmd.Flags().StringVar(&privPolicy, "privacy-policy", "", "Policy for privacy rules (see --help for options)")
 	cmd.Flags().BoolVar(&envFlag, "env", false, "Include process environment in detection")
 	cmd.Flags().StringSliceVar(&allowlistFlag, "allowlist", nil, "Glob patterns to always allow")
 	cmd.Flags().StringSliceVar(&blocklistFlag, "blocklist", nil, "Glob patterns to always deny")

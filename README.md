@@ -109,10 +109,10 @@ dcg-go test --json "git push --force origin main"
 # With explanation
 dcg-go test --explain "DROP TABLE users;"
 
-# Override both category policies together
-dcg-go test --policy permissive "git push --force"
+# Override destructive policy (privacy defaults to allow-all)
+dcg-go test --destructive-policy strict "git push --force"
 
-# Override category policies independently
+# Override both category policies independently
 dcg-go test --destructive-policy permissive --privacy-policy strict "cat ~/.ssh/id_rsa"
 
 # Pass caller environment for context-aware evaluation

@@ -143,7 +143,7 @@ func TestBinaryDualPolicySplit(t *testing.T) {
 	})
 
 	t.Run("policy-shorthand-sets-both", func(t *testing.T) {
-		result, exit := runCLI(t, "--policy", "strict", "git push --force")
+		result, exit := runCLI(t, "--destructive-policy", "strict", "--privacy-policy", "strict", "git push --force")
 		if exit != 2 {
 			t.Fatalf("expected Deny for strict, got exit=%d decision=%s", exit, result.Decision)
 		}
@@ -269,7 +269,7 @@ func TestBinaryTestMode(t *testing.T) {
 		{"deny-destructive-command", []string{"test", "rm -rf /tmp/e2e"}, 2, "Decision: Deny"},
 		{"json-output", []string{"test", "--json", "git push --force"}, 3, `"decision": "Ask"`},
 		{"explain-mode", []string{"test", "--explain", "git push --force"}, 3, "Reason:"},
-		{"policy-override-permissive", []string{"test", "--policy", "permissive", "git push --force"}, 0, "Decision: Allow"},
+		{"policy-override-permissive", []string{"test", "--destructive-policy", "permissive", "git push --force"}, 0, "Decision: Allow"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
