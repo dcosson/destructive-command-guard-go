@@ -188,6 +188,20 @@ func TestNormalize_Glob(t *testing.T) {
 	}
 }
 
+func TestNormalize_Glob_NoPath(t *testing.T) {
+	result := Normalize("Glob", map[string]any{"pattern": "*.go"})
+	if result.NormalizationError {
+		t.Fatal("Glob with missing path should not be a normalization error (path is optional)")
+	}
+	if len(result.Commands) != 1 {
+		t.Fatalf("expected 1 command, got %d", len(result.Commands))
+	}
+	wantRaw := "find . -name *.go"
+	if result.RawText != wantRaw {
+		t.Errorf("RawText = %q, want %q", result.RawText, wantRaw)
+	}
+}
+
 func TestNormalize_WebFetch(t *testing.T) {
 	result := Normalize("WebFetch", map[string]any{"url": "https://example.com/api"})
 	if len(result.Commands) != 1 {

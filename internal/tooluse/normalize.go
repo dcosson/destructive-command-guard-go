@@ -105,12 +105,17 @@ func normalizeFromCatalog(def *ToolDef, toolInput map[string]any) NormalizeResul
 	// Extract the primary path field.
 	pathVal, ok := extractString(toolInput, def.PathField)
 	if !ok {
-		return NormalizeResult{
-			NormalizationError: true,
-			CommandSummary:     def.ToolName,
-			Warnings: []Warning{{
-				Message: fmt.Sprintf("%s tool missing or invalid '%s' field", def.ToolName, def.PathField),
-			}},
+		if def.PathOptional {
+			// Path is optional (e.g. Glob defaults to cwd) — use "." as default.
+			pathVal = "."
+		} else {
+			return NormalizeResult{
+				NormalizationError: true,
+				CommandSummary:     def.ToolName,
+				Warnings: []Warning{{
+					Message: fmt.Sprintf("%s tool missing or invalid '%s' field", def.ToolName, def.PathField),
+				}},
+			}
 		}
 	}
 

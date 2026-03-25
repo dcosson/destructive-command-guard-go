@@ -21,6 +21,9 @@ type ToolDef struct {
 	// PathBeforeExtras puts the path arg before extra fields in the synthetic
 	// command (e.g. find <path> -name <pattern> instead of find <pattern> <path>).
 	PathBeforeExtras bool
+	// PathOptional means the path field can be absent without triggering a
+	// normalization error (e.g. Glob defaults to cwd when path is omitted).
+	PathOptional bool
 	// NoEval means this tool is known but has no security-relevant inputs
 	// to evaluate (e.g. Agent, WebSearch). Returns Allow with no matching.
 	NoEval bool
@@ -33,7 +36,7 @@ var Catalog = []ToolDef{
 	{ToolName: "Write", SyntheticCommand: "tee", PathField: "file_path"},
 	{ToolName: "Edit", SyntheticCommand: "sed", PathField: "file_path", Flags: map[string]string{"-i": ""}},
 	{ToolName: "Grep", SyntheticCommand: "grep", PathField: "path", ExtraFields: []string{"pattern"}},
-	{ToolName: "Glob", SyntheticCommand: "find", PathField: "path", ExtraFieldPrefix: "-name", ExtraFields: []string{"pattern"}, PathBeforeExtras: true},
+	{ToolName: "Glob", SyntheticCommand: "find", PathField: "path", ExtraFieldPrefix: "-name", ExtraFields: []string{"pattern"}, PathBeforeExtras: true, PathOptional: true},
 	{ToolName: "NotebookEdit", SyntheticCommand: "sed", PathField: "file_path", Flags: map[string]string{"-i": ""}},
 	{ToolName: "WebFetch", SyntheticCommand: "curl", PathField: "url"},
 	{ToolName: "Agent", NoEval: true},
