@@ -2,6 +2,9 @@
        test test-integration test-external test-comparison test-all \
        bench bench-full test-race help
 
+# Go binary path
+GOBIN ?= $(shell go env GOPATH)/bin
+
 # Build output directory
 BUILD_DIR ?= ./build
 
@@ -54,15 +57,12 @@ fmt-check:
 	@test -z "$$(gofmt -l .)" || (gofmt -l . && echo "above files are not formatted" && exit 1)
 
 # Format, then run vet + staticcheck.
+# Requires make deps to have been run first.
 check: fmt
 	@echo "==> go vet"
 	go vet ./...
 	@echo "==> staticcheck"
-	@if command -v staticcheck >/dev/null 2>&1; then \
-		staticcheck ./...; \
-	else \
-		go run honnef.co/go/tools/cmd/staticcheck@latest ./...; \
-	fi
+	$(GOBIN)/staticcheck ./...
 
 # CI version: check formatting without fixing, then vet + staticcheck.
 # Expects staticcheck installed via make deps.
@@ -70,7 +70,7 @@ check-nofix: fmt-check
 	@echo "==> go vet"
 	go vet ./...
 	@echo "==> staticcheck"
-	staticcheck ./...
+	$(GOBIN)/staticcheck ./...
 
 # --------------------------------------------------------------------------- #
 # Tests — primary targets
