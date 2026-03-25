@@ -3,6 +3,7 @@
 ## v0.2.1 — 2026-03-24
 
 ### Fixed
+- Glob `path` field is now optional (defaults to cwd), matching Claude Code behavior
 - Use GOBIN for staticcheck in Makefile (no PATH dependency)
 - Remove flaky TestBenchmarkStability (system load variance, not code quality)
 
@@ -24,7 +25,6 @@
 - Empty Bash tool input now preserves Bash-path semantics instead of falling into
   normalization-error handling
 - Glob normalization now matches the documented synthetic command ordering
-- Glob `path` field is now optional (defaults to cwd), matching Claude Code behavior
 - `Result` now exposes `Reason()` and `Remediation()` helpers
 - `--explain` flag removed from `dcg-go test` (reason/remediation always shown)
 
