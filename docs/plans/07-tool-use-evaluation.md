@@ -399,7 +399,38 @@ decoded to `map[string]any` once in `runHookMode` and passed to
 `EvaluateToolUse()`. This ensures non-Bash fields like `file_path`,
 `pattern`, `path`, and `url` survive JSON unmarshalling.
 
-### 4.7 Result.Command field
+### 4.7 CLI `dcg-go list tools`
+
+New subcommand under the existing `list` command, alongside `list packs`
+and `list rules`. Shows the tool catalog — all known tool definitions
+and how they map to synthetic commands.
+
+Human output:
+```
+Known tools (9):
+
+  Bash            → tree-sitter parser (full shell evaluation)
+  Read            → cat <file_path>
+  Write           → tee <file_path>
+  Edit            → sed -i <file_path>
+  Grep            → grep <pattern> <path>
+  Glob            → find <path> -name <pattern>
+  NotebookEdit    → sed -i <file_path>
+  WebFetch        → curl <url>
+  Agent           → no evaluation (always allow)
+  WebSearch       → no evaluation (always allow)
+
+Unknown tools are allowed (DCG has no rules for them).
+```
+
+Supports `--json` flag like the other list subcommands, outputting the
+catalog as JSON.
+
+The catalog data comes from `guard.Tools()` — a new public function
+that exposes the tool catalog metadata (tool name, synthetic command,
+fields, noeval flag).
+
+### 4.8 Result.Command field
 
 For Bash, `Result.Command` continues to be the raw command string (set by
 `Pipeline.Run()` as today).
@@ -485,8 +516,9 @@ Test each tool type mapping:
 3. **`guard/guard.go`** — add `EvaluateToolUse()`, keep `Evaluate()`
 4. **`cmd/dcg-go/test.go`** — add `--tool` flag
 5. **`cmd/dcg-go/hook.go`** — remove Bash-only filter, pass all tools
+6. **`cmd/dcg-go/list.go`** — add `list tools` subcommand
 
-Steps 1-3 are the core. Steps 4-5 are the CLI surface.
+Steps 1-3 are the core. Steps 4-6 are the CLI surface.
 
 ---
 
