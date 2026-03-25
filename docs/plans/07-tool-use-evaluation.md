@@ -159,7 +159,56 @@ No other new packages. Changes to existing packages:
 
 ## 4. Detailed design
 
-### 4.1 `internal/tooluse.Normalize()`
+### 4.1 Tool catalog
+
+All known tool definitions live in a single file:
+`internal/tooluse/catalog.go`
+
+This is the single source of truth for tool names, their input field
+names, and how they map to synthetic shell commands. Adding support for
+a new Claude Code tool means adding one entry here.
+
+```go
+package tooluse
+
+// ToolDef defines how a Claude Code tool maps to a synthetic shell command.
+type ToolDef struct {
+    // ToolName is the Claude Code tool name (e.g. "Read", "Write").
+    ToolName string
+    // SyntheticCommand is the shell command name to synthesize (e.g. "cat", "tee").
+    SyntheticCommand string
+    // PathField is the tool_input field containing the primary file path.
+    // Empty if the tool has no file path (e.g. WebSearch).
+    PathField string
+    // ExtraFields lists additional tool_input fields to include as args
+    // (e.g. "pattern" for Grep). Order matters — they become positional args
+    // before the path.
+    ExtraFields []string
+    // Flags are synthetic flags to add to the command (e.g. "-i" for Edit → sed).
+    Flags map[string]string
+    // NoEval means this tool is known but has no security-relevant inputs
+    // to evaluate (e.g. Agent, WebSearch). Returns Allow with no matching.
+    NoEval bool
+}
+
+var Catalog = []ToolDef{
+    {ToolName: "Read",         SyntheticCommand: "cat",  PathField: "file_path"},
+    {ToolName: "Write",        SyntheticCommand: "tee",  PathField: "file_path"},
+    {ToolName: "Edit",         SyntheticCommand: "sed",  PathField: "file_path", Flags: map[string]string{"-i": ""}},
+    {ToolName: "Grep",         SyntheticCommand: "grep", PathField: "path", ExtraFields: []string{"pattern"}},
+    {ToolName: "Glob",         SyntheticCommand: "find", PathField: "path", ExtraFields: []string{"pattern"}},
+    {ToolName: "NotebookEdit", SyntheticCommand: "sed",  PathField: "file_path", Flags: map[string]string{"-i": ""}},
+    {ToolName: "WebFetch",     SyntheticCommand: "curl", PathField: "url"},
+    {ToolName: "Agent",        NoEval: true},
+    {ToolName: "WebSearch",    NoEval: true},
+}
+```
+
+The `Normalize()` function looks up the tool name in the catalog. If found,
+it uses the definition to extract fields and build the synthetic command.
+If not found, the tool is unknown (allow — DCG has no rules for it).
+
+### 4.2 `internal/tooluse.Normalize()` (uses catalog)
 
 ```go
 package tooluse
@@ -343,8 +392,11 @@ if input.ToolName != "Bash" {
 result := guard.EvaluateToolUse(input.ToolName, toolInputMap, opts...)
 ```
 
-The hook mode passes the full `tool_input` JSON as a `map[string]any` to
-`EvaluateToolUse`. This handles all tools uniformly.
+The hook mode changes `HookInput.ToolInput` from a fixed struct (which
+only captures Bash fields like `command`) to `json.RawMessage`. This is
+decoded to `map[string]any` once in `runHookMode` and passed to
+`EvaluateToolUse()`. This ensures non-Bash fields like `file_path`,
+`pattern`, `path`, and `url` survive JSON unmarshalling.
 
 ### 4.7 Result.Command field
 
@@ -410,6 +462,8 @@ Test each tool type mapping:
 - Non-Bash PreToolUse payload evaluated (not passed through)
 - Read tool with sensitive path returns deny/ask
 - Unknown tool returns allow
+- Non-Bash tool_input fields (file_path, pattern, path, url) survive
+  JSON unmarshalling and reach evaluation (decode-level regression test)
 
 ### External / black-box tests
 
