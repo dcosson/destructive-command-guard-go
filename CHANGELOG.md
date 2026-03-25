@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.2.1 — 2026-03-24
+## v0.2.3 — 2026-03-24
 
 ### Fixed
 - Glob `path` field is now optional (defaults to cwd), matching Claude Code behavior
