@@ -304,4 +304,4 @@ disabled_packs:
 
 ## License
 
-TBD
+MIT License. See [LICENSE](LICENSE) for details.
