@@ -261,9 +261,9 @@ func TestNormalize_UnknownTool_NilInput(t *testing.T) {
 
 func TestNormalize_ExtraFieldsIgnored(t *testing.T) {
 	result := Normalize("Read", map[string]any{
-		"file_path":    "/tmp/file.txt",
-		"extra_field":  "should be ignored",
-		"another_one":  42,
+		"file_path":   "/tmp/file.txt",
+		"extra_field": "should be ignored",
+		"another_one": 42,
 	})
 	if result.NormalizationError {
 		t.Fatal("extra fields should not cause normalization error")

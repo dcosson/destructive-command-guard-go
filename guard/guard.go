@@ -6,7 +6,6 @@ import (
 	"github.com/dcosson/destructive-command-guard-go/internal/eval"
 	"github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
-	"github.com/dcosson/destructive-command-guard-go/internal/tooluse"
 	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/cloud"
 	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/containers"
 	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/core"
@@ -19,6 +18,7 @@ import (
 	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/platform"
 	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/remote"
 	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/secrets"
+	"github.com/dcosson/destructive-command-guard-go/internal/tooluse"
 )
 
 var (

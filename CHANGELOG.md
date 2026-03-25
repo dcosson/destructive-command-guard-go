@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.2.0 — 2026-03-24
+
+### Added
+- **Claude Code tool-use evaluation** across non-Bash tools via `guard.EvaluateToolUse()`
+- **Tool normalization pipeline** with catalog-driven mappings for Read, Write, Edit,
+  Grep, Glob, NotebookEdit, WebFetch, Agent, and WebSearch
+- **`Pipeline.RunCommands()`** for evaluating pre-built command structures without
+  reparsing shell text
+- **`dcg-go test --tool`** for evaluating structured tool inputs from the CLI
+- **Hook-mode support for non-Bash tools** using full `tool_input` JSON decoding
+- **`dcg-go list tools`** and public `guard.Tools()` metadata for known tool mappings
+- **Comprehensive external tests for tool types** covering CLI and hook behavior
+- MIT license for open-source distribution
+
+### Changed
+- Empty Bash tool input now preserves Bash-path semantics instead of falling into
+  normalization-error handling
+- Glob normalization now matches the documented synthetic command ordering
+- `Result` now exposes `Reason()` and `Remediation()` helpers
+
 ## v0.1.1 — 2026-03-21
 
 ### Added

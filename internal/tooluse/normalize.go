@@ -74,7 +74,7 @@ func normalizeBash(toolInput map[string]any) NormalizeResult {
 		return NormalizeResult{
 			NormalizationError: true,
 			CommandSummary:     "Bash",
-			Warnings:          []Warning{{Message: "Bash tool missing 'command' field"}},
+			Warnings:           []Warning{{Message: "Bash tool missing 'command' field"}},
 		}
 	}
 	val, exists := toolInput["command"]
@@ -82,7 +82,7 @@ func normalizeBash(toolInput map[string]any) NormalizeResult {
 		return NormalizeResult{
 			NormalizationError: true,
 			CommandSummary:     "Bash",
-			Warnings:          []Warning{{Message: "Bash tool missing 'command' field"}},
+			Warnings:           []Warning{{Message: "Bash tool missing 'command' field"}},
 		}
 	}
 	cmd, ok := val.(string)
@@ -90,7 +90,7 @@ func normalizeBash(toolInput map[string]any) NormalizeResult {
 		return NormalizeResult{
 			NormalizationError: true,
 			CommandSummary:     "Bash",
-			Warnings:          []Warning{{Message: "Bash tool 'command' field is not a string"}},
+			Warnings:           []Warning{{Message: "Bash tool 'command' field is not a string"}},
 		}
 	}
 	// Empty command is valid — Pipeline.Run() handles it (returns Allow).

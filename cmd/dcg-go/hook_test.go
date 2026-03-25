@@ -43,15 +43,6 @@ func TestWriteHookOutput(t *testing.T) {
 	}
 }
 
-func rawToolInput(t testing.TB, value any) json.RawMessage {
-	t.Helper()
-	data, err := json.Marshal(value)
-	if err != nil {
-		t.Fatalf("marshal tool input: %v", err)
-	}
-	return data
-}
-
 func TestRunHookModeNonBashEvaluates(t *testing.T) {
 	outBuf := &bytes.Buffer{}
 	oldIn, oldOut := stdin, stdout
