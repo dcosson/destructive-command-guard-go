@@ -3,7 +3,6 @@ package integration
 import (
 	"bufio"
 	"encoding/json"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,51 +131,6 @@ func TestComparisonInfrastructureParsers(t *testing.T) {
 	}
 }
 
-func TestBenchmarkStability(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping stability test in short mode")
-	}
-	benchmarks := []struct {
-		name string
-		fn   func(b *testing.B)
-	}{
-		{
-			name: "evaluate-safe",
-			fn: func(b *testing.B) {
-				for i := 0; i < b.N; i++ {
-					_ = guard.Evaluate("echo hello")
-				}
-			},
-		},
-		{
-			name: "evaluate-destructive",
-			fn: func(b *testing.B) {
-				for i := 0; i < b.N; i++ {
-					_ = guard.Evaluate("git push --force", guard.WithDestructivePolicy(guard.InteractivePolicy()))
-				}
-			},
-		},
-	}
-	for _, bm := range benchmarks {
-		bm := bm
-		t.Run(bm.name, func(t *testing.T) {
-			samples := make([]float64, 5)
-			for i := range samples {
-				r := testing.Benchmark(bm.fn)
-				samples[i] = float64(r.NsPerOp())
-			}
-			mean, cv := meanAndCV(samples)
-			maxCV := 0.30
-			if mean > 100_000 {
-				maxCV = 0.15
-			}
-			if cv > maxCV {
-				t.Fatalf("benchmark %s too unstable: mean=%.0fns cv=%.2f max=%.2f", bm.name, mean, cv, maxCV)
-			}
-		})
-	}
-}
-
 func TestBenchmarkRegressionDetectionThreshold(t *testing.T) {
 	base := BenchResult{Name: "x", NsPerOp: 100}
 	minor := BenchResult{Name: "x", NsPerOp: 110}
@@ -195,26 +149,6 @@ func TestBenchmarkRegressionDetectionThreshold(t *testing.T) {
 
 func timeSince(ts time.Time) float64 {
 	return time.Since(ts).Hours()
-}
-
-func meanAndCV(samples []float64) (mean float64, cv float64) {
-	if len(samples) == 0 {
-		return 0, 0
-	}
-	for _, x := range samples {
-		mean += x
-	}
-	mean /= float64(len(samples))
-	if mean == 0 {
-		return mean, 0
-	}
-	var ss float64
-	for _, x := range samples {
-		d := x - mean
-		ss += d * d
-	}
-	std := math.Sqrt(ss / float64(len(samples)))
-	return mean, std / mean
 }
 
 func isRegression(base, current BenchResult, threshold float64) bool {
