@@ -21,13 +21,15 @@ equivalent shell commands and fed through the same pipeline. A Read of
 
 ### What changes
 
-1. **`guard.EvaluateToolUse()`** — Single public entry point that accepts a
+1. **`guard.EvaluateToolUse()`** — New public entry point that accepts a
    tool name and structured input (map). For Bash, extracts the command
    string and runs it through the full tree-sitter parser. For file-based
-   tools, normalizes to equivalent shell commands and evaluates those.
-2. **`guard.Evaluate()`** — Removed. Replaced by `EvaluateToolUse()`.
-   All callers (h2 hook handler, CLI test command, CLI hook mode) migrate
-   to the new entry point.
+   tools, normalizes to synthetic shell commands and evaluates those.
+2. **`guard.Evaluate()`** — Stays as the simple Bash entry point. Takes a
+   raw command string and goes straight to the tree-sitter parser. Since
+   Bash is the default tool and everything maps to synthetic shell commands
+   anyway, this is the natural direct path for callers who already have a
+   shell command string.
 3. **`internal/tooluse/`** — New package with normalization logic:
    tool input → `[]packs.Command`.
 4. **`internal/eval.Pipeline.RunCommands()`** — New method extracted from
@@ -150,7 +152,7 @@ internal/tooluse/
 No other new packages. Changes to existing packages:
 
 - `internal/eval/pipeline.go` — Extract `RunCommands()` from `Run()`
-- `guard/guard.go` — Replace `Evaluate()` with `EvaluateToolUse()`
+- `guard/guard.go` — Add `EvaluateToolUse()`, keep `Evaluate()`
 - `guard/option.go` — No changes (same options work)
 - `cmd/dcg-go/test.go` — Add `--tool` flag, update to use `EvaluateToolUse()`
 - `cmd/dcg-go/hook.go` — Remove Bash-only filter, pass all tools through
@@ -346,17 +348,16 @@ func EvaluateToolUse(toolName string, toolInput map[string]any, opts ...Option) 
 }
 ```
 
-### 4.4 `guard.Evaluate()` removal
+### 4.4 `guard.Evaluate()` stays
 
-The existing `Evaluate(command string, opts ...Option) Result` is removed.
-All callers migrate to `EvaluateToolUse("Bash", map[string]any{"command": command}, opts...)`.
+`Evaluate(command string, opts ...Option) Result` remains unchanged as
+the direct Bash evaluation path. It calls `Pipeline.Run()` with the
+tree-sitter parser as it does today. No refactoring needed — it's the
+right API for callers who already have a raw shell command string.
 
-Callers to update:
-- `cmd/dcg-go/test.go` — CLI test command
-- `cmd/dcg-go/hook.go` — CLI hook mode
-- h2 `handle_hook.go` — already needs updating (separate repo)
-- `guard/guard_test.go` — test suite
-- `internal/integration/` — integration tests
+`EvaluateToolUse("Bash", {"command": cmd})` must produce identical
+results to `Evaluate(cmd)` — both go through the tree-sitter parser
+via `Pipeline.Run()`.
 
 ### 4.5 CLI `dcg-go test` changes
 
@@ -441,6 +442,9 @@ Test each tool type mapping:
 
 - `EvaluateToolUse("Bash", {"command": "rm -rf /"})` produces same result
   as old `Evaluate("rm -rf /")` did
+- `Evaluate("rm -rf /")` and `EvaluateToolUse("Bash", {"command": "rm -rf /"})` produce
+  identical results (decision, matches, severity, reason) — test across
+  a range of commands: safe, destructive, privacy-sensitive, parse errors
 - `EvaluateToolUse("Read", {"file_path": "~/.ssh/id_rsa"})` triggers privacy rules
 - `EvaluateToolUse("Write", {"file_path": "~/Documents/x"})` triggers privacy rules
 - `EvaluateToolUse("UnknownTool", {})` returns Allow
@@ -478,12 +482,11 @@ Test each tool type mapping:
 
 1. **`internal/tooluse/normalize.go`** + tests — pure function, no dependencies
 2. **`internal/eval/pipeline.go`** refactor — extract `RunCommands()`, keep `Run()` working
-3. **`guard/guard.go`** — replace `Evaluate()` with `EvaluateToolUse()`
-4. **Update all callers** — test command, hook mode, guard tests, integration tests
-5. **`cmd/dcg-go/test.go`** — add `--tool` flag
-6. **`cmd/dcg-go/hook.go`** — remove Bash-only filter, pass all tools
+3. **`guard/guard.go`** — add `EvaluateToolUse()`, keep `Evaluate()`
+4. **`cmd/dcg-go/test.go`** — add `--tool` flag
+5. **`cmd/dcg-go/hook.go`** — remove Bash-only filter, pass all tools
 
-Steps 1-3 are the core. Steps 4-6 are the caller migration and CLI surface.
+Steps 1-3 are the core. Steps 4-5 are the CLI surface.
 
 ---
 
@@ -492,9 +495,9 @@ Steps 1-3 are the core. Steps 4-6 are the caller migration and CLI surface.
 After this plan is implemented in dcg-go, the h2 changes are minimal:
 
 - `handle_hook.go` `handleDCGPreToolUse()` — remove the
-  `if input.ToolName != "Bash"` check, extract tool_input as
-  `map[string]any`, call `guard.EvaluateToolUse()` instead of
-  `guard.Evaluate()`
+  `if input.ToolName != "Bash"` check, change `ToolInput` to
+  `json.RawMessage`, decode to `map[string]any`, call
+  `guard.EvaluateToolUse()` instead of `guard.Evaluate()`
 - Release new dcg-go version, update h2's go.mod
 
 This is a ~10 line change in h2 since all the logic lives in dcg-go.
