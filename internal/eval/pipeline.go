@@ -49,9 +49,116 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 		return result
 	}
 
+	// Blocklist/allowlist/prefilter checked against raw command string.
+	if early, ok := p.checkEarlyExit(cmd, cfg, &result); ok {
+		return early
+	}
+
+	parsed := p.parser.ParseAndExtract(context.Background(), command, 0)
+	result.Warnings = append(result.Warnings, convertParseWarnings(parsed.Warnings)...)
+
+	// Parse error with no extracted commands: let policy decide via Indeterminate.
+	if len(parsed.Commands) == 0 {
+		if !parsed.HasError {
+			result.Decision = DecisionAllow
+			return result
+		}
+		return p.indeterminateResult(result, cfg)
+	}
+
+	// Convert parsed commands to packs.Command.
+	var commands []packs.Command
+	for _, extracted := range parsed.Commands {
+		commands = append(commands, toPackCommand(extracted))
+	}
+
+	// Environment detection: global (process env + exported vars).
+	globalEnvResult := p.envDet.DetectProcess(cfg.CallerEnv)
+	exportedEnvResult := p.envDet.DetectExported(parsed.ExportedVars)
+	globalProd := globalEnvResult.IsProduction || exportedEnvResult.IsProduction
+
+	// Per-command inline env detection produces per-command isProd flags.
+	isProdPerCmd := make([]bool, len(parsed.Commands))
+	for i, extracted := range parsed.Commands {
+		cmdEnvResult := p.envDet.DetectInline(extracted.InlineEnv)
+		isProdPerCmd[i] = globalProd || cmdEnvResult.IsProduction
+	}
+
+	p.matchCommands(commands, isProdPerCmd, cfg, &result)
+
+	if len(result.Matches) == 0 && !parsed.HasError {
+		result.Decision = DecisionAllow
+		return result
+	}
+
+	dAgg, pAgg := aggregateByCategory(result.Matches)
+
+	// Partial parse: ensure both assessments are at least Indeterminate.
+	if parsed.HasError {
+		indeterminate := &Assessment{
+			Severity:   SeverityIndeterminate,
+			Confidence: ConfidenceLow,
+		}
+		if dAgg == nil {
+			dAgg = indeterminate
+		}
+		if pAgg == nil {
+			pAgg = indeterminate
+		}
+	}
+
+	result.DestructiveAssessment = dAgg
+	result.PrivacyAssessment = pAgg
+	result.Decision = p.applyPolicy(dAgg, pAgg, cfg)
+	return result
+}
+
+// RunCommands evaluates pre-built commands against registered rules.
+// Used by EvaluateToolUse for non-Bash tools that skip shell parsing.
+// The rawText is used for blocklist/allowlist matching and pre-filter
+// keyword scanning.
+func (p *Pipeline) RunCommands(commands []packs.Command, rawText string, cfg Config) Result {
+	var result Result
+
+	if len(commands) == 0 {
+		result.Decision = DecisionAllow
+		return result
+	}
+
+	// Blocklist/allowlist/prefilter checked against synthetic rawText.
+	if early, ok := p.checkEarlyExit(rawText, cfg, &result); ok {
+		return early
+	}
+
+	// Environment detection: process env only (no inline env for tool use).
+	globalEnvResult := p.envDet.DetectProcess(cfg.CallerEnv)
+	globalProd := globalEnvResult.IsProduction
+
+	isProdPerCmd := make([]bool, len(commands))
+	for i := range isProdPerCmd {
+		isProdPerCmd[i] = globalProd
+	}
+
+	p.matchCommands(commands, isProdPerCmd, cfg, &result)
+
+	if len(result.Matches) == 0 {
+		result.Decision = DecisionAllow
+		return result
+	}
+
+	dAgg, pAgg := aggregateByCategory(result.Matches)
+	result.DestructiveAssessment = dAgg
+	result.PrivacyAssessment = pAgg
+	result.Decision = p.applyPolicy(dAgg, pAgg, cfg)
+	return result
+}
+
+// checkEarlyExit handles blocklist, allowlist, and pre-filter checks.
+// Returns (result, true) if evaluation should stop early.
+func (p *Pipeline) checkEarlyExit(text string, cfg Config, result *Result) (Result, bool) {
 	// Blocklist has highest precedence.
 	for _, pattern := range cfg.Blocklist {
-		if globMatch(pattern, cmd) {
+		if globMatch(pattern, text) {
 			result.Decision = DecisionDeny
 			blAss := Assessment{
 				Severity:   SeverityCritical,
@@ -69,15 +176,15 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 					Remediation: "Remove command from blocklist or use safer command",
 				},
 			}
-			return result
+			return *result, true
 		}
 	}
 
-	// Allowlist bypasses pack evaluation if no blocklist match happened.
+	// Allowlist bypasses pack evaluation.
 	for _, pattern := range cfg.Allowlist {
-		if globMatch(pattern, cmd) {
+		if globMatch(pattern, text) {
 			result.Decision = DecisionAllow
-			return result
+			return *result, true
 		}
 	}
 
@@ -85,75 +192,56 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 	result.Warnings = append(result.Warnings, warnings...)
 	if len(activePacks) == 0 {
 		result.Decision = DecisionAllow
-		return result
+		return *result, true
 	}
 
-	// Pre-filter: fast keyword scan to short-circuit non-destructive commands.
-	filterResult := p.prefilter.Contains(command)
+	// Pre-filter: fast keyword scan.
+	filterResult := p.prefilter.Contains(text)
 	if !filterResult.Matched {
 		result.Decision = DecisionAllow
-		return result
+		return *result, true
 	}
 
-	// Narrow packs to those whose keywords matched the pre-filter.
 	candidateIDs := p.prefilter.CandidatePacks(filterResult.Keywords, cfg.EnabledPacks)
 	if len(candidateIDs) == 0 {
 		result.Decision = DecisionAllow
-		return result
-	}
-	candidateSet := make(map[string]struct{}, len(candidateIDs))
-	for _, id := range candidateIDs {
-		candidateSet[id] = struct{}{}
+		return *result, true
 	}
 
-	parsed := p.parser.ParseAndExtract(context.Background(), command, 0)
-	result.Warnings = append(result.Warnings, convertParseWarnings(parsed.Warnings)...)
+	return Result{}, false
+}
 
-	// Parse error with no extracted commands: let policy decide via Indeterminate.
-	if len(parsed.Commands) == 0 {
-		if !parsed.HasError {
-			result.Decision = DecisionAllow
-			return result
+// matchCommands runs pack rules against the given commands and appends
+// matches to result.
+func (p *Pipeline) matchCommands(commands []packs.Command, isProdPerCmd []bool, cfg Config, result *Result) {
+	activePacks, _ := p.activePacks(cfg)
+
+	// Build candidate set from pre-filter. We re-run the pre-filter here
+	// against each command's RawText to get the union of candidate packs.
+	candidateSet := make(map[string]struct{})
+	for _, cmd := range commands {
+		fr := p.prefilter.Contains(cmd.RawText)
+		if fr.Matched {
+			for _, id := range p.prefilter.CandidatePacks(fr.Keywords, cfg.EnabledPacks) {
+				candidateSet[id] = struct{}{}
+			}
 		}
-		indeterminate := &Assessment{
-			Severity:   SeverityIndeterminate,
-			Confidence: ConfidenceLow,
-		}
-		result.DestructiveAssessment = indeterminate
-		result.PrivacyAssessment = indeterminate
-		dPolicy := cfg.DestructivePolicy
-		if dPolicy == nil {
-			dPolicy = evalcore.InteractivePolicy()
-		}
-		pPolicy := cfg.PrivacyPolicy
-		if pPolicy == nil {
-			pPolicy = evalcore.InteractivePolicy()
-		}
-		pc := evalcore.PolicyConfig{DestructivePolicy: dPolicy, PrivacyPolicy: pPolicy}
-		result.Decision = pc.Decide(indeterminate, indeterminate)
-		return result
 	}
 
-	// Environment detection: global (process env + exported vars).
-	globalEnvResult := p.envDet.DetectProcess(cfg.CallerEnv)
-	exportedEnvResult := p.envDet.DetectExported(parsed.ExportedVars)
-	globalProd := globalEnvResult.IsProduction || exportedEnvResult.IsProduction
-
-	for _, extracted := range parsed.Commands {
-		// Per-command inline environment detection.
-		cmdEnvResult := p.envDet.DetectInline(extracted.InlineEnv)
-		isProd := globalProd || cmdEnvResult.IsProduction
+	for i, cmd := range commands {
+		isProd := false
+		if i < len(isProdPerCmd) {
+			isProd = isProdPerCmd[i]
+		}
 
 		for _, pack := range activePacks {
-			// Skip packs not in candidate set.
 			if _, ok := candidateSet[pack.ID]; !ok {
 				continue
 			}
 
-			// Safe patterns short-circuit destructive evaluation within a pack.
 			safeMatched := false
 			for _, safe := range pack.Safe {
-				if safe.Match != nil && safe.Match.Match(toPackCommand(extracted)) {
+				if safe.Match != nil && safe.Match.Match(cmd) {
 					safeMatched = true
 					break
 				}
@@ -163,7 +251,7 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 			}
 
 			for _, rule := range pack.Rules {
-				if rule.Match == nil || !rule.Match.Match(toPackCommand(extracted)) {
+				if rule.Match == nil || !rule.Match.Match(cmd) {
 					continue
 				}
 				sev := rule.Severity
@@ -175,7 +263,6 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 					}
 					envEscalated = true
 				}
-				// Zero-category normalization: default to Destructive.
 				cat := rule.Category
 				if cat == 0 {
 					cat = evalcore.CategoryDestructive
@@ -193,32 +280,9 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 			}
 		}
 	}
+}
 
-	if len(result.Matches) == 0 && !parsed.HasError {
-		result.Decision = DecisionAllow
-		return result
-	}
-
-	dAgg, pAgg := aggregateByCategory(result.Matches)
-
-	// Partial parse: ensure both assessments are at least Indeterminate
-	// so the policy can weigh in on the unparsed portion.
-	if parsed.HasError {
-		indeterminate := &Assessment{
-			Severity:   SeverityIndeterminate,
-			Confidence: ConfidenceLow,
-		}
-		if dAgg == nil {
-			dAgg = indeterminate
-		}
-		if pAgg == nil {
-			pAgg = indeterminate
-		}
-	}
-
-	result.DestructiveAssessment = dAgg
-	result.PrivacyAssessment = pAgg
-
+func (p *Pipeline) applyPolicy(dAgg, pAgg *Assessment, cfg Config) Decision {
 	dPolicy := cfg.DestructivePolicy
 	if dPolicy == nil {
 		dPolicy = evalcore.InteractivePolicy()
@@ -231,7 +295,17 @@ func (p *Pipeline) Run(command string, cfg Config) Result {
 		DestructivePolicy: dPolicy,
 		PrivacyPolicy:     pPolicy,
 	}
-	result.Decision = pc.Decide(dAgg, pAgg)
+	return pc.Decide(dAgg, pAgg)
+}
+
+func (p *Pipeline) indeterminateResult(result Result, cfg Config) Result {
+	indeterminate := &Assessment{
+		Severity:   SeverityIndeterminate,
+		Confidence: ConfidenceLow,
+	}
+	result.DestructiveAssessment = indeterminate
+	result.PrivacyAssessment = indeterminate
+	result.Decision = p.applyPolicy(indeterminate, indeterminate, cfg)
 	return result
 }
 

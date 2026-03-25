@@ -6,6 +6,7 @@ import (
 	"github.com/dcosson/destructive-command-guard-go/internal/eval"
 	"github.com/dcosson/destructive-command-guard-go/internal/evalcore"
 	"github.com/dcosson/destructive-command-guard-go/internal/packs"
+	"github.com/dcosson/destructive-command-guard-go/internal/tooluse"
 	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/cloud"
 	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/containers"
 	_ "github.com/dcosson/destructive-command-guard-go/internal/packs/core"
@@ -47,6 +48,98 @@ func Evaluate(command string, opts ...Option) Result {
 		cfg.privacyPolicy = InteractivePolicy()
 	}
 	return getPipeline().Run(command, cfg.toInternal())
+}
+
+// EvaluateToolUse analyzes a Claude Code tool use for destructive and privacy
+// risks. For Bash, extracts the command string and runs it through the full
+// tree-sitter parser. For other known tools, normalizes to synthetic shell
+// commands and evaluates those. Unknown tools return Allow.
+func EvaluateToolUse(toolName string, toolInput map[string]any, opts ...Option) Result {
+	cfg := defaultConfig()
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&cfg)
+		}
+	}
+	if cfg.destructivePolicy == nil {
+		cfg.destructivePolicy = InteractivePolicy()
+	}
+	if cfg.privacyPolicy == nil {
+		cfg.privacyPolicy = InteractivePolicy()
+	}
+
+	norm := tooluse.Normalize(toolName, toolInput)
+
+	if norm.UseBashParser {
+		return getPipeline().Run(norm.BashCommand, cfg.toInternal())
+	}
+
+	// Known tool with malformed input: indeterminate, let policy decide.
+	if norm.NormalizationError {
+		indeterminate := &Assessment{
+			Severity:   Indeterminate,
+			Confidence: ConfidenceLow,
+		}
+		pc := PolicyConfig{
+			DestructivePolicy: cfg.destructivePolicy,
+			PrivacyPolicy:     cfg.privacyPolicy,
+		}
+		var warnings []Warning
+		for _, w := range norm.Warnings {
+			warnings = append(warnings, Warning{
+				Code:    WarnExtractorPanic, // closest existing code for normalization issues
+				Message: w.Message,
+			})
+		}
+		return Result{
+			Decision:              pc.Decide(indeterminate, indeterminate),
+			DestructiveAssessment: indeterminate,
+			PrivacyAssessment:     indeterminate,
+			Command:               norm.CommandSummary,
+			Warnings:              warnings,
+		}
+	}
+
+	if len(norm.Commands) == 0 {
+		// Unknown tool or NoEval — no rules exist.
+		return Result{Decision: Allow, Command: norm.CommandSummary}
+	}
+
+	result := getPipeline().RunCommands(norm.Commands, norm.RawText, cfg.toInternal())
+	result.Command = norm.CommandSummary
+	for _, w := range norm.Warnings {
+		result.Warnings = append(result.Warnings, Warning{
+			Code:    WarnExtractorPanic,
+			Message: w.Message,
+		})
+	}
+	return result
+}
+
+// ToolInfo describes a known tool from the catalog.
+type ToolInfo struct {
+	ToolName         string            `json:"tool_name"`
+	SyntheticCommand string            `json:"synthetic_command,omitempty"`
+	PathField        string            `json:"path_field,omitempty"`
+	ExtraFields      []string          `json:"extra_fields,omitempty"`
+	Flags            map[string]string `json:"flags,omitempty"`
+	NoEval           bool              `json:"no_eval,omitempty"`
+}
+
+// Tools returns metadata for all known tools in the catalog.
+func Tools() []ToolInfo {
+	out := make([]ToolInfo, 0, len(tooluse.Catalog))
+	for _, def := range tooluse.Catalog {
+		out = append(out, ToolInfo{
+			ToolName:         def.ToolName,
+			SyntheticCommand: def.SyntheticCommand,
+			PathField:        def.PathField,
+			ExtraFields:      def.ExtraFields,
+			Flags:            def.Flags,
+			NoEval:           def.NoEval,
+		})
+	}
+	return out
 }
 
 func (c *evalConfig) toInternal() eval.Config {
