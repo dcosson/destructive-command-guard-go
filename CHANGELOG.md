@@ -18,7 +18,9 @@
 - Empty Bash tool input now preserves Bash-path semantics instead of falling into
   normalization-error handling
 - Glob normalization now matches the documented synthetic command ordering
+- Glob `path` field is now optional (defaults to cwd), matching Claude Code behavior
 - `Result` now exposes `Reason()` and `Remediation()` helpers
+- `--explain` flag removed from `dcg-go test` (reason/remediation always shown)
 
 ## v0.1.1 — 2026-03-21
 
