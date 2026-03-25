@@ -15,6 +15,12 @@ type ToolDef struct {
 	ExtraFields []string
 	// Flags are synthetic flags to add to the command (e.g. "-i" for Edit → sed).
 	Flags map[string]string
+	// ExtraFieldPrefix is a flag inserted before extra field values
+	// (e.g. "-name" for find <path> -name <pattern>).
+	ExtraFieldPrefix string
+	// PathBeforeExtras puts the path arg before extra fields in the synthetic
+	// command (e.g. find <path> -name <pattern> instead of find <pattern> <path>).
+	PathBeforeExtras bool
 	// NoEval means this tool is known but has no security-relevant inputs
 	// to evaluate (e.g. Agent, WebSearch). Returns Allow with no matching.
 	NoEval bool
@@ -27,7 +33,7 @@ var Catalog = []ToolDef{
 	{ToolName: "Write", SyntheticCommand: "tee", PathField: "file_path"},
 	{ToolName: "Edit", SyntheticCommand: "sed", PathField: "file_path", Flags: map[string]string{"-i": ""}},
 	{ToolName: "Grep", SyntheticCommand: "grep", PathField: "path", ExtraFields: []string{"pattern"}},
-	{ToolName: "Glob", SyntheticCommand: "find", PathField: "path", ExtraFields: []string{"pattern"}},
+	{ToolName: "Glob", SyntheticCommand: "find", PathField: "path", ExtraFieldPrefix: "-name", ExtraFields: []string{"pattern"}, PathBeforeExtras: true},
 	{ToolName: "NotebookEdit", SyntheticCommand: "sed", PathField: "file_path", Flags: map[string]string{"-i": ""}},
 	{ToolName: "WebFetch", SyntheticCommand: "curl", PathField: "url"},
 	{ToolName: "Agent", NoEval: true},

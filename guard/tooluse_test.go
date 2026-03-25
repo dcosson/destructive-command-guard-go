@@ -6,6 +6,7 @@ import (
 
 func TestEvaluateToolUse_Bash_MatchesEvaluate(t *testing.T) {
 	commands := []string{
+		"",
 		"ls -la",
 		"rm -rf /",
 		"git push --force",

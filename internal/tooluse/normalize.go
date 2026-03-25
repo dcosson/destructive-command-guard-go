@@ -70,14 +70,30 @@ func Normalize(toolName string, toolInput map[string]any) NormalizeResult {
 }
 
 func normalizeBash(toolInput map[string]any) NormalizeResult {
-	cmd, ok := extractString(toolInput, "command")
-	if !ok {
+	if toolInput == nil {
 		return NormalizeResult{
 			NormalizationError: true,
 			CommandSummary:     "Bash",
 			Warnings:          []Warning{{Message: "Bash tool missing 'command' field"}},
 		}
 	}
+	val, exists := toolInput["command"]
+	if !exists {
+		return NormalizeResult{
+			NormalizationError: true,
+			CommandSummary:     "Bash",
+			Warnings:          []Warning{{Message: "Bash tool missing 'command' field"}},
+		}
+	}
+	cmd, ok := val.(string)
+	if !ok {
+		return NormalizeResult{
+			NormalizationError: true,
+			CommandSummary:     "Bash",
+			Warnings:          []Warning{{Message: "Bash tool 'command' field is not a string"}},
+		}
+	}
+	// Empty command is valid — Pipeline.Run() handles it (returns Allow).
 	return NormalizeResult{
 		UseBashParser:  true,
 		BashCommand:    cmd,
@@ -98,12 +114,13 @@ func normalizeFromCatalog(def *ToolDef, toolInput map[string]any) NormalizeResul
 		}
 	}
 
-	// Build args: flags first, then extra fields, then path.
+	// Build args with proper ordering.
 	var args []string
 	var rawParts []string
 
 	rawParts = append(rawParts, def.SyntheticCommand)
 
+	// Flags first (e.g. -i for sed).
 	for flag, val := range def.Flags {
 		if val == "" {
 			args = append(args, flag)
@@ -114,16 +131,32 @@ func normalizeFromCatalog(def *ToolDef, toolInput map[string]any) NormalizeResul
 		}
 	}
 
+	// Collect extra field values.
+	var extraVals []string
 	for _, field := range def.ExtraFields {
 		val, fieldOK := extractString(toolInput, field)
 		if fieldOK {
-			args = append(args, val)
-			rawParts = append(rawParts, val)
+			extraVals = append(extraVals, val)
 		}
 	}
 
-	args = append(args, pathVal)
-	rawParts = append(rawParts, pathVal)
+	if def.PathBeforeExtras {
+		// Path before extras: find <path> -name <pattern>
+		args = append(args, pathVal)
+		rawParts = append(rawParts, pathVal)
+		if def.ExtraFieldPrefix != "" {
+			args = append(args, def.ExtraFieldPrefix)
+			rawParts = append(rawParts, def.ExtraFieldPrefix)
+		}
+		args = append(args, extraVals...)
+		rawParts = append(rawParts, extraVals...)
+	} else {
+		// Extras before path: grep <pattern> <path>
+		args = append(args, extraVals...)
+		rawParts = append(rawParts, extraVals...)
+		args = append(args, pathVal)
+		rawParts = append(rawParts, pathVal)
+	}
 
 	rawText := strings.Join(rawParts, " ")
 

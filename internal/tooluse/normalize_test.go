@@ -17,6 +17,19 @@ func TestNormalize_Bash(t *testing.T) {
 	}
 }
 
+func TestNormalize_Bash_EmptyCommand(t *testing.T) {
+	result := Normalize("Bash", map[string]any{"command": ""})
+	if result.NormalizationError {
+		t.Fatal("empty Bash command should not be a normalization error")
+	}
+	if !result.UseBashParser {
+		t.Fatal("expected UseBashParser=true for empty Bash command")
+	}
+	if result.BashCommand != "" {
+		t.Errorf("BashCommand = %q, want empty", result.BashCommand)
+	}
+}
+
 func TestNormalize_Bash_MissingCommand(t *testing.T) {
 	result := Normalize("Bash", map[string]any{})
 	if !result.NormalizationError {
@@ -158,8 +171,20 @@ func TestNormalize_Glob(t *testing.T) {
 	if cmd.Name != "find" {
 		t.Errorf("Name = %q, want %q", cmd.Name, "find")
 	}
-	if result.RawText != "find *.key /home/user/.ssh" {
-		t.Errorf("RawText = %q, want %q", result.RawText, "find *.key /home/user/.ssh")
+	// find <path> -name <pattern> — path before extras
+	wantRaw := "find /home/user/.ssh -name *.key"
+	if result.RawText != wantRaw {
+		t.Errorf("RawText = %q, want %q", result.RawText, wantRaw)
+	}
+	// Args should be: path, -name, pattern
+	wantArgs := []string{"/home/user/.ssh", "-name", "*.key"}
+	if len(cmd.Args) != len(wantArgs) {
+		t.Fatalf("Args = %v, want %v", cmd.Args, wantArgs)
+	}
+	for i, want := range wantArgs {
+		if cmd.Args[i] != want {
+			t.Errorf("Args[%d] = %q, want %q", i, cmd.Args[i], want)
+		}
 	}
 }
 
@@ -257,6 +282,9 @@ func TestNormalize_RawTextIsFullCommand(t *testing.T) {
 		{"Read", map[string]any{"file_path": "/foo"}, "cat /foo"},
 		{"Write", map[string]any{"file_path": "/foo"}, "tee /foo"},
 		{"Edit", map[string]any{"file_path": "/foo"}, "sed -i /foo"},
+		{"Grep", map[string]any{"pattern": "secret", "path": "/etc"}, "grep secret /etc"},
+		{"Glob", map[string]any{"pattern": "*.txt", "path": "/home"}, "find /home -name *.txt"},
+		{"NotebookEdit", map[string]any{"file_path": "/nb.ipynb"}, "sed -i /nb.ipynb"},
 		{"WebFetch", map[string]any{"url": "https://x.com"}, "curl https://x.com"},
 	}
 	for _, tt := range tests {
@@ -264,6 +292,39 @@ func TestNormalize_RawTextIsFullCommand(t *testing.T) {
 			result := Normalize(tt.tool, tt.input)
 			if result.RawText != tt.wantRaw {
 				t.Errorf("RawText = %q, want %q", result.RawText, tt.wantRaw)
+			}
+		})
+	}
+}
+
+func TestNormalize_ArgOrdering(t *testing.T) {
+	tests := []struct {
+		tool     string
+		input    map[string]any
+		wantArgs []string
+	}{
+		{"Read", map[string]any{"file_path": "/foo"}, []string{"/foo"}},
+		{"Write", map[string]any{"file_path": "/foo"}, []string{"/foo"}},
+		{"Edit", map[string]any{"file_path": "/foo"}, []string{"-i", "/foo"}},
+		{"Grep", map[string]any{"pattern": "x", "path": "/bar"}, []string{"x", "/bar"}},
+		{"Glob", map[string]any{"pattern": "*.go", "path": "/src"}, []string{"/src", "-name", "*.go"}},
+		{"NotebookEdit", map[string]any{"file_path": "/nb.ipynb"}, []string{"-i", "/nb.ipynb"}},
+		{"WebFetch", map[string]any{"url": "https://x.com"}, []string{"https://x.com"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.tool, func(t *testing.T) {
+			result := Normalize(tt.tool, tt.input)
+			if len(result.Commands) != 1 {
+				t.Fatalf("expected 1 command, got %d", len(result.Commands))
+			}
+			args := result.Commands[0].Args
+			if len(args) != len(tt.wantArgs) {
+				t.Fatalf("Args = %v, want %v", args, tt.wantArgs)
+			}
+			for i, want := range tt.wantArgs {
+				if args[i] != want {
+					t.Errorf("Args[%d] = %q, want %q", i, args[i], want)
+				}
 			}
 		})
 	}
