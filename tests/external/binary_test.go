@@ -258,6 +258,142 @@ func TestBinaryHookMode(t *testing.T) {
 	}
 }
 
+// TestExternalToolUseTestMode exercises the --tool flag for every tool in
+// the catalog via the test subcommand. Each tool gets:
+//   - An allow case (safe path/input)
+//   - A privacy failure case (sensitive path like ~/Documents)
+//   - A destructive failure case where applicable
+func TestExternalToolUseTestMode(t *testing.T) {
+	tests := []struct {
+		name         string
+		args         []string
+		wantExitCode int
+		wantContains string
+	}{
+		// Read: privacy only (cat doesn't match destructive rules)
+		{"read-allow", []string{"test", "--tool", "Read", `{"file_path":"/tmp/safe.txt"}`}, 0, "Decision: Allow"},
+		{"read-privacy-deny", []string{"test", "--tool", "Read", "--privacy-policy", "strict", `{"file_path":"/Users/testuser/Documents/foo.pdf"}`}, 2, "Decision: Deny"},
+
+		// Write: privacy + destructive
+		{"write-allow", []string{"test", "--tool", "Write", `{"file_path":"/tmp/out.txt"}`}, 0, "Decision: Allow"},
+		{"write-privacy-deny", []string{"test", "--tool", "Write", "--privacy-policy", "strict", `{"file_path":"/Users/testuser/Documents/report.docx"}`}, 2, "Decision: Deny"},
+
+		// Edit: privacy + destructive
+		{"edit-allow", []string{"test", "--tool", "Edit", `{"file_path":"/tmp/config.yaml"}`}, 0, "Decision: Allow"},
+		{"edit-privacy-deny", []string{"test", "--tool", "Edit", "--privacy-policy", "strict", `{"file_path":"/Users/testuser/Documents/notes.md"}`}, 2, "Decision: Deny"},
+
+		// Grep: privacy (searches sensitive dirs)
+		{"grep-allow", []string{"test", "--tool", "Grep", `{"pattern":"TODO","path":"/tmp/project"}`}, 0, "Decision: Allow"},
+		{"grep-privacy-deny", []string{"test", "--tool", "Grep", "--privacy-policy", "strict", `{"pattern":"password","path":"/Users/testuser/Documents"}`}, 2, "Decision: Deny"},
+
+		// Glob: privacy (scans sensitive dirs)
+		{"glob-allow", []string{"test", "--tool", "Glob", `{"pattern":"*.go","path":"/tmp/src"}`}, 0, "Decision: Allow"},
+		{"glob-privacy-deny", []string{"test", "--tool", "Glob", "--privacy-policy", "strict", `{"pattern":"*.pdf","path":"/Users/testuser/Documents"}`}, 2, "Decision: Deny"},
+
+		// NotebookEdit: privacy
+		{"notebook-allow", []string{"test", "--tool", "NotebookEdit", `{"file_path":"/tmp/analysis.ipynb"}`}, 0, "Decision: Allow"},
+		{"notebook-privacy-deny", []string{"test", "--tool", "NotebookEdit", "--privacy-policy", "strict", `{"file_path":"/Users/testuser/Documents/research.ipynb"}`}, 2, "Decision: Deny"},
+
+		// WebFetch: allow (curl to safe URL)
+		{"webfetch-allow", []string{"test", "--tool", "WebFetch", `{"url":"https://example.com/api"}`}, 0, "Decision: Allow"},
+
+		// Agent: always allow (NoEval)
+		{"agent-allow", []string{"test", "--tool", "Agent", `{"prompt":"do stuff"}`}, 0, "Decision: Allow"},
+
+		// WebSearch: always allow (NoEval)
+		{"websearch-allow", []string{"test", "--tool", "WebSearch", `{"query":"golang testing"}`}, 0, "Decision: Allow"},
+
+		// Unknown tool: allow
+		{"unknown-tool-allow", []string{"test", "--tool", "FutureTool", `{"whatever":"value"}`}, 0, "Decision: Allow"},
+
+		// Bash via --tool flag matches bare command
+		{"bash-tool-flag", []string{"test", "--tool", "Bash", "echo hello"}, 0, "Decision: Allow"},
+		{"bash-destructive", []string{"test", "--tool", "Bash", "rm -rf /"}, 2, "Decision: Deny"},
+
+		// Normalization error: known tool, missing required field
+		{"read-missing-path", []string{"test", "--tool", "Read", `{}`}, 3, "Decision: Ask"},
+
+		// Non-JSON input for non-Bash tool
+		{"read-non-json", []string{"test", "--tool", "Read", "not-json"}, 1, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := exec.Command(binaryPath, tt.args...)
+			var stdout bytes.Buffer
+			cmd.Stdout = &stdout
+			err := cmd.Run()
+			exit := 0
+			if ee, ok := err.(*exec.ExitError); ok {
+				exit = ee.ExitCode()
+			} else if err != nil {
+				t.Fatalf("unexpected run error: %v", err)
+			}
+			if exit != tt.wantExitCode {
+				t.Fatalf("exit=%d want=%d stdout=%s", exit, tt.wantExitCode, stdout.String())
+			}
+			if tt.wantContains != "" && !strings.Contains(stdout.String(), tt.wantContains) {
+				t.Fatalf("stdout missing %q:\n%s", tt.wantContains, stdout.String())
+			}
+		})
+	}
+}
+
+// TestExternalToolUseHookMode exercises hook mode for non-Bash tools.
+func TestExternalToolUseHookMode(t *testing.T) {
+	cases := []struct {
+		name     string
+		input    string
+		wantPerm string
+	}{
+		// Read safe path
+		{"hook-read-allow", `{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"/tmp/safe.txt"}}`, "allow"},
+		// Read privacy-sensitive path
+		{"hook-read-privacy", `{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"/Users/testuser/Documents/foo.pdf"}}`, "ask"},
+		// Write safe path
+		{"hook-write-allow", `{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"/tmp/out.txt"}}`, "allow"},
+		// Write privacy-sensitive path
+		{"hook-write-privacy", `{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"/Users/testuser/Documents/secret.txt"}}`, "ask"},
+		// Edit safe path
+		{"hook-edit-allow", `{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"/tmp/config.yaml"}}`, "allow"},
+		// Grep safe path
+		{"hook-grep-allow", `{"hook_event_name":"PreToolUse","tool_name":"Grep","tool_input":{"pattern":"TODO","path":"/tmp/src"}}`, "allow"},
+		// Glob safe path
+		{"hook-glob-allow", `{"hook_event_name":"PreToolUse","tool_name":"Glob","tool_input":{"pattern":"*.go","path":"/tmp/src"}}`, "allow"},
+		// Agent (NoEval)
+		{"hook-agent-allow", `{"hook_event_name":"PreToolUse","tool_name":"Agent","tool_input":{"prompt":"do stuff"}}`, "allow"},
+		// Unknown tool
+		{"hook-unknown-allow", `{"hook_event_name":"PreToolUse","tool_name":"FutureTool","tool_input":{"foo":"bar"}}`, "allow"},
+		// Bash destructive
+		{"hook-bash-deny", `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"rm -rf /"}}`, "deny"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := exec.Command(binaryPath)
+			cmd.Stdin = strings.NewReader(tc.input)
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+			err := cmd.Run()
+			if err != nil {
+				if _, ok := err.(*exec.ExitError); !ok {
+					t.Fatalf("hook mode failed: %v stderr=%s", err, stderr.String())
+				}
+			}
+			var output map[string]any
+			if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+				t.Fatalf("invalid JSON output: %v\nstdout=%s", err, stdout.String())
+			}
+			hso, ok := output["hookSpecificOutput"].(map[string]any)
+			if !ok {
+				t.Fatalf("missing hookSpecificOutput: %v", output)
+			}
+			if got := hso["permissionDecision"]; got != tc.wantPerm {
+				t.Fatalf("permissionDecision=%v want=%s\nstdout=%s", got, tc.wantPerm, stdout.String())
+			}
+		})
+	}
+}
+
 func TestBinaryTestMode(t *testing.T) {
 	tests := []struct {
 		name         string
