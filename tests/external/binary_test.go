@@ -268,7 +268,7 @@ func TestBinaryTestMode(t *testing.T) {
 		{"allow-safe-command", []string{"test", "echo hello"}, 0, "Decision: Allow"},
 		{"deny-destructive-command", []string{"test", "rm -rf /tmp/e2e"}, 2, "Decision: Deny"},
 		{"json-output", []string{"test", "--json", "git push --force"}, 3, `"decision": "Ask"`},
-		{"explain-mode", []string{"test", "--explain", "git push --force"}, 3, "Reason:"},
+		{"reason-always-shown", []string{"test", "git push --force"}, 3, "Reason:"},
 		{"policy-override-permissive", []string{"test", "--destructive-policy", "permissive", "git push --force"}, 0, "Decision: Allow"},
 	}
 	for _, tt := range tests {

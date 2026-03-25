@@ -41,16 +41,32 @@ func TestTestModeJSONOutput(t *testing.T) {
 	}
 }
 
-func TestTestModeExplainOutput(t *testing.T) {
-	out, _, err := execCmd(t, "test", "--explain", "rm -rf /")
+func TestTestModeReasonOutput(t *testing.T) {
+	out, _, err := execCmd(t, "test", "rm -rf /")
 	if err != nil {
-		t.Fatalf("test --explain error: %v", err)
+		t.Fatalf("test error: %v", err)
 	}
 	if !strings.Contains(out, "Decision: Deny") {
 		t.Fatalf("missing decision: %q", out)
 	}
 	if !strings.Contains(out, "Reason:") {
-		t.Fatalf("missing explain reason: %q", out)
+		t.Fatalf("missing reason: %q", out)
+	}
+	if !strings.Contains(out, "[core.filesystem]") {
+		t.Fatalf("missing pack in reason: %q", out)
+	}
+}
+
+func TestTestModeAllowReason(t *testing.T) {
+	out, _, err := execCmd(t, "test", "ls -la")
+	if err != nil {
+		t.Fatalf("test error: %v", err)
+	}
+	if !strings.Contains(out, "Decision: Allow") {
+		t.Fatalf("missing decision: %q", out)
+	}
+	if !strings.Contains(out, "No destructive or privacy patterns matched") {
+		t.Fatalf("missing allow reason: %q", out)
 	}
 }
 

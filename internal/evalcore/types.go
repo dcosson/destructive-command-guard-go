@@ -3,6 +3,11 @@
 // eliminating type duplication and adapter layers.
 package evalcore
 
+import (
+	"fmt"
+	"strings"
+)
+
 // Severity levels for destructive command assessments.
 type Severity int
 
@@ -170,6 +175,38 @@ type Result struct {
 	Matches               []Match
 	Warnings              []Warning
 	Command               string
+}
+
+// Reason returns a single-line human-readable summary of the evaluation.
+// For matched commands it reports the first match's pack and reason; for
+// allowed commands it reports that no patterns matched.
+func (r Result) Reason() string {
+	if len(r.Matches) == 0 {
+		if len(r.Warnings) > 0 {
+			codes := make([]string, len(r.Warnings))
+			for i, w := range r.Warnings {
+				codes[i] = w.Code.String()
+			}
+			return fmt.Sprintf("No destructive or privacy patterns matched (%d warning(s): %s)",
+				len(r.Warnings), strings.Join(codes, ", "))
+		}
+		return "No destructive or privacy patterns matched"
+	}
+	m := r.Matches[0]
+	reason := fmt.Sprintf("[%s] %s", m.Pack, m.Reason)
+	if len(r.Matches) > 1 {
+		reason = fmt.Sprintf("%s (and %d more)", reason, len(r.Matches)-1)
+	}
+	return reason
+}
+
+// Remediation returns a single-line remediation suggestion from the first
+// matched rule, or an empty string if there are no matches or no remediation.
+func (r Result) Remediation() string {
+	if len(r.Matches) == 0 {
+		return ""
+	}
+	return r.Matches[0].Remediation
 }
 
 // PolicyConfig holds separate policies for each rule category.

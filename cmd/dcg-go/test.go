@@ -18,7 +18,6 @@ const policyHelp = `Available policies (from most to least permissive):
 
 func newTestCmd() *cobra.Command {
 	var (
-		explain       bool
 		jsonOut       bool
 		destrPolicy   string
 		privPolicy    string
@@ -39,7 +38,6 @@ Exit codes: 0=Allow, 1=Error, 2=Deny, 3=Ask
 
 ` + policyHelp,
 		Example: `  dcg-go test "git push --force"
-  dcg-go test --explain "DROP TABLE users;"
   dcg-go test --json "git push --force origin main"
   dcg-go test --destructive-policy strict "rm -rf /"
   dcg-go test --destructive-policy permissive --privacy-policy strict "cat ~/.ssh/id_rsa"
@@ -87,7 +85,7 @@ Exit codes: 0=Allow, 1=Error, 2=Deny, 3=Ask
 					return err
 				}
 			} else {
-				if err := printTestHuman(result, explain); err != nil {
+				if err := printTestHuman(result); err != nil {
 					return err
 				}
 			}
@@ -108,7 +106,6 @@ Exit codes: 0=Allow, 1=Error, 2=Deny, 3=Ask
 	cmd.Flags().StringSliceVar(&allowlistFlag, "allowlist", nil, "Glob patterns to always allow")
 	cmd.Flags().StringSliceVar(&blocklistFlag, "blocklist", nil, "Glob patterns to always deny")
 	cmd.Flags().BoolVar(&envFlag, "env", false, "Include process environment in detection")
-	cmd.Flags().BoolVar(&explain, "explain", false, "Show detailed reasoning")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
 
 	return cmd
@@ -133,9 +130,13 @@ func parsePolicy(name string) (guard.Policy, error) {
 	}
 }
 
-func printTestHuman(result guard.Result, explain bool) error {
+func printTestHuman(result guard.Result) error {
 	fmt.Fprintf(stdout, "Command:  %s\n", result.Command)
 	fmt.Fprintf(stdout, "Decision: %s\n", result.Decision)
+	fmt.Fprintf(stdout, "Reason:   %s\n", result.Reason())
+	if rem := result.Remediation(); rem != "" {
+		fmt.Fprintf(stdout, "Suggestion: %s\n", rem)
+	}
 	if result.DestructiveAssessment != nil {
 		fmt.Fprintf(stdout, "Destructive Severity: %s\n", result.DestructiveAssessment.Severity)
 		fmt.Fprintf(stdout, "Destructive Confidence: %s\n", result.DestructiveAssessment.Confidence)
@@ -148,14 +149,12 @@ func printTestHuman(result guard.Result, explain bool) error {
 		fmt.Fprintf(stdout, "\nMatches (%d):\n", len(result.Matches))
 		for i, m := range result.Matches {
 			fmt.Fprintf(stdout, "  %d. [%s] %s (%s/%s)\n", i+1, m.Pack, m.Rule, m.Severity, m.Confidence)
-			if explain {
-				fmt.Fprintf(stdout, "     Reason: %s\n", m.Reason)
-				if m.Remediation != "" {
-					fmt.Fprintf(stdout, "     Suggestion: %s\n", m.Remediation)
-				}
-				if m.EnvEscalated {
-					fmt.Fprintln(stdout, "     Note: severity escalated (production env detected)")
-				}
+			fmt.Fprintf(stdout, "     Reason: %s\n", m.Reason)
+			if m.Remediation != "" {
+				fmt.Fprintf(stdout, "     Suggestion: %s\n", m.Remediation)
+			}
+			if m.EnvEscalated {
+				fmt.Fprintln(stdout, "     Note: severity escalated (production env detected)")
 			}
 		}
 	}
@@ -171,6 +170,8 @@ func printTestHuman(result guard.Result, explain bool) error {
 type TestResult struct {
 	Command               string              `json:"command"`
 	Decision              string              `json:"decision"`
+	Reason                string              `json:"reason"`
+	Remediation           string              `json:"remediation,omitempty"`
 	DestructiveSeverity   string              `json:"destructive_severity,omitempty"`
 	DestructiveConfidence string              `json:"destructive_confidence,omitempty"`
 	PrivacySeverity       string              `json:"privacy_severity,omitempty"`
@@ -196,8 +197,10 @@ type TestWarningResult struct {
 
 func printTestJSON(result guard.Result) error {
 	tr := TestResult{
-		Command:  result.Command,
-		Decision: result.Decision.String(),
+		Command:     result.Command,
+		Decision:    result.Decision.String(),
+		Reason:      result.Reason(),
+		Remediation: result.Remediation(),
 	}
 	if result.DestructiveAssessment != nil {
 		tr.DestructiveSeverity = result.DestructiveAssessment.Severity.String()
