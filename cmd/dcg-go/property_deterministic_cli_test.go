@@ -13,11 +13,11 @@ import (
 
 func TestPropertyProcessHookInputDeterminism(t *testing.T) {
 	cases := []HookInput{
-		{ToolName: "Bash", ToolInput: ToolInput{Command: "echo hello"}},
-		{ToolName: "Bash", ToolInput: ToolInput{Command: "rm -rf /"}},
-		{ToolName: "Read", ToolInput: ToolInput{Command: "rm -rf /"}},
-		{ToolName: "Bash", ToolInput: ToolInput{Command: ""}},
-		{HookEventName: "PostToolUse", ToolName: "Bash", ToolInput: ToolInput{Command: "rm -rf /"}},
+		{ToolName: "Bash", ToolInput: rawToolInput(t, map[string]any{"command": "echo hello"})},
+		{ToolName: "Bash", ToolInput: rawToolInput(t, map[string]any{"command": "rm -rf /"})},
+		{ToolName: "Read", ToolInput: rawToolInput(t, map[string]any{"file_path": "/tmp/x"})},
+		{ToolName: "Bash", ToolInput: rawToolInput(t, map[string]any{"command": ""})},
+		{HookEventName: "PostToolUse", ToolName: "Bash", ToolInput: rawToolInput(t, map[string]any{"command": "rm -rf /"})},
 	}
 
 	for i, in := range cases {

@@ -30,9 +30,9 @@ func BenchmarkProcessHookInput(b *testing.B) {
 		name string
 		in   HookInput
 	}{
-		{name: "safe", in: HookInput{ToolName: "Bash", ToolInput: ToolInput{Command: "echo hello"}}},
-		{name: "destructive", in: HookInput{ToolName: "Bash", ToolInput: ToolInput{Command: "rm -rf /"}}},
-		{name: "nonbash", in: HookInput{ToolName: "Read", ToolInput: ToolInput{Command: "ignored"}}},
+		{name: "safe", in: HookInput{ToolName: "Bash", ToolInput: rawToolInput(b, map[string]any{"command": "echo hello"})}},
+		{name: "destructive", in: HookInput{ToolName: "Bash", ToolInput: rawToolInput(b, map[string]any{"command": "rm -rf /"})}},
+		{name: "nonbash", in: HookInput{ToolName: "Read", ToolInput: rawToolInput(b, map[string]any{"file_path": "/tmp/x"})}},
 	}
 	for _, tc := range cases {
 		tc := tc
@@ -62,7 +62,7 @@ func TestStressConcurrentHookProcess(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < iterations; i++ {
 				cmd := commands[(w+i)%len(commands)]
-				out := processHookInput(HookInput{ToolName: "Bash", ToolInput: ToolInput{Command: cmd}})
+				out := processHookInput(HookInput{ToolName: "Bash", ToolInput: rawToolInput(t, map[string]any{"command": cmd})})
 				d := out.HookSpecificOutput.PermissionDecision
 				if d != "allow" && d != "ask" && d != "deny" {
 					errCh <- fmt.Errorf("invalid decision %q", d)
@@ -81,7 +81,7 @@ func TestStressConcurrentHookProcess(t *testing.T) {
 func TestOracleHookOutputJSONConformance(t *testing.T) {
 	reset := withIO(t)
 	defer reset()
-	in := HookInput{ToolName: "Bash", ToolInput: ToolInput{Command: "rm -rf /"}}
+	in := HookInput{ToolName: "Bash", ToolInput: rawToolInput(t, map[string]any{"command": "rm -rf /"})}
 	out := processHookInput(in)
 	buf := &bytes.Buffer{}
 	enc := json.NewEncoder(buf)

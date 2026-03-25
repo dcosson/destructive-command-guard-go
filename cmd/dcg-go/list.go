@@ -13,10 +13,11 @@ import (
 func newListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List packs and rules",
+		Short: "List packs, rules, and tools",
 	}
 	cmd.AddCommand(newListPacksCmd())
 	cmd.AddCommand(newListRulesCmd())
+	cmd.AddCommand(newListToolsCmd())
 	return cmd
 }
 
@@ -94,6 +95,44 @@ func newListRulesCmd() *cobra.Command {
 	return cmd
 }
 
+type listToolInfo struct {
+	ToolName         string            `json:"tool_name"`
+	SyntheticCommand string            `json:"synthetic_command,omitempty"`
+	PathField        string            `json:"path_field,omitempty"`
+	ExtraFields      []string          `json:"extra_fields,omitempty"`
+	Flags            map[string]string `json:"flags,omitempty"`
+	NoEval           bool              `json:"no_eval,omitempty"`
+	UsesParser       bool              `json:"uses_parser,omitempty"`
+}
+
+func newListToolsCmd() *cobra.Command {
+	var jsonOut bool
+
+	cmd := &cobra.Command{
+		Use:   "tools",
+		Short: "List known Claude Code tools",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			tools := cliTools()
+			if jsonOut {
+				enc := json.NewEncoder(stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(tools)
+			}
+
+			fmt.Fprintf(stdout, "Known tools (%d):\n\n", len(tools))
+			for _, tool := range tools {
+				fmt.Fprintf(stdout, "  %-15s -> %s\n", tool.ToolName, formatToolMapping(tool))
+			}
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, "Unknown tools are allowed (DCG has no rules for them).")
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
+	return cmd
+}
+
 func formatCategoryDetail(d guard.CategoryDetail) string {
 	if d.Count == 0 {
 		return "0 rules"
@@ -118,6 +157,72 @@ func formatRuleCategory(r guard.RuleInfo) string {
 	default:
 		return fmt.Sprintf("[Destructive: %s]", sev)
 	}
+}
+
+func cliTools() []listToolInfo {
+	out := []listToolInfo{{
+		ToolName:   "Bash",
+		UsesParser: true,
+	}}
+	for _, tool := range guard.Tools() {
+		out = append(out, listToolInfo{
+			ToolName:         tool.ToolName,
+			SyntheticCommand: tool.SyntheticCommand,
+			PathField:        tool.PathField,
+			ExtraFields:      append([]string(nil), tool.ExtraFields...),
+			Flags:            copyStringMap(tool.Flags),
+			NoEval:           tool.NoEval,
+		})
+	}
+	return out
+}
+
+func formatToolMapping(tool listToolInfo) string {
+	if tool.UsesParser {
+		return "tree-sitter parser (full shell evaluation)"
+	}
+	if tool.NoEval {
+		return "no evaluation (always allow)"
+	}
+
+	var parts []string
+	parts = append(parts, tool.SyntheticCommand)
+	for _, flag := range sortedKeys(tool.Flags) {
+		parts = append(parts, flag)
+		if value := tool.Flags[flag]; value != "" {
+			parts = append(parts, value)
+		}
+	}
+	for _, field := range tool.ExtraFields {
+		parts = append(parts, "<"+field+">")
+	}
+	if tool.PathField != "" {
+		parts = append(parts, "<"+tool.PathField+">")
+	}
+	return strings.Join(parts, " ")
+}
+
+func sortedKeys(m map[string]string) []string {
+	if len(m) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func copyStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }
 
 // wrapDesc wraps text to maxWidth characters, breaking on spaces.

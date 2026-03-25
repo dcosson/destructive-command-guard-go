@@ -1,26 +1,24 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/dcosson/destructive-command-guard-go/guard"
 )
 
 type HookInput struct {
-	SessionID      string    `json:"session_id"`
-	TranscriptPath string    `json:"transcript_path"`
-	Cwd            string    `json:"cwd"`
-	HookEventName  string    `json:"hook_event_name"`
-	ToolName       string    `json:"tool_name"`
-	ToolInput      ToolInput `json:"tool_input"`
-}
+	SessionID      string          `json:"session_id"`
+	TranscriptPath string          `json:"transcript_path"`
+	Cwd            string          `json:"cwd"`
+	HookEventName  string          `json:"hook_event_name"`
+	ToolName       string          `json:"tool_name"`
+	ToolInput      json.RawMessage `json:"tool_input"`
 
-type ToolInput struct {
-	Command     string `json:"command"`
-	Description string `json:"description,omitempty"`
-	Timeout     int    `json:"timeout,omitempty"`
+	toolInputMap map[string]any
 }
 
 type HookOutput struct {
@@ -45,6 +43,11 @@ func runHookMode() error {
 	if err := json.Unmarshal(input, &hookInput); err != nil {
 		return fmt.Errorf("parsing hook input: %w", err)
 	}
+	toolInputMap, err := decodeHookToolInput(hookInput.ToolInput)
+	if err != nil {
+		return err
+	}
+	hookInput.toolInputMap = toolInputMap
 	output := processHookInput(hookInput)
 	return writeHookOutput(output.HookSpecificOutput.PermissionDecision, output.HookSpecificOutput.PermissionDecisionReason)
 }
@@ -60,17 +63,16 @@ func processHookInput(hookInput HookInput) HookOutput {
 		}
 	}
 
-	if hookInput.ToolName != "Bash" {
-		return HookOutput{
-			HookSpecificOutput: HookSpecificOutput{
-				HookEventName:      "PreToolUse",
-				PermissionDecision: "allow",
-			},
+	toolInputMap := hookInput.toolInputMap
+	if toolInputMap == nil {
+		var err error
+		toolInputMap, err = decodeHookToolInput(hookInput.ToolInput)
+		if err != nil {
+			toolInputMap = nil
 		}
 	}
 
-	command := hookInput.ToolInput.Command
-	if command == "" {
+	if strings.EqualFold(hookInput.ToolName, "Bash") && !hasNonEmptyString(toolInputMap, "command") {
 		return HookOutput{
 			HookSpecificOutput: HookSpecificOutput{
 				HookEventName:      "PreToolUse",
@@ -83,7 +85,7 @@ func processHookInput(hookInput HookInput) HookOutput {
 	opts := cfg.toOptions()
 	opts = append(opts, guard.WithEnv(environFn()))
 
-	result := guard.Evaluate(command, opts...)
+	result := guard.EvaluateToolUse(hookInput.ToolName, toolInputMap, opts...)
 	decision := decisionToHookDecision(result.Decision)
 	reason := buildReason(result)
 	return HookOutput{
@@ -93,6 +95,33 @@ func processHookInput(hookInput HookInput) HookOutput {
 			PermissionDecisionReason: reason,
 		},
 	}
+}
+
+func decodeHookToolInput(raw json.RawMessage) (map[string]any, error) {
+	if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil, nil
+	}
+
+	var toolInput map[string]any
+	if err := json.Unmarshal(raw, &toolInput); err != nil {
+		return nil, fmt.Errorf("parsing tool_input: %w", err)
+	}
+	if toolInput == nil {
+		return nil, fmt.Errorf("parsing tool_input: expected object")
+	}
+	return toolInput, nil
+}
+
+func hasNonEmptyString(toolInput map[string]any, key string) bool {
+	if toolInput == nil {
+		return false
+	}
+	value, ok := toolInput[key]
+	if !ok {
+		return false
+	}
+	s, ok := value.(string)
+	return ok && strings.TrimSpace(s) != ""
 }
 
 func decisionToHookDecision(d guard.Decision) string {

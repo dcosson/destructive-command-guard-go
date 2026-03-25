@@ -80,3 +80,36 @@ func TestListRulesJSON(t *testing.T) {
 		}
 	}
 }
+
+func TestListToolsHuman(t *testing.T) {
+	out, _, err := execCmd(t, "list", "tools")
+	if err != nil {
+		t.Fatalf("list tools error: %v", err)
+	}
+	if !strings.Contains(out, "Known tools") {
+		t.Fatalf("missing header: %q", out)
+	}
+	if !strings.Contains(out, "Bash") {
+		t.Fatalf("missing Bash: %q", out)
+	}
+	if !strings.Contains(out, "Read") {
+		t.Fatalf("missing Read: %q", out)
+	}
+}
+
+func TestListToolsJSON(t *testing.T) {
+	out, _, err := execCmd(t, "list", "tools", "--json")
+	if err != nil {
+		t.Fatalf("list tools --json error: %v", err)
+	}
+	var tools []map[string]any
+	if err := json.Unmarshal([]byte(out), &tools); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if len(tools) == 0 {
+		t.Fatal("expected non-empty tools list")
+	}
+	if tools[0]["tool_name"] != "Bash" {
+		t.Fatalf("first tool=%v want Bash", tools[0]["tool_name"])
+	}
+}

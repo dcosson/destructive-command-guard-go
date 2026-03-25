@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/dcosson/destructive-command-guard-go/guard"
 	"github.com/spf13/cobra"
@@ -21,15 +22,16 @@ func newTestCmd() *cobra.Command {
 		jsonOut       bool
 		destrPolicy   string
 		privPolicy    string
+		toolName      string
 		envFlag       bool
 		allowlistFlag []string
 		blocklistFlag []string
 	)
 
 	cmd := &cobra.Command{
-		Use:   "test [flags] \"command\"",
-		Short: "Evaluate a command and print the result",
-		Long: `Evaluate a shell command against registered rules and print the result.
+		Use:   "test [flags] <command-or-tool-input>",
+		Short: "Evaluate a command or tool use and print the result",
+		Long: `Evaluate a shell command or Claude Code tool use against registered rules and print the result.
 
 If only one of --destructive-policy or --privacy-policy is set, the
 other defaults to allow-all.
@@ -42,10 +44,11 @@ Exit codes: 0=Allow, 1=Error, 2=Deny, 3=Ask
   dcg-go test --destructive-policy strict "rm -rf /"
   dcg-go test --destructive-policy permissive --privacy-policy strict "cat ~/.ssh/id_rsa"
   dcg-go test --blocklist "rm *" "rm -rf /tmp"
-  dcg-go test --env "RAILS_ENV=production rails db:reset"`,
+  dcg-go test --env "RAILS_ENV=production rails db:reset"
+  dcg-go test --tool Read '{"file_path":"~/.ssh/id_rsa"}'
+  dcg-go test --tool Grep '{"pattern":"password","path":"~/Documents"}'`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			command := args[0]
 			cfg := loadConfig()
 			opts := cfg.toOptions()
 
@@ -79,7 +82,12 @@ Exit codes: 0=Allow, 1=Error, 2=Deny, 3=Ask
 				opts = append(opts, guard.WithEnv(environFn()))
 			}
 
-			result := guard.Evaluate(command, opts...)
+			toolInput, err := parseTestToolInput(toolName, args[0])
+			if err != nil {
+				return err
+			}
+
+			result := guard.EvaluateToolUse(toolName, toolInput, opts...)
 			if jsonOut {
 				if err := printTestJSON(result); err != nil {
 					return err
@@ -103,6 +111,7 @@ Exit codes: 0=Allow, 1=Error, 2=Deny, 3=Ask
 	cmd.Flags().SortFlags = false
 	cmd.Flags().StringVar(&destrPolicy, "destructive-policy", "", "Policy for destructive rules (see policies above)")
 	cmd.Flags().StringVar(&privPolicy, "privacy-policy", "", "Policy for privacy rules (see policies above)")
+	cmd.Flags().StringVar(&toolName, "tool", "Bash", "Claude Code tool name to evaluate (default: Bash)")
 	cmd.Flags().StringSliceVar(&allowlistFlag, "allowlist", nil, "Glob patterns to always allow")
 	cmd.Flags().StringSliceVar(&blocklistFlag, "blocklist", nil, "Glob patterns to always deny")
 	cmd.Flags().BoolVar(&envFlag, "env", false, "Include process environment in detection")
@@ -165,6 +174,21 @@ func printTestHuman(result guard.Result) error {
 		}
 	}
 	return nil
+}
+
+func parseTestToolInput(toolName, arg string) (map[string]any, error) {
+	if strings.EqualFold(toolName, "Bash") {
+		return map[string]any{"command": arg}, nil
+	}
+
+	var toolInput map[string]any
+	if err := json.Unmarshal([]byte(arg), &toolInput); err != nil {
+		return nil, fmt.Errorf("parsing --tool %s input as JSON object: %w", toolName, err)
+	}
+	if toolInput == nil {
+		return nil, fmt.Errorf("parsing --tool %s input as JSON object: expected object", toolName)
+	}
+	return toolInput, nil
 }
 
 type TestResult struct {

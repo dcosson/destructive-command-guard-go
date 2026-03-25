@@ -43,10 +43,19 @@ func TestWriteHookOutput(t *testing.T) {
 	}
 }
 
-func TestRunHookModeNonBashAllows(t *testing.T) {
+func rawToolInput(t testing.TB, value any) json.RawMessage {
+	t.Helper()
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal tool input: %v", err)
+	}
+	return data
+}
+
+func TestRunHookModeNonBashEvaluates(t *testing.T) {
 	outBuf := &bytes.Buffer{}
 	oldIn, oldOut := stdin, stdout
-	stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"command":"git push --force"}}`)
+	stdin = strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"/Users/testuser/.ssh/id_rsa"}}`)
 	stdout = outBuf
 	t.Cleanup(func() { stdin, stdout = oldIn, oldOut })
 
@@ -58,8 +67,8 @@ func TestRunHookModeNonBashAllows(t *testing.T) {
 	if err := json.Unmarshal(outBuf.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal output: %v", err)
 	}
-	if out.HookSpecificOutput.PermissionDecision != "allow" {
-		t.Fatalf("decision = %q, want allow", out.HookSpecificOutput.PermissionDecision)
+	if out.HookSpecificOutput.PermissionDecision == "allow" {
+		t.Fatalf("decision = %q, want non-allow", out.HookSpecificOutput.PermissionDecision)
 	}
 }
 
@@ -108,5 +117,25 @@ func TestRunHookModeUnsupportedEventWarnsAndAllows(t *testing.T) {
 	}
 	if out.HookSpecificOutput.PermissionDecision != "allow" {
 		t.Fatalf("decision = %q, want allow", out.HookSpecificOutput.PermissionDecision)
+	}
+}
+
+func TestRunHookModeNonBashFieldsSurviveUnmarshal(t *testing.T) {
+	input := `{"hook_event_name":"PreToolUse","tool_name":"Grep","tool_input":{"pattern":"password","path":"/Users/testuser/Documents"}}`
+
+	var hookInput HookInput
+	if err := json.Unmarshal([]byte(input), &hookInput); err != nil {
+		t.Fatalf("unmarshal hook input: %v", err)
+	}
+
+	toolInput, err := decodeHookToolInput(hookInput.ToolInput)
+	if err != nil {
+		t.Fatalf("decodeHookToolInput: %v", err)
+	}
+	if got := toolInput["pattern"]; got != "password" {
+		t.Fatalf("pattern=%v want password", got)
+	}
+	if got := toolInput["path"]; got != "/Users/testuser/Documents" {
+		t.Fatalf("path=%v want /Users/testuser/Documents", got)
 	}
 }

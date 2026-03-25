@@ -108,7 +108,7 @@ func TestSecurityHookOutputNoSecretLeakage(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.command, func(t *testing.T) {
-			out := processHookInput(HookInput{ToolName: "Bash", ToolInput: ToolInput{Command: tc.command}})
+			out := processHookInput(HookInput{ToolName: "Bash", ToolInput: rawToolInput(t, map[string]any{"command": tc.command})})
 			reason := strings.ToLower(out.HookSpecificOutput.PermissionDecisionReason)
 			for _, bad := range tc.forbidden {
 				if strings.Contains(reason, strings.ToLower(bad)) {

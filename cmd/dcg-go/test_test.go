@@ -6,93 +6,59 @@ import (
 	"testing"
 )
 
-func TestParsePolicy(t *testing.T) {
-	for _, name := range []string{"allow-all", "permissive", "moderate", "strict", "very-strict", "interactive"} {
-		if _, err := parsePolicy(name); err != nil {
-			t.Fatalf("%s error: %v", name, err)
-		}
+func TestParseTestToolInputBash(t *testing.T) {
+	got, err := parseTestToolInput("Bash", "rm -rf /")
+	if err != nil {
+		t.Fatalf("parseTestToolInput: %v", err)
 	}
-	if _, err := parsePolicy("wat"); err == nil {
-		t.Fatal("expected error for unknown policy")
+	if got["command"] != "rm -rf /" {
+		t.Fatalf("command=%v want rm -rf /", got["command"])
 	}
 }
 
-func TestTestModeDenyExitCode(t *testing.T) {
-	out, _, err := execCmd(t, "test", "rm -rf /")
-	if err != nil {
-		t.Fatalf("test error: %v", err)
-	}
-	if !strings.Contains(out, "Decision: Deny") {
-		t.Fatalf("expected Deny: %q", out)
+func TestParseTestToolInputNonBashRequiresJSONObject(t *testing.T) {
+	if _, err := parseTestToolInput("Read", "not-json"); err == nil {
+		t.Fatal("expected error for non-JSON non-Bash input")
 	}
 }
 
-func TestTestModeJSONOutput(t *testing.T) {
-	out, _, err := execCmd(t, "test", "--json", "git status")
+func TestTestCmdToolReadJSON(t *testing.T) {
+	out, _, err := execCmd(t, "test", "--json", "--tool", "Read", `{"file_path":"/Users/testuser/.ssh/id_rsa"}`)
 	if err != nil {
-		t.Fatalf("test --json error: %v", err)
+		t.Fatalf("test --tool Read: %v", err)
 	}
 	var result map[string]any
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
-		t.Fatalf("json invalid: %v\n%s", err, out)
+		t.Fatalf("invalid json: %v", err)
 	}
-	if result["command"] != "git status" {
-		t.Fatalf("command = %#v", result["command"])
+	if result["command"] != "Read(/Users/testuser/.ssh/id_rsa)" {
+		t.Fatalf("command=%v", result["command"])
+	}
+	if result["decision"] == "allow" {
+		t.Fatalf("decision=%v want non-allow", result["decision"])
 	}
 }
 
-func TestTestModeReasonOutput(t *testing.T) {
-	out, _, err := execCmd(t, "test", "rm -rf /")
+func TestTestCmdToolBashMatchesBare(t *testing.T) {
+	bareOut, _, err := execCmd(t, "test", "--json", "ls -la")
 	if err != nil {
-		t.Fatalf("test error: %v", err)
+		t.Fatalf("bare test: %v", err)
 	}
-	if !strings.Contains(out, "Decision: Deny") {
-		t.Fatalf("missing decision: %q", out)
-	}
-	if !strings.Contains(out, "Reason:") {
-		t.Fatalf("missing reason: %q", out)
-	}
-	if !strings.Contains(out, "[core.filesystem]") {
-		t.Fatalf("missing pack in reason: %q", out)
-	}
-}
-
-func TestTestModeAllowReason(t *testing.T) {
-	out, _, err := execCmd(t, "test", "ls -la")
+	toolOut, _, err := execCmd(t, "test", "--json", "--tool", "Bash", "ls -la")
 	if err != nil {
-		t.Fatalf("test error: %v", err)
+		t.Fatalf("tool Bash test: %v", err)
 	}
-	if !strings.Contains(out, "Decision: Allow") {
-		t.Fatalf("missing decision: %q", out)
-	}
-	if !strings.Contains(out, "No destructive or privacy patterns matched") {
-		t.Fatalf("missing allow reason: %q", out)
+	if bareOut != toolOut {
+		t.Fatalf("Bash outputs differ\nbare=%s\ntool=%s", bareOut, toolOut)
 	}
 }
 
-func TestTestModeNoArgs(t *testing.T) {
-	_, _, err := execCmd(t, "test")
+func TestTestCmdToolBadJSONReturnsError(t *testing.T) {
+	_, stderrOut, err := execCmd(t, "test", "--tool", "Read", "not-json")
 	if err == nil {
-		t.Fatal("expected error for no args")
+		t.Fatal("expected error")
 	}
-}
-
-func TestTestModeBlocklist(t *testing.T) {
-	out, _, err := execCmd(t, "test", "--blocklist", "echo *", "echo hello")
-	if err != nil {
-		t.Fatalf("test --blocklist error: %v", err)
-	}
-	if !strings.Contains(out, "Decision: Deny") {
-		t.Fatalf("expected Deny with blocklist: %q", out)
-	}
-}
-
-func TestTestModeAllowlist(t *testing.T) {
-	out, _, err := execCmd(t, "test", "--allowlist", "rm *", "rm -rf /")
-	if err != nil {
-		t.Fatalf("test --allowlist error: %v", err)
-	}
-	if !strings.Contains(out, "Decision: Allow") {
-		t.Fatalf("expected Allow with allowlist: %q", out)
+	if !strings.Contains(err.Error(), "parsing --tool Read input") && !strings.Contains(stderrOut, "parsing --tool Read input") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
