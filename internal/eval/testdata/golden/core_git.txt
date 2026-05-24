@@ -36,7 +36,7 @@ rule: git-checkout-discard-all
 # D5: git rebase
 decision: Ask
 command: git rebase main
-severity: High
+severity: Low
 confidence: Medium
 pack: core.git
 rule: git-rebase

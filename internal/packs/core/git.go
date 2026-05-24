@@ -174,10 +174,10 @@ func GitPack() packs.Pack {
 						packs.Flags("--skip"),
 					)),
 				),
-				Severity:    sevHigh,
+				Severity:    sevLow,
 				Confidence:  confMedium,
-				Reason:      "git rebase rewrites commit history; rebasing shared branches can lose work for other contributors",
-				Remediation: "Use git merge to preserve branch history",
+				Reason:      "git rebase rewrites local commit history; recoverable via reflog or --abort",
+				Remediation: "Use git merge to preserve branch history, or ensure you use --force-with-lease if pushing after rebase",
 			},
 			{
 				ID: "git-clean-force",
